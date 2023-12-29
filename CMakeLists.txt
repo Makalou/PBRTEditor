@@ -32,12 +32,19 @@ endif ()
 
 # for external
 
-set (BUILD_SHARED_LIBS OFF)
+set(BUILD_SHARED_LIBS OFF)
 
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/ext)
 
+include_directories(src/ext/glm)
+include_directories(src/ext/glfw/include)
+include_directories(src/ext/tinyobjloader)
+include_directories(src/ext/imgui/include)
+
 add_executable(editor_exe src/pbrt_scene_editor/main.cpp src/pbrt_scene_editor/viewer.cpp)
-target_link_libraries(editor_exe Vulkan::Vulkan)
+target_link_libraries(editor_exe PRIVATE Vulkan::Vulkan)
+target_link_libraries(editor_exe PRIVATE glfw)
+target_link_libraries(editor_exe PRIVATE imgui)
 
 
 
