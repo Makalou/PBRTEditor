@@ -278,7 +278,7 @@ void EditorGUI::createRenderPass(SwapchainExtended* swapchain)
 	}
 
 	vk::AttachmentDescription attachDesc = {};
-	attachDesc.format = vk::Format{ swapchain->image_format };
+	attachDesc.format = vk::Format(swapchain->image_format);
 	attachDesc.samples = vk::SampleCountFlagBits::e1;
 	attachDesc.loadOp = vk::AttachmentLoadOp::eClear;
 	attachDesc.storeOp = vk::AttachmentStoreOp::eStore;
