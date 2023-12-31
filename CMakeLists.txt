@@ -41,7 +41,14 @@ include_directories(src/ext/glfw/include)
 include_directories(src/ext/tinyobjloader)
 include_directories(src/ext/imgui/include)
 
-add_executable(editor_exe src/pbrt_scene_editor/main.cpp src/pbrt_scene_editor/viewer.cpp)
+add_executable(editor_exe src/pbrt_scene_editor/main.cpp 
+                          src/pbrt_scene_editor/viewer.cpp 
+                          src/pbrt_scene_editor/window.cpp 
+                          src/pbrt_scene_editor/window.h
+                          src/pbrt_scene_editor/window_config.h
+                          src/pbrt_scene_editor/VkBootstrap.cpp
+                          src/pbrt_scene_editor/VkBootstrap.h
+                          src/pbrt_scene_editor/VkBootstrapDispatch.h "src/pbrt_scene_editor/editorGUI.h" "src/pbrt_scene_editor/editorGUI.cpp" "src/pbrt_scene_editor/VulkanExtension.h" "src/pbrt_scene_editor/AssetFileTree.cpp" "src/pbrt_scene_editor/sceneViewer.cpp" "src/pbrt_scene_editor/sceneGraphEditor.cpp")
 target_link_libraries(editor_exe PRIVATE Vulkan::Vulkan)
 target_link_libraries(editor_exe PRIVATE glfw)
 target_link_libraries(editor_exe PRIVATE imgui)
