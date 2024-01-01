@@ -3,6 +3,7 @@
 #include <vulkan/vulkan.hpp>
 
 #include <memory>
+#include <deque>
 
 #define MAX_FRAME_IN_FLIGHT 3
 
@@ -35,9 +36,13 @@ public:
 	SceneGraphEditor* _sceneGraphEditor = nullptr;
 
 private:
-
+	std::deque < std::pair<std::string, std::string>> recentOpenCache;
 	void showMainMenuBar();
 	void showMenuFile();
+	void showMenuEdit();
+	void showMenuView();
+	void showMenuRender();
+	void showMenuTools();
 	void render(vk::CommandBuffer, unsigned int idx);
 	void createVulkanResource();
 	void createRenderPass(SwapchainExtended* swapchain);
@@ -51,4 +56,6 @@ private:
 	
 	vk::RenderPass guiPass;
 	vk::DescriptorPool descriptorPool;
+
+	bool fileSelectorOpen = false;
 };

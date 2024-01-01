@@ -14,7 +14,9 @@ add_library(imgui STATIC
         src/imgui.cpp
         src/imgui_demo.cpp
         src/implot.cpp
-        src/implot_items.cpp)
+        src/implot_items.cpp
+        src/ImGuiFileDialog.cpp
+)
 
 target_include_directories(imgui PUBLIC ../glfw/include)
 target_include_directories(imgui PRIVATE ../imgui/include)

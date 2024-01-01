@@ -7,10 +7,15 @@
 #include "imgui_impl_glfw.h"
 #include "implot.h"
 
+#include "imguiFileDialog.h"
+
 #include "Inspector.hpp"
 #include "AssetFileTree.hpp"
 #include "sceneViewer.hpp"
 #include "sceneGraphEditor.hpp"
+
+#include <iostream>
+#include <algorithm>
 
 EditorGUI::EditorGUI()
 {
@@ -57,7 +62,10 @@ void EditorGUI::init(GLFWwindow* window, std::shared_ptr<DeviceExtended> device)
 
 	_assetFileTree->init();
 	_sceneGraphEditor->init();
+	_sceneGraphEditor->setOpen();
 	_sceneViewer->init(device);
+	const auto dialogFlags = ImGuiFileDialogFlags_DisableThumbnailMode | ImGuiFileDialogFlags_DontShowHiddenFiles | ImGuiFileDialogFlags_Modal;
+	ImGuiFileDialog::Instance()->OpenDialog("ChoosePBRTFileDlgKey", "Choose .pbrt file", ".pbrt", ".", 1, nullptr, dialogFlags);
 }
 
 void EditorGUI::showMainMenuBar()
@@ -71,12 +79,22 @@ void EditorGUI::showMainMenuBar()
 		}
 		if (ImGui::BeginMenu("Edit"))
 		{
-			if (ImGui::MenuItem("Undo", "CTRL+Z")) {}
-			if (ImGui::MenuItem("Redo", "CTRL+Y", false, false)) {}  // Disabled item
-			ImGui::Separator();
-			if (ImGui::MenuItem("Cut", "CTRL+X")) {}
-			if (ImGui::MenuItem("Copy", "CTRL+C")) {}
-			if (ImGui::MenuItem("Paste", "CTRL+V")) {}
+			showMenuEdit();
+			ImGui::EndMenu();
+		}
+		if (ImGui::BeginMenu("View"))
+		{
+			showMenuView();
+			ImGui::EndMenu();
+		}
+		if (ImGui::BeginMenu("Render"))
+		{
+			showMenuRender();
+			ImGui::EndMenu();
+		}
+		if (ImGui::BeginMenu("Tools"))
+		{
+			showMenuTools();
 			ImGui::EndMenu();
 		}
 		ImGui::EndMainMenuBar();
@@ -89,23 +107,57 @@ void EditorGUI::showMenuFile()
 		//printf("Click New\n");
 	}
 	if (ImGui::MenuItem("Open", "Ctrl+O")) {
-
+		fileSelectorOpen = true;
 	}
+	
 	if (ImGui::BeginMenu("Open Recent"))
 	{
-		ImGui::MenuItem("fish_hat.c");
-		ImGui::MenuItem("fish_hat.inl");
-		ImGui::MenuItem("fish_hat.h");
-		if (ImGui::BeginMenu("More.."))
-		{
-			ImGui::MenuItem("Hello");
-			ImGui::MenuItem("Sailor");
-			ImGui::EndMenu();
+		if (!recentOpenCache.empty()) {
+			int have_listed = 0;
+			int size = recentOpenCache.size();
+			int idx =  size - 1;
+
+			for (; idx >= 0 && have_listed < 3; idx--)
+			{
+				auto& histroy = recentOpenCache[idx];
+				if (ImGui::MenuItem(histroy.first.c_str())) {
+					// todo : repush hit histroy
+					_sceneGraphEditor->parsePBRTSceneFile(histroy.second, _assetFileTree->assetLoader);
+				}
+				have_listed++;
+			}
+
+			if (idx >= 0) {
+				if (ImGui::BeginMenu("More.."))
+				{
+					for (; idx >= 0; idx--)
+					{
+						auto& histroy = recentOpenCache[idx];
+						if (ImGui::MenuItem(histroy.first.c_str())) {
+							//todo : repush hit histroy
+							_sceneGraphEditor->parsePBRTSceneFile(histroy.second, _assetFileTree->assetLoader);
+						}
+					}
+					ImGui::EndMenu();
+				}
+			}
 		}
 		ImGui::EndMenu();
 	}
 	if (ImGui::MenuItem("Save", "Ctrl+S")) {}
 	if (ImGui::MenuItem("Save As..")) {}
+
+	if (ImGui::BeginMenu("Import"))
+	{
+		ImGui::MenuItem(".obj");
+		ImGui::MenuItem(".fbx");
+		ImGui::MenuItem(".gltf");
+		if (ImGui::BeginMenu("More.."))
+		{
+			ImGui::EndMenu();
+		}
+		ImGui::EndMenu();
+	}
 
 	ImGui::Separator();
 	if (ImGui::BeginMenu("Options"))
@@ -157,17 +209,91 @@ void EditorGUI::showMenuFile()
 	if (ImGui::MenuItem("Quit", "Alt+F4")) {}
 }
 
+void EditorGUI::showMenuEdit()
+{
+	if (ImGui::MenuItem("Undo", "CTRL+Z")) {}
+	if (ImGui::MenuItem("Redo", "CTRL+Y", false, false)) {}  // Disabled item
+	ImGui::Separator();
+	if (ImGui::MenuItem("Cut", "CTRL+X")) {}
+	if (ImGui::MenuItem("Copy", "CTRL+C")) {}
+	if (ImGui::MenuItem("Paste", "CTRL+V")) {}
+}
+
+void EditorGUI::showMenuView()
+{
+	if (ImGui::MenuItem("SceneGraphEditor")) {
+		_sceneGraphEditor->setOpen();
+	}
+	if (ImGui::MenuItem("Asset")) {
+		_assetFileTree->setOpen();
+	}
+	if (ImGui::MenuItem("Inspector")) {
+
+	}
+}
+
+void EditorGUI::showMenuRender()
+{
+	if (ImGui::MenuItem("Render Current Frame")) {
+
+	}
+
+	if (ImGui::MenuItem("Render Interactive Session")) {
+
+	}
+
+	if (ImGui::BeginMenu("Bake Lighting")) {
+		static bool b_all = false;
+		ImGui::Checkbox("All", &b_all);
+
+		static bool b_diffuse = true;
+		b_diffuse |= b_all;
+		ImGui::Checkbox("Diffuse", &b_diffuse);
+
+		ImGui::EndMenu();
+	}
+}
+
+void EditorGUI::showMenuTools()
+{
+
+}
+
 void EditorGUI::constructFrame()
 {
 	ImGui_ImplVulkan_NewFrame();
 	ImGui_ImplGlfw_NewFrame();
 	ImGui::NewFrame();
-	ImGui::ShowDemoWindow();
+	//ImGui::ShowDemoWindow();
 	//_inspector->constructFrame();
 	showMainMenuBar();
 	_assetFileTree->constructFrame();
 	_sceneGraphEditor->constructFrame();
 	_sceneViewer->constructFrame();
+
+	if (fileSelectorOpen) {
+		
+		if (ImGuiFileDialog::Instance()->Display("ChoosePBRTFileDlgKey"))
+		{
+			if (ImGuiFileDialog::Instance()->IsOk())
+			{
+				auto fileName = ImGuiFileDialog::Instance()->GetCurrentFileName();
+				auto filePath= ImGuiFileDialog::Instance()->GetCurrentPath();
+				std::cout << fileName << std::endl;
+				std::cout << filePath << std::endl;
+				if (true) { // if load sucess
+					auto fileHistroy = std::pair{ fileName,filePath };
+					recentOpenCache.erase(std::remove(recentOpenCache.begin(),recentOpenCache.end(),fileHistroy),recentOpenCache.end());
+					recentOpenCache.push_back(fileHistroy);
+					if (recentOpenCache.size() > 10) {
+						recentOpenCache.pop_front();
+					}
+				}
+				_sceneGraphEditor->parsePBRTSceneFile(filePath, _assetFileTree->assetLoader);
+				fileSelectorOpen = false;
+			}
+		}
+	}
 
 	ImGui::Render();
 }

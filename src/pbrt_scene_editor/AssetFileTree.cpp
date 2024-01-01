@@ -5,9 +5,11 @@
 #include "imgui_impl_glfw.h"
 #include "implot.h"
 
+#include <cstdio>
+
 void AssetFileTree::constructFrame()
 {
-
+	
 }
 
 void AssetFileTree::init()

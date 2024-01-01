@@ -7,4 +7,8 @@ struct EditorComponentGUI
 	virtual ~EditorComponentGUI() {
 
 	}
+
+	void setOpen() {
+		is_open = true;
+	}
 };
