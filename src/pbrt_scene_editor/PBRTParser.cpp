@@ -128,7 +128,7 @@ void PBRTParser::tokenizeMMAP(const std::filesystem::path& path, LockFreeCircleQ
 						break;
 					}
                     auto pbrtFormatPath = dequote(std::string(f.raw() + tok_loc, tok_len));
-                    auto& searchDir = path.parent_path();
+                    auto searchDir = path.parent_path();
                     size_t pos = pbrtFormatPath.find('/');
                     while (pos != std::string::npos) {
                         searchDir.append(pbrtFormatPath.substr(0,pos));
