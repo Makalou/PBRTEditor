@@ -13,6 +13,7 @@
 #include "AssetFileTree.hpp"
 #include "sceneViewer.hpp"
 #include "sceneGraphEditor.hpp"
+#include "LoggerGUI.hpp"
 
 #include <iostream>
 #include <algorithm>
@@ -22,6 +23,7 @@ EditorGUI::EditorGUI()
 	_assetFileTree = new AssetFileTree;
 	_sceneGraphEditor = new SceneGraphEditor;
 	_sceneViewer = new SceneViewer;
+    _loggerWindow = new LoggerGUI;
 }
 
 void EditorGUI::init(GLFWwindow* window, std::shared_ptr<DeviceExtended> device)
@@ -64,6 +66,7 @@ void EditorGUI::init(GLFWwindow* window, std::shared_ptr<DeviceExtended> device)
 	_sceneGraphEditor->init();
 	_sceneGraphEditor->setOpen();
 	_sceneViewer->init(device);
+    _loggerWindow->init();
 	const auto dialogFlags = ImGuiFileDialogFlags_DisableThumbnailMode | ImGuiFileDialogFlags_DontShowHiddenFiles | ImGuiFileDialogFlags_Modal;
 	ImGuiFileDialog::Instance()->OpenDialog("ChoosePBRTFileDlgKey", "Choose .pbrt file", ".pbrt", ".", 1, nullptr, dialogFlags);
 }
@@ -235,6 +238,9 @@ void EditorGUI::showMenuView()
 	if (ImGui::MenuItem("Inspector")) {
 
 	}
+    if (ImGui::MenuItem("Log")) {
+        _loggerWindow->setOpen();
+    }
 }
 
 void EditorGUI::showMenuRender()
@@ -269,12 +275,13 @@ void EditorGUI::constructFrame()
 	ImGui_ImplVulkan_NewFrame();
 	ImGui_ImplGlfw_NewFrame();
 	ImGui::NewFrame();
-	ImGui::ShowDemoWindow();
+	//ImGui::ShowDemoWindow();
 	//_inspector->constructFrame();
 	showMainMenuBar();
 	_assetFileTree->constructFrame();
 	_sceneGraphEditor->constructFrame();
 	_sceneViewer->constructFrame();
+    _loggerWindow->constructFrame();
 
 	if (fileSelectorOpen) {
 		

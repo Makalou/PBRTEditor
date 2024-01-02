@@ -5,7 +5,7 @@ Window::Window()
 {
 	width = 1920;
 	height = 1080;
-	title = "glfw window";
+	title = "PBRTv4 Editor";
 }
 
 void Window::init() 

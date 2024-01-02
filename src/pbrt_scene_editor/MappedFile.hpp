@@ -13,6 +13,8 @@
 #include <filesystem>
 #include <exception>
 
+#include "GlobalLogger.h"
+
 struct MappedFile
 {
 	MappedFile(const std::filesystem::path& path)
@@ -54,6 +56,7 @@ struct MappedFile
         }
 #endif
 		ref_counter = new std::atomic<int>(0);
+        GlobalLogger::getInstance().info("opened and mapped file : " + path.string());
 	}
 	char* raw() const {
 		return pMapped;
