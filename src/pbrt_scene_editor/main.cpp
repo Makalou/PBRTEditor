@@ -111,8 +111,8 @@ int main( int /*argc*/, char ** /*argv*/ )
     vkb::InstanceBuilder instanceBuilder;
     auto inst = instanceBuilder
         .set_app_name("pbrt editor")
-        .request_validation_layers()
-        .use_default_debug_messenger()
+        //.request_validation_layers()
+        //.use_default_debug_messenger()
         .build();
     if (!inst)
         throw std::runtime_error("Failed to create Vulkan instance. Reason: " + inst.error().message());

@@ -279,17 +279,19 @@ void EditorGUI::constructFrame()
 			{
 				auto fileName = ImGuiFileDialog::Instance()->GetCurrentFileName();
 				auto filePath= ImGuiFileDialog::Instance()->GetCurrentPath();
-				std::cout << fileName << std::endl;
-				std::cout << filePath << std::endl;
+				//std::cout << fileName << std::endl;
+				//std::cout << filePath << std::endl;
+				std::filesystem::path fsPath(filePath);
+				fsPath.append(fileName);
 				if (true) { // if load sucess
-					auto fileHistroy = std::pair{ fileName,filePath };
+					auto fileHistroy = std::pair{ fileName,fsPath };
 					recentOpenCache.erase(std::remove(recentOpenCache.begin(),recentOpenCache.end(),fileHistroy),recentOpenCache.end());
 					recentOpenCache.push_back(fileHistroy);
 					if (recentOpenCache.size() > 10) {
 						recentOpenCache.pop_front();
 					}
 				}
-				_sceneGraphEditor->parsePBRTSceneFile(filePath, _assetFileTree->assetLoader);
+				_sceneGraphEditor->parsePBRTSceneFile(fsPath, _assetFileTree->assetLoader);
 				fileSelectorOpen = false;
 			}
 		}
@@ -454,8 +456,6 @@ void EditorGUI::createGuiFrameBuffer(SwapchainExtended* swapchain)
 
 	int width = swapchain->extent.width;
 	int height = swapchain->extent.height;
-
-	printf("[%d, %d]\n",width, height);
 
 	for (uint32_t i = 0; i < swapChainImgViewsCount; i++)
 	{

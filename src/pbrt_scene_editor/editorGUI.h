@@ -4,6 +4,7 @@
 
 #include <memory>
 #include <deque>
+#include <filesystem>
 
 #define MAX_FRAME_IN_FLIGHT 3
 
@@ -36,7 +37,7 @@ public:
 	SceneGraphEditor* _sceneGraphEditor = nullptr;
 
 private:
-	std::deque < std::pair<std::string, std::string>> recentOpenCache;
+	std::deque < std::pair<std::string, std::filesystem::path>> recentOpenCache;
 	void showMainMenuBar();
 	void showMenuFile();
 	void showMenuEdit();

@@ -6,6 +6,8 @@
 
 #include "PBRTParser.h"
 
+#include <filesystem>
+
 struct AssetLoader;
 
 struct SceneGraphEditor : EditorComponentGUI
@@ -16,6 +18,6 @@ struct SceneGraphEditor : EditorComponentGUI
 	~SceneGraphEditor() override;
 
 	// path is the absolute path to the file
-	PBRTParser::ParseResult parsePBRTSceneFile(const std::string& path, const AssetLoader& assetLoader);
+	PBRTParser::ParseResult parsePBRTSceneFile(const std::filesystem::path& path, const AssetLoader& assetLoader);
 	PBRTParser _parser;
 };
