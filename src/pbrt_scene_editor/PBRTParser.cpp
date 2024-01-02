@@ -166,7 +166,7 @@ void PBRTParser::parseToken(PBRTScene& targetScene,LockFreeCircleQueue<Token>& t
             printf("%c", (t.str + t.pos)[i]);
         }
         printf("\n");
-        printf("\t [offset : %d \t length : %d\n]", t.pos, t.len);
+        printf("\t [offset : %d \t length : %d]\n", t.pos, t.len);
 	}
     printf("Done.\n");
 }

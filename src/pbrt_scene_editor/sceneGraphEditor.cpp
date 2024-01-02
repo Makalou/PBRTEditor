@@ -12,6 +12,36 @@
 
 #include "scene.h"
 
+#include "Inspector.hpp"
+
+struct SceneGraphNode : Inspectable
+{
+    std::string name;
+    std::vector<SceneGraphNode*> children;
+    SceneGraphNode* parent;
+
+    int intermediate_val;
+    int accumulated_val;
+
+    void modify(int new_val){
+        intermediate_val = new_val;
+        reaccumulate(parent->accumulated_val);
+    }
+
+    void reaccumulate(int val)
+    {
+        accumulated_val = accumulate(val);
+        for (auto* child : children) { //todo maybe paralleized by omp task ... 
+            child->reaccumulate(accumulated_val);
+        }
+    }
+
+    int accumulate(int val)
+    {
+
+    }
+};
+
 void rightClickMenu(bool* selections, int count)
 {
     if (ImGui::BeginPopupContextItem())
@@ -136,7 +166,7 @@ void SceneGraphEditor::init()
 
 PBRTParser::ParseResult SceneGraphEditor::parsePBRTSceneFile(const std::filesystem::path & path, const AssetLoader& assetLoader)
 {
-    return _parser.parse(*_scene,path,assetLoader);
+    return _parser.parse(*_currentScene,path,assetLoader);
 }
 
 SceneGraphEditor::~SceneGraphEditor()
