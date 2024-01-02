@@ -112,6 +112,7 @@ void EditorGUI::showMenuFile()
 	
 	if (ImGui::BeginMenu("Open Recent"))
 	{
+		//todo : BUG : can't remapped scene file
 		if (!recentOpenCache.empty()) {
 			int have_listed = 0;
 			int size = recentOpenCache.size();
@@ -124,6 +125,8 @@ void EditorGUI::showMenuFile()
 					// todo : repush hit histroy
 					_sceneGraphEditor->parsePBRTSceneFile(histroy.second, _assetFileTree->assetLoader);
 				}
+				if (ImGui::IsItemHovered())
+					ImGui::SetTooltip(histroy.second.string().c_str());
 				have_listed++;
 			}
 
@@ -137,6 +140,8 @@ void EditorGUI::showMenuFile()
 							//todo : repush hit histroy
 							_sceneGraphEditor->parsePBRTSceneFile(histroy.second, _assetFileTree->assetLoader);
 						}
+						if (ImGui::IsItemHovered())
+							ImGui::SetTooltip(histroy.second.string().c_str());
 					}
 					ImGui::EndMenu();
 				}
@@ -264,7 +269,7 @@ void EditorGUI::constructFrame()
 	ImGui_ImplVulkan_NewFrame();
 	ImGui_ImplGlfw_NewFrame();
 	ImGui::NewFrame();
-	//ImGui::ShowDemoWindow();
+	ImGui::ShowDemoWindow();
 	//_inspector->constructFrame();
 	showMainMenuBar();
 	_assetFileTree->constructFrame();

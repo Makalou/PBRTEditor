@@ -9,6 +9,7 @@
 #include <filesystem>
 
 struct AssetLoader;
+struct PBRTScene;
 
 struct SceneGraphEditor : EditorComponentGUI
 {
@@ -20,4 +21,5 @@ struct SceneGraphEditor : EditorComponentGUI
 	// path is the absolute path to the file
 	PBRTParser::ParseResult parsePBRTSceneFile(const std::filesystem::path& path, const AssetLoader& assetLoader);
 	PBRTParser _parser;
+	std::shared_ptr<PBRTScene> _scene;
 };

@@ -10,6 +10,8 @@
 
 #include "AssetLoader.hpp"
 
+#include "scene.h"
+
 void rightClickMenu(bool* selections, int count)
 {
     if (ImGui::BeginPopupContextItem())
@@ -134,7 +136,7 @@ void SceneGraphEditor::init()
 
 PBRTParser::ParseResult SceneGraphEditor::parsePBRTSceneFile(const std::filesystem::path & path, const AssetLoader& assetLoader)
 {
-    return _parser.parse(path,assetLoader);
+    return _parser.parse(*_scene,path,assetLoader);
 }
 
 SceneGraphEditor::~SceneGraphEditor()
