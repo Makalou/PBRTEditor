@@ -1,0 +1,229 @@
+//
+// Created by 王泽远 on 2024/1/1.
+//
+#include "PBRTParser.h"
+#include "scene.h"
+
+#include "TokenParser.h"
+
+#define TOKEN_HANDLER_DEF(token) static void TokenHandler##token( Token& t,\
+                                                                PBRTScene& target, \
+                                                                LockFreeCircleQueue<Token>& tokenQueue, \
+                                                                AssetLoader& assetLoader)\
+{ \
+    for (int i = 0; i < t.len; i++) { \
+    printf("%c", (t.str + t.pos)[i]); \
+    } \
+    printf("\t [offset : %d \t length : %d]\n", t.pos, t.len);
+
+#define TOKEN_HANDLER_DEF_END }
+
+#define REGISTRY_HANDLER_FOR(token) handlers.emplace(#token,TokenHandler##token);
+
+TOKEN_HANDLER_DEF(AttributeBegin)
+
+TOKEN_HANDLER_DEF_END
+
+TOKEN_HANDLER_DEF(AttributeEnd)
+
+TOKEN_HANDLER_DEF_END
+
+TOKEN_HANDLER_DEF(Attribute)
+
+TOKEN_HANDLER_DEF_END
+
+TOKEN_HANDLER_DEF(ActiveTransform)
+
+TOKEN_HANDLER_DEF_END
+
+TOKEN_HANDLER_DEF(AreaLightSource)
+
+TOKEN_HANDLER_DEF_END
+
+TOKEN_HANDLER_DEF(Accelerator)
+
+TOKEN_HANDLER_DEF_END
+
+TOKEN_HANDLER_DEF(ConcatTransform)
+
+TOKEN_HANDLER_DEF_END
+
+TOKEN_HANDLER_DEF(CoordinateSystem)
+
+TOKEN_HANDLER_DEF_END
+
+TOKEN_HANDLER_DEF(CoordSysTransform)
+
+TOKEN_HANDLER_DEF_END
+
+TOKEN_HANDLER_DEF(ColorSpace)
+
+TOKEN_HANDLER_DEF_END
+
+TOKEN_HANDLER_DEF(Camera)
+
+TOKEN_HANDLER_DEF_END
+
+TOKEN_HANDLER_DEF(Film)
+
+TOKEN_HANDLER_DEF_END
+
+TOKEN_HANDLER_DEF(Integrator)
+
+TOKEN_HANDLER_DEF_END
+
+TOKEN_HANDLER_DEF(Include)
+
+TOKEN_HANDLER_DEF_END
+
+TOKEN_HANDLER_DEF(Import)
+
+TOKEN_HANDLER_DEF_END
+
+TOKEN_HANDLER_DEF(Identity)
+
+TOKEN_HANDLER_DEF_END
+
+TOKEN_HANDLER_DEF(LightSource)
+
+TOKEN_HANDLER_DEF_END
+
+TOKEN_HANDLER_DEF(LookAt)
+
+TOKEN_HANDLER_DEF_END
+
+TOKEN_HANDLER_DEF(MakeNamedMaterial)
+
+TOKEN_HANDLER_DEF_END
+
+TOKEN_HANDLER_DEF(MakeNamedMedium)
+
+TOKEN_HANDLER_DEF_END
+
+TOKEN_HANDLER_DEF(Material)
+
+TOKEN_HANDLER_DEF_END
+
+TOKEN_HANDLER_DEF(MediumInterface)
+
+TOKEN_HANDLER_DEF_END
+
+TOKEN_HANDLER_DEF(NamedMaterial)
+
+TOKEN_HANDLER_DEF_END
+
+TOKEN_HANDLER_DEF(ObjectBegin)
+
+TOKEN_HANDLER_DEF_END
+
+TOKEN_HANDLER_DEF(ObjectEnd)
+
+TOKEN_HANDLER_DEF_END
+
+TOKEN_HANDLER_DEF(ObjectInstance)
+
+TOKEN_HANDLER_DEF_END
+
+TOKEN_HANDLER_DEF(Option)
+
+TOKEN_HANDLER_DEF_END
+
+TOKEN_HANDLER_DEF(PixelFilter)
+
+TOKEN_HANDLER_DEF_END
+
+TOKEN_HANDLER_DEF(ReverseOrientation)
+
+TOKEN_HANDLER_DEF_END
+
+TOKEN_HANDLER_DEF(Rotate)
+
+TOKEN_HANDLER_DEF_END
+
+TOKEN_HANDLER_DEF(Shape)
+
+TOKEN_HANDLER_DEF_END
+
+TOKEN_HANDLER_DEF(Sampler)
+
+TOKEN_HANDLER_DEF_END
+
+TOKEN_HANDLER_DEF(Scale)
+
+TOKEN_HANDLER_DEF_END
+
+TOKEN_HANDLER_DEF(TransformBegin)
+
+TOKEN_HANDLER_DEF_END
+
+TOKEN_HANDLER_DEF(TransformEnd)
+
+TOKEN_HANDLER_DEF_END
+
+TOKEN_HANDLER_DEF(Transform)
+
+TOKEN_HANDLER_DEF_END
+
+TOKEN_HANDLER_DEF(Translate)
+
+TOKEN_HANDLER_DEF_END
+
+TOKEN_HANDLER_DEF(TransformTimes)
+
+TOKEN_HANDLER_DEF_END
+
+TOKEN_HANDLER_DEF(Texture)
+
+TOKEN_HANDLER_DEF_END
+
+TOKEN_HANDLER_DEF(WorldBegin)
+
+TOKEN_HANDLER_DEF_END
+
+TOKEN_HANDLER_DEF(WorldEnd)
+
+TOKEN_HANDLER_DEF_END
+
+TokenParser::TokenParser() {
+    REGISTRY_HANDLER_FOR(AttributeBegin);
+    REGISTRY_HANDLER_FOR(AttributeEnd);
+    REGISTRY_HANDLER_FOR(Attribute);
+    REGISTRY_HANDLER_FOR(ActiveTransform);
+    REGISTRY_HANDLER_FOR(Accelerator);
+    REGISTRY_HANDLER_FOR(ConcatTransform);
+    REGISTRY_HANDLER_FOR(CoordinateSystem);
+    REGISTRY_HANDLER_FOR(CoordSysTransform);
+    REGISTRY_HANDLER_FOR(ColorSpace);
+    REGISTRY_HANDLER_FOR(Camera);
+    REGISTRY_HANDLER_FOR(Film);
+    REGISTRY_HANDLER_FOR(Integrator);
+    REGISTRY_HANDLER_FOR(Include);
+    REGISTRY_HANDLER_FOR(Import);
+    REGISTRY_HANDLER_FOR(Identity);
+    REGISTRY_HANDLER_FOR(LightSource);
+    REGISTRY_HANDLER_FOR(LookAt);
+    REGISTRY_HANDLER_FOR(MakeNamedMaterial);
+    REGISTRY_HANDLER_FOR(MakeNamedMedium);
+    REGISTRY_HANDLER_FOR(Material);
+    REGISTRY_HANDLER_FOR(MediumInterface);
+    REGISTRY_HANDLER_FOR(NamedMaterial);
+    REGISTRY_HANDLER_FOR(ObjectBegin);
+    REGISTRY_HANDLER_FOR(ObjectEnd);
+    REGISTRY_HANDLER_FOR(ObjectInstance);
+    REGISTRY_HANDLER_FOR(Option);
+    REGISTRY_HANDLER_FOR(PixelFilter);
+    REGISTRY_HANDLER_FOR(ReverseOrientation);
+    REGISTRY_HANDLER_FOR(Rotate);
+    REGISTRY_HANDLER_FOR(Shape);
+    REGISTRY_HANDLER_FOR(Sampler);
+    REGISTRY_HANDLER_FOR(Scale);
+    REGISTRY_HANDLER_FOR(TransformBegin);
+    REGISTRY_HANDLER_FOR(TransformEnd);
+    REGISTRY_HANDLER_FOR(Transform);
+    REGISTRY_HANDLER_FOR(Translate);
+    REGISTRY_HANDLER_FOR(TransformTimes);
+    REGISTRY_HANDLER_FOR(Texture);
+    REGISTRY_HANDLER_FOR(WorldBegin);
+    REGISTRY_HANDLER_FOR(WorldEnd);
+}
+

@@ -5,13 +5,15 @@
 
 #include "scene.h"
 
-PBRTParser::ParseResult PBRTParser::parse(PBRTScene& targetScene,const std::filesystem::path& path, const AssetLoader& assetLoader)
+#include "TokenParser.h"
+
+PBRTParser::ParseResult PBRTParser::parse(PBRTScene& targetScene,const std::filesystem::path& path,AssetLoader& assetLoader)
 {
 	std::thread tokenizeThread([&](){
-        tokenize(path, token_queue);
+        tokenize(path);
         });
     std::thread parseTokenThread([&]() {
-        parseToken(targetScene,token_queue, assetLoader);
+        parseToken(targetScene,assetLoader);
      });
 
 	tokenizeThread.join();
@@ -88,10 +90,10 @@ void PBRTParser::nextToken(const char* text, int text_len, int* seek, int* tok_l
 
 }
 
-void PBRTParser::tokenize(const std::filesystem::path& path, LockFreeCircleQueue<Token>& token_queue)
+void PBRTParser::tokenize(const std::filesystem::path& path)
 {
 	if (g_use_mmap) {
-		tokenizeMMAP(path, token_queue);
+		tokenizeMMAP(path);
 	}
 }
 
@@ -107,8 +109,7 @@ std::string dequote(const std::string& input) {
     }
 }
 
-
-void PBRTParser::tokenizeMMAP(const std::filesystem::path& path, LockFreeCircleQueue<Token>& token_queue)
+void PBRTParser::tokenizeMMAP(const std::filesystem::path& path)
 {
 		std::vector<std::pair<MappedFile, int>> handleFileStack;
 		openedMappedFile.emplace_back(path);
@@ -155,18 +156,9 @@ void PBRTParser::tokenizeMMAP(const std::filesystem::path& path, LockFreeCircleQ
 
         token_queue.waitAndEnqueue({ nullptr,0,0 });
 }
-void PBRTParser::parseToken(PBRTScene& targetScene,LockFreeCircleQueue<Token>& token_queue, const AssetLoader& assetLoader)
+
+void PBRTParser::parseToken(PBRTScene& targetScene,AssetLoader& assetLoader)
 {
-	while (true)
-	{
-		Token t = token_queue.waitAndDequeue();
-		if (t.str == nullptr)
-			break;
-        for (int i = 0; i < t.len; i++) {
-            printf("%c", (t.str + t.pos)[i]);
-        }
-        printf("\n");
-        printf("\t [offset : %d \t length : %d]\n", t.pos, t.len);
-	}
-    printf("Done.\n");
+	static TokenParser tp;
+    tp.parse(targetScene,token_queue,assetLoader);
 }

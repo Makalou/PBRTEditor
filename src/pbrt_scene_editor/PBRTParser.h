@@ -28,15 +28,15 @@ struct PBRTParser
 		INCORRECT_FORMAT
 	};
 
-	PBRTParser::ParseResult parse(PBRTScene& targetScene, const std::filesystem::path& path, const AssetLoader& assetLoader);
+	PBRTParser::ParseResult parse(PBRTScene& targetScene, const std::filesystem::path& path, AssetLoader& assetLoader);
 
 	bool g_use_mmap = true;
 
 private:
 	LockFreeCircleQueue<Token> token_queue{ 10000 };
 	void nextToken(const char* text, int text_len, int* seek, int* tok_loc, int* tok_len);
-	void tokenize(const std::filesystem::path& path, LockFreeCircleQueue<Token>& token_queue);
-	void tokenizeMMAP(const std::filesystem::path& path, LockFreeCircleQueue<Token>& token_queue);
-	void parseToken(PBRTScene& targetScene, LockFreeCircleQueue<Token>& token_queue, const AssetLoader& assetLoader);
+	void tokenize(const std::filesystem::path& path);
+	void tokenizeMMAP(const std::filesystem::path& path);
+	void parseToken(PBRTScene& targetScene, AssetLoader& assetLoader);
 	std::vector<MappedFile> openedMappedFile;
 };

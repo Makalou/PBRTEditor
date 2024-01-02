@@ -164,7 +164,7 @@ void SceneGraphEditor::init()
 
 }
 
-PBRTParser::ParseResult SceneGraphEditor::parsePBRTSceneFile(const std::filesystem::path & path, const AssetLoader& assetLoader)
+PBRTParser::ParseResult SceneGraphEditor::parsePBRTSceneFile(const std::filesystem::path & path, AssetLoader& assetLoader)
 {
     return _parser.parse(*_currentScene,path,assetLoader);
 }
