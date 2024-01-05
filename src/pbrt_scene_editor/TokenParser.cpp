@@ -360,8 +360,14 @@ DIRECTIVE_HANDLER_DEF(Shape)
     auto shapeParamList = convertToPBRTParamLists(para_list);
     if(class_str == "plymesh" || class_str == "loopsubdiv")
     {
-        assert(shapeParamList[0].first == "filename");
-        assetLoader.loadMesh(std::get<std::string>(shapeParamList[0].second));
+        for (const auto& para : shapeParamList)
+        {
+            if (para.first == "filename") {
+                assetLoader.loadMesh(std::get<std::string>(para.second));
+                break;
+            }
+               
+        }
     }
 DIRECTIVE_HANDLER_DEF_END
 
@@ -436,9 +442,14 @@ DIRECTIVE_HANDLER_DEF(Texture)
     auto textureParamList = convertToPBRTParamLists(para_list);
     auto class_str = classTok.to_string();
     if(dequote(class_str) == "imagemap"){
-        assert(textureParamList[0].first == "filename");
-        //assetLoader.loadImg(std::get<std::string>(textureParamList[0].second));
-        assetLoader.loadImgAsync(std::get<std::string>(textureParamList[0].second));
+        for (const auto& para : textureParamList)
+        {
+            if (para.first == "filename") {
+                assetLoader.loadImgAsync(std::get<std::string>(para.second));
+                break;
+            }
+
+        }
     }
 DIRECTIVE_HANDLER_DEF_END
 

@@ -5,6 +5,8 @@
 #ifndef PBRTEDITOR_REFLECTION_H
 #define PBRTEDITOR_REFLECTION_H
 
+#include <string>
+
 #define DEF_BASECLASS_BEGIN(base) struct base { \
          virtual void parse(const std::vector<PBRTParam> & para_lists) = 0; \
 

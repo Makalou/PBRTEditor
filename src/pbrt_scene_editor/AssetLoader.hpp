@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <future>
 #include "LockFreeCircleQueue.hpp"
+#include <variant>
 
 namespace fs = std::filesystem;
 

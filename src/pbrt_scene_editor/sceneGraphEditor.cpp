@@ -118,7 +118,7 @@ void SceneGraphEditor::constructFrame()
 
 void SceneGraphEditor::init()
 {
-
+    _sceneGraphRootNode = nullptr;
 }
 
 PBRTParser::ParseResult SceneGraphEditor::parsePBRTSceneFile(const std::filesystem::path & path, AssetLoader& assetLoader)

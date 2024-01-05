@@ -6,6 +6,7 @@
 #define PBRTEDITOR_SCENE_H
 
 #include <string>
+#include <variant>
 
 #include "Reflection.h"
 

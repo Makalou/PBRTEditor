@@ -15,7 +15,7 @@ void AssetLoader::loadImg(const std::string &relative_path) {
     auto img_mem = stbi_load(fileName.c_str(),&x,&y,&channels,0);
     if(img_mem != nullptr){
         float img_mem_size_kb = float(x * y * channels * sizeof(stbi_us))/1024.0f;
-        GlobalLogger::getInstance().info("Load Image " + fileName + "\t size : " + std::to_string(img_mem_size_kb) + "KB");
+        GlobalLogger::getInstance().info("Load Image " + relative_path + "\t mem : " + std::to_string(img_mem_size_kb) + "KB");
         loadedCache.emplace(fileName,img_mem);
     }
 }
@@ -28,12 +28,12 @@ AssetRequest AssetLoader::loadImgAsync(const std::string &relative_path) {
         return it->second;
     }
 
-    auto loadTask = [=,this]()->void*{
+    auto loadTask = [this,fileName,relative_path]()->void*{
         int x,y,channels;
         auto img_mem = stbi_load(fileName.c_str(),&x,&y,&channels,0);
         if(img_mem != nullptr){
             float img_mem_size_kb = float(x * y * channels * sizeof(stbi_us))/1024.0f;
-            GlobalLogger::getInstance().info("Load Image " + fileName + "\t size : " + std::to_string(img_mem_size_kb) + "KB");
+            GlobalLogger::getInstance().info("Load Image " + relative_path + "\t mem : " + std::to_string(img_mem_size_kb) + "KB");
             float oldValue = _totalImgSizeKB.load();
             while (!_totalImgSizeKB.compare_exchange_weak(oldValue, oldValue + img_mem_size_kb));
             std::lock_guard<std::mutex> lg(_cacheLock);
