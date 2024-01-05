@@ -6,6 +6,7 @@
 /*
 *  Atomic int based circular queue implementation
 *  Should be used in "single producer single consumer" scenario
+*  Should be really careful when storing object with ref count
 */
 template<class T>
 struct LockFreeCircleQueue
@@ -50,6 +51,25 @@ struct LockFreeCircleQueue
 		while (!dequeue(&val));
 		return val;
 	}
+
+    // return current front but don't dequeue it.
+    bool front(T* value)
+    {
+        size_t currentHead = head.load(std::memory_order_relaxed);
+        if (currentHead == tail.load(std::memory_order_acquire)) {
+            return false;
+        }
+        *value = buffer[currentHead];
+        return true;
+    }
+
+    //busy wait until queue is not empty(potential live lock)
+    T waitAndFront()
+    {
+        T val;
+        while(!front(&val));
+        return val;
+    }
 
 	~LockFreeCircleQueue()
 	{

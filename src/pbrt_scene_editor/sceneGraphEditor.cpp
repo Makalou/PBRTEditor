@@ -11,39 +11,21 @@
 #include "AssetLoader.hpp"
 
 #include "scene.h"
+#include "SceneBuilder.hpp"
 
-#include "Inspector.hpp"
-
-struct SceneGraphNode : Inspectable
+void rightClickMenu(const bool* selections, int count)
 {
-    std::string name;
-    std::vector<SceneGraphNode*> children;
-    SceneGraphNode* parent;
-
-    int intermediate_val;
-    int accumulated_val;
-
-    void modify(int new_val){
-        intermediate_val = new_val;
-        reaccumulate(parent->accumulated_val);
-    }
-
-    void reaccumulate(int val)
+    bool all_false = true;
+    for (int i = 0; i < count; i++)
     {
-        accumulated_val = accumulate(val);
-        for (auto* child : children) { //todo maybe paralleized by omp task ... 
-            child->reaccumulate(accumulated_val);
+        if (selections[i]) {
+            all_false = false;
+            break;
         }
     }
 
-    int accumulate(int val)
-    {
+    if (all_false) return;
 
-    }
-};
-
-void rightClickMenu(bool* selections, int count)
-{
     if (ImGui::BeginPopupContextItem())
     {
         std::vector<int> selected_idices;
@@ -68,9 +50,8 @@ void rightClickMenu(bool* selections, int count)
             if (ImGui::MenuItem("Delete"))
             {
 
-            }   
-        }
-        else {
+            }
+        }else if(selected_idices.size() >1) {
             if (ImGui::MenuItem("Copy All"))
             {
 
@@ -89,6 +70,10 @@ void rightClickMenu(bool* selections, int count)
     }
 }
 
+void rightClickMenu2(bool selected){
+
+}
+
 void SceneGraphEditor::constructFrame()
 {
     if (!is_open) {
@@ -96,66 +81,38 @@ void SceneGraphEditor::constructFrame()
     }
 
     ImGui::Begin("SceneGraph",&is_open);
-    if (ImGui::TreeNode("Obj0"))
-    {
-        //rightClickMenu(0);
-        static bool selection[5] = { false, false, false, false, false };
 
-        for (int n = 0; n < 5; n++)
-        {
-            char buf[32];
-            sprintf(buf, "Object %d", n);
-            if (ImGui::Selectable(buf, selection[n]))
+   if(_sceneGraphRootNode == nullptr){
+        ImGui::End();
+        return;
+   }
+
+    static auto nodePreVisitor = [](SceneGraphNode* node){
+        if(node->children.empty()){
+            if (ImGui::Selectable(node->name.c_str(), &node->is_selected))
             {
-                if (!ImGui::GetIO().KeyCtrl)    // Clear selection when CTRL is not held
-                    memset(selection, 0, sizeof(selection));
-                selection[n] ^= 1;
+//                if (!ImGui::GetIO().KeyCtrl)    // Clear selection when CTRL is not held
+//                    node->is_selected = false;//memset(selection, 0, sizeof(selection));
+//                node->is_selected ^= 1;
             }
-
-            rightClickMenu(selection,5);
+            rightClickMenu2(node->is_selected);
+            return std::make_pair(false, false);
+        }else{
+            auto nodeFlags = node->is_selected? ImGuiTreeNodeFlags_OpenOnArrow| ImGuiTreeNodeFlags_Selected : ImGuiTreeNodeFlags_OpenOnArrow;
+            bool is_node_open = ImGui::TreeNodeEx(node->name.c_str(), nodeFlags);
+            if(ImGui::IsItemClicked())
+                node->is_selected ^= 1;
+            rightClickMenu2(node->is_selected);
+            return std::make_pair(is_node_open, is_node_open);
         }
+    };
+
+    static auto nodePostVisitor = [](SceneGraphNode* node)->void{
         ImGui::TreePop();
-    }
-    if (ImGui::TreeNode("Obj1"))
-    {
-        //rightClickMenu(0);
-        static bool selection[5] = { false, false, false, false, false };
+    };
 
-        for (int n = 0; n < 5; n++)
-        {
-            char buf[32];
-            sprintf(buf, "Object %d", n);
-            if (ImGui::Selectable(buf, selection[n]))
-            {
-                if (!ImGui::GetIO().KeyCtrl)    // Clear selection when CTRL is not held
-                    memset(selection, 0, sizeof(selection));
-                selection[n] ^= 1;
-            }
+    _sceneGraphRootNode->visit(nodePreVisitor,nodePostVisitor);
 
-            rightClickMenu(selection, 5);
-        }
-        if (ImGui::TreeNode("Obj1"))
-        {
-            //rightClickMenu(0);
-            static bool selection[5] = { false, false, false, false, false };
-
-            for (int n = 0; n < 5; n++)
-            {
-                char buf[32];
-                sprintf(buf, "Object %d", n);
-                if (ImGui::Selectable(buf, selection[n]))
-                {
-                    if (!ImGui::GetIO().KeyCtrl)    // Clear selection when CTRL is not held
-                        memset(selection, 0, sizeof(selection));
-                    selection[n] ^= 1;
-                }
-
-                rightClickMenu(selection, 5);
-            }
-            ImGui::TreePop();
-        }
-        ImGui::TreePop();
-    }
     ImGui::End();
 }
 
@@ -166,7 +123,12 @@ void SceneGraphEditor::init()
 
 PBRTParser::ParseResult SceneGraphEditor::parsePBRTSceneFile(const std::filesystem::path & path, AssetLoader& assetLoader)
 {
-    return _parser.parse(*_currentScene,path,assetLoader);
+    PBRTSceneBuilder builder{};
+    assetLoader.setWorkDir(path.parent_path());
+    auto res = _parser.parse(builder,path,assetLoader);
+    // do something to currentScene
+    _sceneGraphRootNode = builder._currentVisitNode;
+    return res;
 }
 
 SceneGraphEditor::~SceneGraphEditor()

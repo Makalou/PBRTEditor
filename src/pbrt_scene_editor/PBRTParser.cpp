@@ -7,13 +7,13 @@
 
 #include "TokenParser.h"
 
-PBRTParser::ParseResult PBRTParser::parse(PBRTScene& targetScene,const std::filesystem::path& path,AssetLoader& assetLoader)
+PBRTParser::ParseResult PBRTParser::parse(PBRTSceneBuilder& builder,const std::filesystem::path& path,AssetLoader& assetLoader)
 {
 	std::thread tokenizeThread([&](){
         tokenize(path);
         });
     std::thread parseTokenThread([&]() {
-        parseToken(targetScene,assetLoader);
+        parseToken(builder,assetLoader);
      });
 
 	tokenizeThread.join();
@@ -97,7 +97,7 @@ void PBRTParser::tokenize(const std::filesystem::path& path)
 	}
 }
 
-std::string dequote(const std::string& input) {
+std::string dequote1(const std::string& input) {
     if (input.length() >= 2 && (input.front() == '\'' || input.front() == '"') &&
         (input.back() == '\'' || input.back() == '"')) {
         // Remove the first and last characters
@@ -130,7 +130,7 @@ void PBRTParser::tokenizeMMAP(const std::filesystem::path& path)
 						handleFileStack.pop_back();
 						break;
 					}
-                    auto pbrtFormatPath = dequote(std::string(f.raw() + tok_loc, tok_len));
+                    auto pbrtFormatPath = dequote1(std::string(f.raw() + tok_loc, tok_len));
                     auto searchDir = path.parent_path();
                     size_t pos = pbrtFormatPath.find('/');
                     while (pos != std::string::npos) {
@@ -157,8 +157,8 @@ void PBRTParser::tokenizeMMAP(const std::filesystem::path& path)
         token_queue.waitAndEnqueue({ nullptr,0,0 });
 }
 
-void PBRTParser::parseToken(PBRTScene& targetScene,AssetLoader& assetLoader)
+void PBRTParser::parseToken(PBRTSceneBuilder& builder,AssetLoader& assetLoader)
 {
 	static TokenParser tp;
-    tp.parse(targetScene,token_queue,assetLoader);
+    tp.parse(builder,token_queue,assetLoader);
 }

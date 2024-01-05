@@ -24,6 +24,7 @@ EditorGUI::EditorGUI()
 	_sceneGraphEditor = new SceneGraphEditor;
 	_sceneViewer = new SceneViewer;
     _loggerWindow = new LoggerGUI;
+    _inspector = new Inspector;
 }
 
 void EditorGUI::init(GLFWwindow* window, std::shared_ptr<DeviceExtended> device)
@@ -129,7 +130,7 @@ void EditorGUI::showMenuFile()
 					_sceneGraphEditor->parsePBRTSceneFile(histroy.second, _assetFileTree->assetLoader);
 				}
 				if (ImGui::IsItemHovered())
-					ImGui::SetTooltip(histroy.second.string().c_str());
+					ImGui::SetTooltip("%s",histroy.second.string().c_str());
 				have_listed++;
 			}
 
@@ -144,7 +145,7 @@ void EditorGUI::showMenuFile()
 							_sceneGraphEditor->parsePBRTSceneFile(histroy.second, _assetFileTree->assetLoader);
 						}
 						if (ImGui::IsItemHovered())
-							ImGui::SetTooltip(histroy.second.string().c_str());
+							ImGui::SetTooltip("%s",histroy.second.string().c_str());
 					}
 					ImGui::EndMenu();
 				}
@@ -236,7 +237,7 @@ void EditorGUI::showMenuView()
 		_assetFileTree->setOpen();
 	}
 	if (ImGui::MenuItem("Inspector")) {
-
+        _inspector->setOpen();
 	}
     if (ImGui::MenuItem("Log")) {
         _loggerWindow->setOpen();
@@ -276,8 +277,8 @@ void EditorGUI::constructFrame()
 	ImGui_ImplGlfw_NewFrame();
 	ImGui::NewFrame();
 	//ImGui::ShowDemoWindow();
-	//_inspector->constructFrame();
 	showMainMenuBar();
+    _inspector->constructFrame();
 	_assetFileTree->constructFrame();
 	_sceneGraphEditor->constructFrame();
 	_sceneViewer->constructFrame();
@@ -291,8 +292,6 @@ void EditorGUI::constructFrame()
 			{
 				auto fileName = ImGuiFileDialog::Instance()->GetCurrentFileName();
 				auto filePath= ImGuiFileDialog::Instance()->GetCurrentPath();
-				//std::cout << fileName << std::endl;
-				//std::cout << filePath << std::endl;
 				std::filesystem::path fsPath(filePath);
 				fsPath.append(fileName);
 				if (true) { // if load sucess

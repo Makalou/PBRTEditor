@@ -129,8 +129,6 @@ void LoggerGUI::constructFrame() {
 
     ImGui::EndChild();
     ImGui::End();
-
-    ImGui::End();
 }
 
 LoggerGUI::~LoggerGUI() = default;
