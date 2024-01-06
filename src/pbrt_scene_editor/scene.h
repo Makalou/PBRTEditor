@@ -118,7 +118,7 @@ DEF_SUBCLASS_BEGIN(Camera,Spherical)
     PARSE_SECTION_END_IN_DERIVED
 DEF_SUBCLASS_END
 
-CREATOR(Camera,Perspective,Orthognal,Realistic,Spherical)
+using CameraCreator = GenericCreator<Camera, PerspectiveCamera, OrthognalCamera, RealisticCamera, SphericalCamera>;
 
 DEF_BASECLASS_BEGIN(Sampler)
 
@@ -172,7 +172,7 @@ DEF_SUBCLASS_BEGIN(Sampler,ZSobol)
 
 DEF_SUBCLASS_END
 
-CREATOR(Sampler,Halton,Independent,PaddedSobol,Sobol,Stratified,ZSobol)
+using SamplerCreator = GenericCreator<Sampler, HaltonSampler, IndependentSampler, PaddedSobolSampler, SobolSampler, StratifiedSampler, ZSobolSampler>;
 
 DEF_BASECLASS_BEGIN(Filter)
 
@@ -218,7 +218,7 @@ DEF_SUBCLASS_BEGIN(Filter,Triangle)
 
 DEF_SUBCLASS_END
 
-CREATOR(Filter,Box,Gaussian,Mitchell,Sinc,Triangle)
+using FilterCreator = GenericCreator<Filter, BoxFilter, GaussianFilter, MitchellFilter, SincFilter, TriangleFilter>;
 
 DEF_BASECLASS_BEGIN(Integrator)
 
@@ -304,7 +304,7 @@ DEF_SUBCLASS_BEGIN(Integrator,VolPath)
 
 DEF_SUBCLASS_END
 
-CREATOR(Integrator,AmientOcclusion,BDPT,LightPath,MLT,Path,RandomWalk,SimplePath,SimpleVolPath,SPPM,VolPath)
+using IntegratorCreator = GenericCreator<Integrator, AmientOcclusionIntegrator, BDPTIntegrator, LightPathIntegrator, MLTIntegrator, PathIntegrator, RandomWalkIntegrator, SimplePathIntegrator, SimpleVolPathIntegrator, SPPMIntegrator, VolPathIntegrator>;
 
 DEF_BASECLASS_BEGIN(Aggregate)
 
@@ -326,7 +326,7 @@ DEF_SUBCLASS_BEGIN(Aggregate,KdTree)
 
 DEF_SUBCLASS_END
 
-CREATOR(Aggregate,BVH,KdTree)
+using AggregateCreator = GenericCreator<Aggregate, BVHAggregate, KdTreeAggregate>;
 
 DEF_BASECLASS_BEGIN(Shape)
 DEF_BASECLASS_END
@@ -373,7 +373,7 @@ DEF_SUBCLASS_BEGIN(Shape,TriangleMesh)
     }
 DEF_SUBCLASS_END
 
-CREATOR(Shape,BilinearMesh,Curve,Cylinder,Disk,Sphere,TriangleMesh)
+using ShapeCreator = GenericCreator<Shape, BilinearMeshShape, CurveShape, CylinderShape, DiskShape, SphereShape, TriangleMeshShape>;
 
 DEF_BASECLASS_BEGIN(Light)
 
@@ -421,7 +421,7 @@ DEF_SUBCLASS_BEGIN(Light,Spot)
     }
 DEF_SUBCLASS_END
 
-CREATOR(Light,Distant,Goniometric,Infinite,Point,Projection,Spot)
+using LightCreator = GenericCreator<Light, DistantLight, GoniometricLight, InfiniteLight, PointLight, ProjectionLight, SpotLight>;
 
 DEF_BASECLASS_BEGIN(AreaLight)
 
@@ -434,7 +434,7 @@ DEF_SUBCLASS_BEGIN(AreaLight,Diffuse)
     }
 DEF_SUBCLASS_END
 
-CREATOR(AreaLight,Diffuse)
+using AreaLightCreator = GenericCreator<AreaLight, DiffuseAreaLight>;
 
 DEF_BASECLASS_BEGIN(Material)
 
@@ -535,9 +535,7 @@ DEF_SUBCLASS_BEGIN(Material,Thindielectric)
 
 DEF_SUBCLASS_END
 
-CREATOR(Material,CoatedDiffuse,CoatedConductor,Conductor,
-        Dielectric,Diffuse,DiffuseTransmission,Hair,
-        Interface,Measured,Mix,Subsurface,Thindielectric);
+using MaterialCreator = GenericCreator<Material, CoatedDiffuseMaterial, CoatedConductorMaterial, ConductorMaterial, DielectricMaterial, DiffuseMaterial, DiffuseTransmissionMaterial, HairMaterial, InterfaceMaterial, MeasuredMaterial, MixMaterial, SubsurfaceMaterial, ThindielectricMaterial>;;
 
 DEF_BASECLASS_BEGIN(Texture)
 
@@ -647,8 +645,7 @@ DEF_SUBCLASS_BEGIN(Texture,Wrinkled)
 
 DEF_SUBCLASS_END
 
-CREATOR(Texture,Bilerp,CheckerBoard,Constant,DirectionMix,
-        Dots,FBM,ImageMap,Marble,Mix,PTex,Scale,Windy,Wrinkled);
+using TextureCreator = GenericCreator<Texture, BilerpTexture, CheckerBoardTexture, ConstantTexture, DirectionMixTexture, DotsTexture, FBMTexture, ImageMapTexture, MarbleTexture, MixTexture, PTexTexture, ScaleTexture, WindyTexture, WrinkledTexture>;;
 
 DEF_BASECLASS_BEGIN(Medium)
 DEF_BASECLASS_END
@@ -693,7 +690,7 @@ DEF_SUBCLASS_BEGIN(Medium,UniformGrid)
 
 DEF_BASECLASS_END
 
-CREATOR(Medium,Cloud,Homogeneous,NanoVDB,RGBGrid,UniformGrid);
+using MediumCreator = GenericCreator<Medium, CloudMedium, HomogeneousMedium, NanoVDBMedium, RGBGridMedium, UniformGridMedium >;
 
 struct PBRTScene
 {

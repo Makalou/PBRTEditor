@@ -63,7 +63,6 @@
 #define CONC(A, B) CONC_(A, B)
 #define CONC_(A, B) A##B
 
-#define PREFIX_0(P, E) E
 #define PREFIX_1(P, E) E##P
 #define PREFIX_2(P, E, ...) E##P ,PREFIX_1(P, __VA_ARGS__)
 #define PREFIX_3(P, E, ...) E##P ,PREFIX_2(P, __VA_ARGS__)
@@ -120,6 +119,6 @@ public:
         };
 };
 
-#define CREATOR(base,...) using base##Creator = GenericCreator<base,PREFIX(base,__VA_ARGS__)>;
+#define CREATOR(base, ...) using base##Creator = GenericCreator<base, PREFIX(base, __VA_ARGS__) >;
 
 #endif //PBRTEDITOR_REFLECTION_H
