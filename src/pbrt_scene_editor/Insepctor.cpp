@@ -19,9 +19,10 @@ void Inspector::constructFrame()
         return;
     }
 
-    ImGui::Begin("Inspector - nothing",&is_open);
-
+    ImGui::Begin(("Inspect - " +_currentInspect->InspectedName()).c_str(),&is_open);
+    _currentInspect->show();
     ImGui::End();
+
 }
 
 void Inspector::init()
@@ -29,9 +30,10 @@ void Inspector::init()
 
 }
 
-
-
 Inspector::~Inspector()
 {
 
 }
+
+Inspectable Inspector::dummy = DummyInspectable{};
+Inspectable* Inspector::_currentInspect = &dummy;

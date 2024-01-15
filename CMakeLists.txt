@@ -1,5 +1,10 @@
 cmake_minimum_required(VERSION 3.12)
 
+set(CMAKE_TOOLCHAIN_FILE "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg/scripts/buildsystems/vcpkg.cmake"
+        CACHE STRING "Vcpkg toolchain file")
+
+execute_process(COMMAND ./vcpkg install assimap meshoptimizer WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/vcpkg)
+
 project(PBRTEditor LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -17,6 +22,8 @@ endif ()
 
 find_package(Threads)
 find_package(Vulkan REQUIRED)
+find_package(assimp CONFIG REQUIRED)
+find_package(meshoptimizer CONFIG REQUIRED)
 
 if(${Vulkan_FOUND})
     message("find vulkan version : " ${Vulkan_VERSION})
@@ -41,6 +48,7 @@ include_directories(src/ext/glfw/include)
 include_directories(src/ext/tinyobjloader)
 include_directories(src/ext/imgui/include)
 include_directories(src/ext/stb)
+include_directories(src/ext/vma)
 
 add_executable(editor_exe src/pbrt_scene_editor/main.cpp 
                           src/pbrt_scene_editor/viewer.cpp 
@@ -56,7 +64,7 @@ add_executable(editor_exe src/pbrt_scene_editor/main.cpp
                           src/pbrt_scene_editor/AssetFileTree.cpp
         src/pbrt_scene_editor/sceneViewer.cpp
         src/pbrt_scene_editor/sceneGraphEditor.cpp
-        src/pbrt_scene_editor/AssetLoader.cpp
+        src/pbrt_scene_editor/AssetManager.cpp
         src/pbrt_scene_editor/Insepctor.cpp
         src/pbrt_scene_editor/PBRTParser.h
         src/pbrt_scene_editor/PBRTParser.cpp
@@ -65,12 +73,17 @@ add_executable(editor_exe src/pbrt_scene_editor/main.cpp
         src/pbrt_scene_editor/GlobalLogger.h
         src/pbrt_scene_editor/SceneBuilder.hpp
         src/pbrt_scene_editor/SceneBuilder.cpp
-        src/pbrt_scene_editor/Insepctor.cpp)
+        src/pbrt_scene_editor/Insepctor.cpp
+        src/pbrt_scene_editor/RenderScene.h
+        src/pbrt_scene_editor/RenderScene.cpp)
 
 target_link_libraries(editor_exe PRIVATE Vulkan::Vulkan)
 target_link_libraries(editor_exe PRIVATE glfw)
 target_link_libraries(editor_exe PRIVATE imgui)
 target_link_libraries(editor_exe PRIVATE stb)
+target_link_libraries(editor_exe PRIVATE vma)
+target_link_libraries(editor_exe PRIVATE assimp::assimp)
+target_link_libraries(editor_exe PRIVATE meshoptimizer::meshoptimizer)
 
 
 

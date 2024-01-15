@@ -8,7 +8,7 @@
 #include <cstdio>
 #include <vector>
 
-#include "AssetLoader.hpp"
+#include "AssetManager.hpp"
 
 #include "scene.h"
 #include "SceneBuilder.hpp"
@@ -95,6 +95,8 @@ void SceneGraphEditor::constructFrame()
 //                    node->is_selected = false;//memset(selection, 0, sizeof(selection));
 //                node->is_selected ^= 1;
             }
+            if(node->is_selected)
+                Inspector::inspect(node);
             rightClickMenu2(node->is_selected);
             return std::make_pair(false, false);
         }else{
@@ -102,6 +104,8 @@ void SceneGraphEditor::constructFrame()
             bool is_node_open = ImGui::TreeNodeEx(node->name.c_str(), nodeFlags);
             if(ImGui::IsItemClicked())
                 node->is_selected ^= 1;
+            if(node->is_selected)
+                Inspector::inspect(node);
             rightClickMenu2(node->is_selected);
             return std::make_pair(is_node_open, is_node_open);
         }
@@ -121,14 +125,14 @@ void SceneGraphEditor::init()
     _sceneGraphRootNode = nullptr;
 }
 
-PBRTParser::ParseResult SceneGraphEditor::parsePBRTSceneFile(const std::filesystem::path & path, AssetLoader& assetLoader)
+SceneGraphNode* SceneGraphEditor::parsePBRTSceneFile(const std::filesystem::path & path, AssetManager& assetManager)
 {
     PBRTSceneBuilder builder{};
-    assetLoader.setWorkDir(path.parent_path());
-    auto res = _parser.parse(builder,path,assetLoader);
-    // do something to currentScene
+    assetManager.setWorkDir(path.parent_path());
+    auto res = _parser.parse(builder,path,assetManager);
+    // do something to current scene
     _sceneGraphRootNode = builder._currentVisitNode;
-    return res;
+    return builder._currentVisitNode;
 }
 
 SceneGraphEditor::~SceneGraphEditor()

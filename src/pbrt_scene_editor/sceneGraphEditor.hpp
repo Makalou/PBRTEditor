@@ -1,18 +1,16 @@
 #pragma once
 
 #include "editorComponent.hpp"
-
 #include <string>
-
 #include "PBRTParser.h"
-
 #include <filesystem>
-
 #include "Inspector.hpp"
-
 #include <functional>
+#include <glm/gtc/type_ptr.hpp>
+#include <glm/gtx/euler_angles.hpp>
+#include "scene.h"
 
-struct AssetLoader;
+struct AssetManager;
 struct PBRTScene;
 
 struct SceneGraphNode;
@@ -73,10 +71,22 @@ struct SceneGraphNode : Inspectable
     std::vector<SceneGraphNode*> children;
     SceneGraphNode* parent;
 
+    std::vector<Shape*> shapes;
+    std::vector<Light*> lights;
+    std::vector<AreaLight*> areaLights;
+
+    bool is_empty;
+    bool is_transform_detached;//transform not be affected by its parent
     bool is_selected;
 
-    int intermediate_val;
-    int accumulated_val;
+    glm::mat4x4 _selfTransform;
+    glm::mat4x4 _finalTransform;
+
+    SceneGraphNode()
+    {
+        _selfTransform = glm::identity<glm::mat4x4>();
+        _finalTransform = _selfTransform;
+    }
 
     void visit(SceneGraphVisitor& visitor){
         visitor(this);
@@ -138,6 +148,40 @@ struct SceneGraphNode : Inspectable
 //    {
 //
 //    }
+    void show() override
+    {
+        float translate[3];
+        translate[0] = glm::vec3{_selfTransform[3]}.x;
+        translate[1] = glm::vec3{_selfTransform[3]}.y;
+        translate[2] = glm::vec3{_selfTransform[3]}.z;
+        SHOW_FILED_FlOAT3(translate)
+        float rotation[3];
+        glm::extractEulerAngleXYZ(_selfTransform,rotation[0],rotation[1],rotation[2]);
+        SHOW_FILED_FlOAT3(rotation);
+        float scale[3];
+        scale[0] = _selfTransform[0][0];
+        scale[1] = _selfTransform[1][1];
+        scale[2] = _selfTransform[2][2];
+        SHOW_FILED_FlOAT3(scale);
+        ImGui::Separator();
+        for(auto shape : shapes)
+        {
+            shape->show();
+        }
+        for(auto light : lights)
+        {
+            light->show();
+        }
+        for(auto areaLight : lights)
+        {
+            areaLight->show();
+        }
+    }
+
+    std::string InspectedName() override
+    {
+        return name;
+    }
 };
 
 struct SceneGraphEditor : EditorComponentGUI
@@ -148,7 +192,7 @@ struct SceneGraphEditor : EditorComponentGUI
 	~SceneGraphEditor() override;
 
 	// path is the absolute path to the file
-	PBRTParser::ParseResult parsePBRTSceneFile(const std::filesystem::path& path, AssetLoader& assetLoader);
+	SceneGraphNode* parsePBRTSceneFile(const std::filesystem::path& path, AssetManager& assetLoader);
 	PBRTParser _parser;
 	std::shared_ptr<PBRTScene> _currentScene;
 	SceneGraphNode* _sceneGraphRootNode;

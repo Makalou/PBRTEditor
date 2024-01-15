@@ -8,6 +8,7 @@
 
 #include "window.h"
 #include "editorGUI.h"
+#include "sceneViewer.hpp"
 
 static char const * AppName    = "";
 static char const * EngineName = "";
@@ -39,6 +40,7 @@ void createSychronizeObjects()
 }
 
 EditorGUI editorGUI;
+SceneViewer viewer;
 
 void drawFrame()
 {
@@ -99,6 +101,9 @@ void drawFrame()
     currentFrameIdx = (currentFrameIdx + 1) % MAX_FRAME_IN_FLIGHT;
 }
 
+bool g_support_bindless;
+bool g_support_ray_tracing;
+
 int main( int /*argc*/, char ** /*argv*/ )
 {
     Window window;
@@ -111,6 +116,8 @@ int main( int /*argc*/, char ** /*argv*/ )
     vkb::InstanceBuilder instanceBuilder;
     auto inst = instanceBuilder
         .set_app_name("pbrt editor")
+        .require_api_version(1,2)
+        .set_minimum_instance_version(1,2)
         //.request_validation_layers()
         //.use_default_debug_messenger()
         .build();
@@ -124,7 +131,7 @@ int main( int /*argc*/, char ** /*argv*/ )
     vkb::PhysicalDeviceSelector phyDevSelector{ inst.value()};
     auto phy_dev = phyDevSelector
         .set_surface(surface)
-        .set_minimum_version(1, 1)
+        .set_minimum_version(1, 2)
         .prefer_gpu_device_type(vkb::PreferredDeviceType::discrete)
         .select();
 
@@ -161,8 +168,11 @@ int main( int /*argc*/, char ** /*argv*/ )
 
     createSychronizeObjects();
 
+    viewer.init(device);
     editorGUI.init(window.getRawWindowHandle(), device);
+    editorGUI.viewer = &viewer;
 
+    //main loop
     while (!window.shouldClose()) {
         window.pollEvents();
         double current_time = glfwGetTime();

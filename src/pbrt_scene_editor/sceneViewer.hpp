@@ -4,12 +4,14 @@
 #include <memory>
 
 struct DeviceExtended;
+struct SceneGraphNode;
 
-struct SceneViewer : EditorComponentGUI
+struct SceneViewer
 {
-	void constructFrame() override;
 	void init(std::shared_ptr<DeviceExtended> device);
-	~SceneViewer() override;
+    void setCurrentSceneGraph(SceneGraphNode* root);
+	~SceneViewer();
 private:
 	std::shared_ptr<DeviceExtended> backendDevice;
+    SceneGraphNode* currentSceneGraph;
 };

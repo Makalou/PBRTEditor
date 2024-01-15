@@ -5,6 +5,7 @@
 
 #include <vulkan/vulkan.hpp>
 #include "VkBootstrap.h"
+#include "vk_mem_alloc.h"
 
 struct SwapchainExtended : vkb::Swapchain
 {
@@ -61,6 +62,53 @@ struct DeviceExtended : vkb::Device, vk::Device
 
     DeviceExtended(vkb::Device device,vk::Instance instance) : vkb::Device(device), vk::Device(device.device) {
         _instance = instance;
+        VmaVulkanFunctions vulkanFunctions = {};
+        vulkanFunctions.vkGetInstanceProcAddr = &vkGetInstanceProcAddr;
+        vulkanFunctions.vkGetDeviceProcAddr = &vkGetDeviceProcAddr;
+
+        VmaAllocatorCreateInfo allocatorCreateInfo = {};
+        allocatorCreateInfo.vulkanApiVersion = VK_API_VERSION_1_3;
+        allocatorCreateInfo.physicalDevice = device.physical_device;
+        allocatorCreateInfo.device = device;
+        allocatorCreateInfo.instance = instance;
+        allocatorCreateInfo.pVulkanFunctions = &vulkanFunctions;
+
+        vmaCreateAllocator(&allocatorCreateInfo, &_globalVMAAllocator);
+    }
+
+    std::optional<std::pair<VkBuffer,VmaAllocation>> allocateBuffer(vk::DeviceSize size, VkBufferUsageFlagBits usage)
+    {
+        VkBufferCreateInfo bufferInfo = { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
+        bufferInfo.size = size;
+        bufferInfo.usage = usage;
+
+        VmaAllocationCreateInfo allocInfo = {};
+        allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
+
+        VkBuffer buffer;
+        VmaAllocation allocation;
+        if(vmaCreateBuffer(_globalVMAAllocator,
+                           &bufferInfo, &allocInfo,
+                           &buffer, &allocation, nullptr) == VK_SUCCESS)
+        {
+            return std::make_pair(buffer,allocation);
+        }
+       return {};
+    }
+
+    void deAllocateBuffer(VkBuffer buffer, VmaAllocation allocation)
+    {
+        vmaDestroyBuffer(_globalVMAAllocator,buffer,allocation);
+    }
+
+    auto allocateImage()
+    {
+
+    }
+
+    void deAllocateImage(VkImage image, VmaAllocation allocation)
+    {
+        vmaDestroyImage(_globalVMAAllocator,image,allocation);
     }
 
     void setSwapchain(vkb::Swapchain swapchain) {
@@ -105,10 +153,15 @@ struct DeviceExtended : vkb::Device, vk::Device
         };
     }
 
+    ~DeviceExtended(){
+        vmaDestroyAllocator(_globalVMAAllocator);
+    }
+
     //vkb::Device _vkb_device;
     //vk::Device _vk_device;
     vk::Instance _instance;
     SwapchainExtended _swapchain;
+    VmaAllocator _globalVMAAllocator;
 private:
     vk::CommandPool onceGraphicsCommandPool = VK_NULL_HANDLE;
 };

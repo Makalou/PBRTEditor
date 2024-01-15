@@ -31,10 +31,11 @@ public:
 	vk::CommandBuffer recordGraphicsCommand(unsigned int idx);
 	~EditorGUI(); 
 
+    SceneViewer* viewer;
+
 	//components
 	Inspector* _inspector = nullptr;
 	AssetFileTree* _assetFileTree = nullptr;
-	SceneViewer* _sceneViewer = nullptr;
 	SceneGraphEditor* _sceneGraphEditor = nullptr;
     LoggerGUI* _loggerWindow = nullptr;
 

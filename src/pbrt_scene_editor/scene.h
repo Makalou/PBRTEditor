@@ -11,6 +11,8 @@
 #include "Reflection.h"
 
 #include "GlobalLogger.h"
+#include "imgui.h"
+#include "Inspector.hpp"
 
 struct point2{};
 struct vector2{};
@@ -25,33 +27,45 @@ using PBRTType = std::variant<int,float,point2,vector2,point3,vector3,normal3,sp
 
 using PBRTParam = std::pair<std::string,PBRTType>;
 
-struct GeneralOption
+struct GeneralOption : Inspectable
 {
-    bool disablepixeljitter;
-    bool disabletexturefiltering;
-    bool disablewavelengthjitter;
-    float displacementedgescale;
+    bool disablepixeljitter = false;
+    bool disabletexturefiltering = false;
+    bool disablewavelengthjitter = false;
+    float displacementedgescale = false;
     std::string msereferenceimage;
     std::string msereferenceout;
     std::string rendercoordsys;
-    int seed;
-    bool forcediffuse;
-    bool pixelstats;
-    bool wavefront;
+    int seed = 0;
+    bool forcediffuse = false;
+    bool pixelstats = false;
+    bool wavefront = false;
 
     PARSE_SECTION_BEGIN
-        PARSE_FOR(bool,disablepixeljitter)
-        PARSE_FOR(bool,disabletexturefiltering)
-        PARSE_FOR(bool,disablewavelengthjitter)
-        PARSE_FOR(float,displacementedgescale)
-        PARSE_FOR(std::string, msereferenceimage)
-        PARSE_FOR(std::string, msereferenceout)
-        PARSE_FOR(std::string, rendercoordsys)
-        PARSE_FOR(int,seed)
-        PARSE_FOR(bool,forcediffuse)
-        PARSE_FOR(bool,pixelstats)
-        PARSE_FOR(bool,wavefront)
+        PARSE_FOR(disablepixeljitter)
+        PARSE_FOR(disabletexturefiltering)
+        PARSE_FOR(disablewavelengthjitter)
+        PARSE_FOR(displacementedgescale)
+        PARSE_FOR(msereferenceimage)
+        PARSE_FOR(msereferenceout)
+        PARSE_FOR(rendercoordsys)
+        PARSE_FOR(seed)
+        PARSE_FOR(forcediffuse)
+        PARSE_FOR(pixelstats)
+        PARSE_FOR(wavefront)
     PARSE_SECTION_END
+
+    void show() override
+    {
+        SHOW_FIELD(disablepixeljitter);
+        SHOW_FIELD(disabletexturefiltering);
+        SHOW_FIELD(disablewavelengthjitter);
+        SHOW_FIELD(displacementedgescale);
+        SHOW_FIELD(seed);
+        SHOW_FIELD(forcediffuse);
+        SHOW_FIELD(pixelstats);
+        SHOW_FIELD(wavefront);
+    }
 };
 
 DEF_BASECLASS_BEGIN(Camera)
@@ -59,9 +73,15 @@ DEF_BASECLASS_BEGIN(Camera)
     float shutterclose = 1;
 
     PARSE_SECTION_BEGIN_IN_BASE
-        PARSE_FOR(float,shutteropen)
-        PARSE_FOR(float,shutterclose)
+        PARSE_FOR(shutteropen)
+        PARSE_FOR(shutterclose)
     PARSE_SECTION_END_IN_BASE
+
+    void show() override
+    {
+        SHOW_FIELD(shutteropen);
+        SHOW_FIELD(shutterclose);
+    }
 
 DEF_BASECLASS_END
 
@@ -73,27 +93,46 @@ DEF_SUBCLASS_BEGIN(Camera,Perspective)
     float fov = 90.0f;
 
     PARSE_SECTION_CONTINUE_IN_DERIVED
-        PARSE_FOR(float,frameaspectratio)
-        PARSE_FOR(float,screenwindow)
-        PARSE_FOR(float,lensradius)
-        PARSE_FOR(float,focaldistance)
-        PARSE_FOR(float,fov)
+        PARSE_FOR(frameaspectratio)
+        PARSE_FOR(screenwindow)
+        PARSE_FOR(lensradius)
+        PARSE_FOR(focaldistance)
+        PARSE_FOR(fov)
     PARSE_SECTION_END_IN_DERIVED
+
+    void show() override
+    {
+        Camera::show();
+        SHOW_FIELD(frameaspectratio);
+        SHOW_FIELD(screenwindow);
+        SHOW_FIELD(lensradius);
+        SHOW_FIELD(focaldistance);
+        SHOW_FIELD(fov);
+    }
 
 DEF_SUBCLASS_END
 
 DEF_SUBCLASS_BEGIN(Camera,Orthognal)
     float frameaspectratio;
-    float screenwindow;
+    float screenwindow[2]{-1,1};
     float lensradius = 0;
     float focaldistance = (1 << 30);
 
     PARSE_SECTION_CONTINUE_IN_DERIVED
-        PARSE_FOR(float,frameaspectratio)
-        PARSE_FOR(float,screenwindow)
-        PARSE_FOR(float,lensradius)
-        PARSE_FOR(float,focaldistance)
+        PARSE_FOR(frameaspectratio)
+        PARSE_FOR_ARR(float,2,screenwindow)
+        PARSE_FOR(lensradius)
+        PARSE_FOR(focaldistance)
     PARSE_SECTION_END_IN_DERIVED
+
+    void show() override
+    {
+        Camera::show();
+        SHOW_FIELD(frameaspectratio);
+        SHOW_FILED_FlOAT2(screenwindow);
+        SHOW_FIELD(lensradius);
+        SHOW_FIELD(focaldistance);
+    }
 
 DEF_SUBCLASS_END
 
@@ -104,17 +143,25 @@ DEF_SUBCLASS_BEGIN(Camera,Realistic)
     std::string aperture;
 
     PARSE_SECTION_CONTINUE_IN_DERIVED
-        PARSE_FOR(std::string, lensfile)
-        PARSE_FOR(float,aperturediameter)
-        PARSE_FOR(float,focusdistance)
-        PARSE_FOR(std::string,aperture)
+        PARSE_FOR(lensfile)
+        PARSE_FOR(aperturediameter)
+        PARSE_FOR(focusdistance)
+        PARSE_FOR(aperture)
     PARSE_SECTION_END_IN_DERIVED
+
+    void show() override
+    {
+        Camera::show();
+        SHOW_FIELD(aperturediameter);
+        SHOW_FIELD(focusdistance);
+    }
+
 DEF_SUBCLASS_END
 
 DEF_SUBCLASS_BEGIN(Camera,Spherical)
     std::string mapping;
     PARSE_SECTION_CONTINUE_IN_DERIVED
-        PARSE_FOR(std::string,mapping)
+        PARSE_FOR(mapping)
     PARSE_SECTION_END_IN_DERIVED
 DEF_SUBCLASS_END
 
@@ -329,6 +376,17 @@ DEF_SUBCLASS_END
 using AggregateCreator = GenericCreator<Aggregate, BVHAggregate, KdTreeAggregate>;
 
 DEF_BASECLASS_BEGIN(Shape)
+    float alpha_constant = 1;
+    std::string alpha_tex;
+    PARSE_SECTION_BEGIN_IN_BASE
+        PARSE_FOR(alpha_constant)
+        PARSE_FOR(alpha_tex)
+    PARSE_SECTION_END_IN_BASE
+    void show() override
+    {
+        SHOW_FIELD(alpha_constant);
+        SHOW_FIELD(alpha_tex);
+    }
 DEF_BASECLASS_END
 
 DEF_SUBCLASS_BEGIN(Shape,BilinearMesh)
@@ -373,7 +431,22 @@ DEF_SUBCLASS_BEGIN(Shape,TriangleMesh)
     }
 DEF_SUBCLASS_END
 
-using ShapeCreator = GenericCreator<Shape, BilinearMeshShape, CurveShape, CylinderShape, DiskShape, SphereShape, TriangleMeshShape>;
+DEF_SUBCLASS_BEGIN(Shape,PLYMesh)
+    std::string filename;
+    float edgelength = 1;
+    PARSE_SECTION_CONTINUE_IN_DERIVED
+        PARSE_FOR(filename)
+        PARSE_FOR(edgelength)
+    PARSE_SECTION_END_IN_DERIVED
+    void show() override
+    {
+        Shape::show();
+        SHOW_FIELD(filename);
+        SHOW_FIELD(edgelength);
+    }
+DEF_SUBCLASS_END
+
+using ShapeCreator = GenericCreator<Shape, BilinearMeshShape, CurveShape, CylinderShape, DiskShape, SphereShape, TriangleMeshShape,PLYMeshShape>;
 
 DEF_BASECLASS_BEGIN(Light)
 

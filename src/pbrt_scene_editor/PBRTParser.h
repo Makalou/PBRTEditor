@@ -8,7 +8,7 @@
 
 #include <filesystem>
 
-struct AssetLoader;
+struct AssetManager;
 struct PBRTSceneBuilder;
 
 struct Token
@@ -32,7 +32,7 @@ struct PBRTParser
 		INCORRECT_FORMAT
 	};
 
-	PBRTParser::ParseResult parse(PBRTSceneBuilder& targetScene, const std::filesystem::path& path, AssetLoader& assetLoader);
+	PBRTParser::ParseResult parse(PBRTSceneBuilder& targetScene, const std::filesystem::path& path, AssetManager& assetLoader);
 
 	bool g_use_mmap = true;
 
@@ -41,6 +41,6 @@ private:
 	void nextToken(const char* text, int text_len, int* seek, int* tok_loc, int* tok_len);
 	void tokenize(const std::filesystem::path& path);
 	void tokenizeMMAP(const std::filesystem::path& path);
-	void parseToken(PBRTSceneBuilder& builder, AssetLoader& assetLoader);
+	void parseToken(PBRTSceneBuilder& builder, AssetManager& assetLoader);
 	std::vector<MappedFile> openedMappedFile;
 };

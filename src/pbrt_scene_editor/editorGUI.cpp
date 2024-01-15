@@ -22,7 +22,6 @@ EditorGUI::EditorGUI()
 {
 	_assetFileTree = new AssetFileTree;
 	_sceneGraphEditor = new SceneGraphEditor;
-	_sceneViewer = new SceneViewer;
     _loggerWindow = new LoggerGUI;
     _inspector = new Inspector;
 }
@@ -66,7 +65,6 @@ void EditorGUI::init(GLFWwindow* window, std::shared_ptr<DeviceExtended> device)
 	_assetFileTree->init();
 	_sceneGraphEditor->init();
 	_sceneGraphEditor->setOpen();
-	_sceneViewer->init(device);
     _loggerWindow->init();
 	const auto dialogFlags = ImGuiFileDialogFlags_DisableThumbnailMode | ImGuiFileDialogFlags_DontShowHiddenFiles | ImGuiFileDialogFlags_Modal;
 	ImGuiFileDialog::Instance()->OpenDialog("ChoosePBRTFileDlgKey", "Choose .pbrt file", ".pbrt", ".", 1, nullptr, dialogFlags);
@@ -141,7 +139,7 @@ void EditorGUI::showMenuFile()
 					{
 						auto& histroy = recentOpenCache[idx];
 						if (ImGui::MenuItem(histroy.first.c_str())) {
-							//todo : repush hit histroy
+							//todo : re-push hit history
 							_sceneGraphEditor->parsePBRTSceneFile(histroy.second, _assetFileTree->assetLoader);
 						}
 						if (ImGui::IsItemHovered())
@@ -281,7 +279,6 @@ void EditorGUI::constructFrame()
     _inspector->constructFrame();
 	_assetFileTree->constructFrame();
 	_sceneGraphEditor->constructFrame();
-	_sceneViewer->constructFrame();
     _loggerWindow->constructFrame();
 
 	if (fileSelectorOpen) {
@@ -302,7 +299,8 @@ void EditorGUI::constructFrame()
 						recentOpenCache.pop_front();
 					}
 				}
-				_sceneGraphEditor->parsePBRTSceneFile(fsPath, _assetFileTree->assetLoader);
+				auto* sceneGraph = _sceneGraphEditor->parsePBRTSceneFile(fsPath, _assetFileTree->assetLoader);
+                if(viewer!= nullptr) viewer->setCurrentSceneGraph(sceneGraph);
 				fileSelectorOpen = false;
 			}
 		}
@@ -354,8 +352,6 @@ EditorGUI::~EditorGUI()
 		delete _assetFileTree;
 	if(_sceneGraphEditor!=nullptr)
 		delete _sceneGraphEditor;
-	if(_sceneViewer!=nullptr)
-		delete _sceneViewer;
 }
 
 void EditorGUI::createVulkanResource()

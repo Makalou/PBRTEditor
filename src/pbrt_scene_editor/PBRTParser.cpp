@@ -1,13 +1,13 @@
 #include "PBRTParser.h"
 
-#include "AssetLoader.hpp"
+#include "AssetManager.hpp"
 #include <thread>
 
 #include "scene.h"
 
 #include "TokenParser.h"
 
-PBRTParser::ParseResult PBRTParser::parse(PBRTSceneBuilder& builder,const std::filesystem::path& path,AssetLoader& assetLoader)
+PBRTParser::ParseResult PBRTParser::parse(PBRTSceneBuilder& builder, const std::filesystem::path& path, AssetManager& assetLoader)
 {
 	std::thread tokenizeThread([&](){
         tokenize(path);
@@ -157,7 +157,7 @@ void PBRTParser::tokenizeMMAP(const std::filesystem::path& path)
         token_queue.waitAndEnqueue({ nullptr,0,0 });
 }
 
-void PBRTParser::parseToken(PBRTSceneBuilder& builder,AssetLoader& assetLoader)
+void PBRTParser::parseToken(PBRTSceneBuilder& builder, AssetManager& assetLoader)
 {
 	static TokenParser tp;
     tp.parse(builder,token_queue,assetLoader);

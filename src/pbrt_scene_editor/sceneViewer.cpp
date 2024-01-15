@@ -7,12 +7,12 @@
 
 #include "VulkanExtension.h"
 
-void SceneViewer::constructFrame() 
+void SceneViewer::init(std::shared_ptr<DeviceExtended> device)
 {
 
 }
 
-void SceneViewer::init(std::shared_ptr<DeviceExtended> device)
+void SceneViewer::setCurrentSceneGraph(SceneGraphNode *root)
 {
 
 }

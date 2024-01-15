@@ -6,14 +6,14 @@
 
 #include "TokenParser.h"
 #include "SceneBuilder.hpp"
-#include "AssetLoader.hpp"
+#include "AssetManager.hpp"
 
 std::unordered_map<std::string_view,DirectiveHandler> TokenParser::handlers;
 
 #define DIRECTIVE_HANDLER_DEF(token) static void TokenHandler##token(Token& t,\
                                                                 PBRTSceneBuilder& builder, \
                                                                 LockFreeCircleQueue<Token>& tokenQueue, \
-                                                                AssetLoader& assetLoader)\
+                                                                AssetManager& assetLoader)\
 { \
 //    for (int i = 0; i < t.len; i++) { \
 //    printf("%c", (t.str + t.pos)[i]); \
@@ -83,16 +83,6 @@ PBRTType StringTo(const std::string& type_str,const char* str,char** end)
     }
 }
 
-const char* find_next_separator(const char* beg, const char* end)
-{
-    for(auto it = beg; it < end; it ++)
-    {
-        if(*it == ',' || *it == ']'){
-            return it;
-        }
-    }
-}
-
 void extractParam(const std::pair<std::string,std::string> & str_pair,std::vector<PBRTParam> & res)
 {
     std::string name_str;
@@ -159,24 +149,30 @@ std::vector<PBRTParam> convertToPBRTParamLists(const std::vector<std::pair<std::
 }
 
 DIRECTIVE_HANDLER_DEF(AttributeBegin)
-    //todo target->AttributeBegin(token);
     builder.AttributeBegin();
 DIRECTIVE_HANDLER_DEF_END
 
 DIRECTIVE_HANDLER_DEF(AttributeEnd)
-    //todo target->AttributeEnd(token);
     builder.AttributeEnd();
 DIRECTIVE_HANDLER_DEF_END
 
+/*  specify parameter values for
+    shapes, lights, textures, materials, and participating media once and have subsequent instantiations
+    of those objects inherit the specified value.*/
 DIRECTIVE_HANDLER_DEF(Attribute)
     //todo basicParamListEntrypoint(&ParserTarget::Attribute, tok->loc);
+    assert(false);
     auto para_list = TokenParser::extractParaLists(tokenQueue);
     convertToPBRTParamLists(para_list);
 DIRECTIVE_HANDLER_DEF_END
 
+/*  indicates whether subsequent directives that modify the CTM
+    should apply to the transformation at the starting time, the transformation at the ending time, or
+    both. */
 DIRECTIVE_HANDLER_DEF(ActiveTransform)
     auto a = tokenQueue.waitAndDequeue();
     std::string_view a_str{a.str+a.pos,(size_t)a.len};
+    assert(false);
     if(a_str == "All")
     {
         //todo target->ActiveTransformAll(tok->loc);
@@ -193,16 +189,21 @@ DIRECTIVE_HANDLER_DEF(ActiveTransform)
     }
 DIRECTIVE_HANDLER_DEF_END
 
+
 DIRECTIVE_HANDLER_DEF(AreaLightSource)
     //todo basicParamListEntrypoint(&ParserTarget::AreaLightSource, tok->loc);
     auto next = tokenQueue.waitAndDequeue();
+    auto areaLight = AreaLightCreator::make(next.to_string());
     auto para_list = TokenParser::extractParaLists(tokenQueue);
-    convertToPBRTParamLists(para_list);
+    auto para_list2 = convertToPBRTParamLists(para_list);
+    areaLight->parse(para_list2);
+    builder.AddAreaLight(areaLight.release());
 DIRECTIVE_HANDLER_DEF_END
 
 DIRECTIVE_HANDLER_DEF(Accelerator)
     //todo basicParamListEntrypoint(&ParserTarget::Accelerator, tok->loc);
     auto next = tokenQueue.waitAndDequeue();
+    auto accelerator = AggregateCreator::make(next.to_string());
     auto para_list = TokenParser::extractParaLists(tokenQueue);
     convertToPBRTParamLists(para_list);
 DIRECTIVE_HANDLER_DEF_END
@@ -223,18 +224,21 @@ DIRECTIVE_HANDLER_DEF(ConcatTransform)
     a_str =  std::string_view{a.str+a.pos,(size_t)a.len};
     if(a_str != "]")
         throw std::runtime_error("syntax error");
-    //todo target->ConcatTransform(m, tok->loc);
+    builder.ConcatTransform(m);
 DIRECTIVE_HANDLER_DEF_END
 
 DIRECTIVE_HANDLER_DEF(CoordinateSystem)
+    assert(false);
     //todo target->CoordinateSystem(toString(n), tok->loc);
 DIRECTIVE_HANDLER_DEF_END
 
 DIRECTIVE_HANDLER_DEF(CoordSysTransform)
+    assert(false);
     //todo  target->CoordSysTransform(toString(n), tok->loc);
 DIRECTIVE_HANDLER_DEF_END
 
 DIRECTIVE_HANDLER_DEF(ColorSpace)
+    assert(false);
     //todo  target->ColorSpace(toString(n), tok->loc);
 DIRECTIVE_HANDLER_DEF_END
 
@@ -245,7 +249,6 @@ DIRECTIVE_HANDLER_DEF(Camera)
     auto para_list = convertToPBRTParamLists(para_str_list);
     auto cam =  CameraCreator::make(dequote(next.to_string()));
     cam->parse(para_list);
-
 DIRECTIVE_HANDLER_DEF_END
 
 DIRECTIVE_HANDLER_DEF(Film)
@@ -271,14 +274,16 @@ DIRECTIVE_HANDLER_DEF(Import)
 DIRECTIVE_HANDLER_DEF_END
 
 DIRECTIVE_HANDLER_DEF(Identity)
-    //todo target->Identity(tok->loc);
+    builder.Identity();
 DIRECTIVE_HANDLER_DEF_END
 
 DIRECTIVE_HANDLER_DEF(LightSource)
-    //todo basicParamListEntrypoint(&ParserTarget::LightSource, tok->loc);
     auto next = tokenQueue.waitAndDequeue();
     auto para_list = TokenParser::extractParaLists(tokenQueue);
-    convertToPBRTParamLists(para_list);
+    auto para_list2 = convertToPBRTParamLists(para_list);
+    auto light =  LightCreator::make(dequote(next.to_string()));
+    light->parse(para_list2);
+    builder.AddLightSource(light.release());
 DIRECTIVE_HANDLER_DEF_END
 
 DIRECTIVE_HANDLER_DEF(LookAt)
@@ -287,8 +292,7 @@ DIRECTIVE_HANDLER_DEF(LookAt)
         auto tok = tokenQueue.waitAndDequeue();
         v[i] = tokenToFloat<pbrt::Float>(tok);
     }
-    //todo target->LookAt(v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8],
-    //                               tok->loc);
+    builder.LookAt(v);
 DIRECTIVE_HANDLER_DEF_END
 
 DIRECTIVE_HANDLER_DEF(MakeNamedMaterial)
@@ -300,7 +304,6 @@ DIRECTIVE_HANDLER_DEF(MakeNamedMedium)
 DIRECTIVE_HANDLER_DEF_END
 
 DIRECTIVE_HANDLER_DEF(Material)
-    //todo basicParamListEntrypoint(&ParserTarget::Material, tok->loc);
     auto next = tokenQueue.waitAndDequeue();
     auto para_list = TokenParser::extractParaLists(tokenQueue);
     convertToPBRTParamLists(para_list);
@@ -316,15 +319,18 @@ DIRECTIVE_HANDLER_DEF(NamedMaterial)
 DIRECTIVE_HANDLER_DEF_END
 
 DIRECTIVE_HANDLER_DEF(ObjectBegin)
-    //todo  target->ObjectBegin(toString(n), tok->loc);
+    auto nameTok = tokenQueue.waitAndDequeue();
+    auto name = nameTok.to_string();
+    builder.ObjectBegin(name);
 DIRECTIVE_HANDLER_DEF_END
 
 DIRECTIVE_HANDLER_DEF(ObjectEnd)
-    //todo target->ObjectEnd(tok->loc);
+    builder.ObjectEnd();
 DIRECTIVE_HANDLER_DEF_END
 
 DIRECTIVE_HANDLER_DEF(ObjectInstance)
-    //todo target->ObjectInstance(toString(n), tok->loc);
+    auto name = tokenQueue.waitAndDequeue().to_string();
+    builder.ObjectInstance(name);
 DIRECTIVE_HANDLER_DEF_END
 
 DIRECTIVE_HANDLER_DEF(Option)
@@ -349,11 +355,10 @@ DIRECTIVE_HANDLER_DEF(Rotate)
         auto tok = tokenQueue.waitAndDequeue();
         v[i] = tokenToFloat<pbrt::Float>(tok);
     }
-    //todo target->Rotate(v[0], v[1], v[2], v[3], tok->loc);
+    builder.Rotate(v);
 DIRECTIVE_HANDLER_DEF_END
 
 DIRECTIVE_HANDLER_DEF(Shape)
-    //todo basicParamListEntrypoint(&ParserTarget::Shape, tok->loc);
     auto class_tok = tokenQueue.waitAndDequeue();
     auto class_str = dequote(class_tok.to_string());
     auto para_list = TokenParser::extractParaLists(tokenQueue);
@@ -363,12 +368,15 @@ DIRECTIVE_HANDLER_DEF(Shape)
         for (const auto& para : shapeParamList)
         {
             if (para.first == "filename") {
-                assetLoader.loadMesh(std::get<std::string>(para.second));
+                assetLoader.loadMeshPBRTPLY(std::get<std::string>(para.second));
                 break;
             }
-               
         }
     }
+
+    auto shape = ShapeCreator::make(class_str);
+    shape->parse(shapeParamList);
+    builder.AddShape(shape.release());
 DIRECTIVE_HANDLER_DEF_END
 
 DIRECTIVE_HANDLER_DEF(Sampler)
@@ -385,7 +393,7 @@ DIRECTIVE_HANDLER_DEF(Scale)
         auto tok = tokenQueue.waitAndDequeue();
         v[i] = tokenToFloat<pbrt::Float>(tok);
     }
-    //todo target->Scale(v[0], v[1], v[2], tok->loc);
+    builder.Scale(v);
 DIRECTIVE_HANDLER_DEF_END
 
 DIRECTIVE_HANDLER_DEF(TransformBegin)
@@ -410,7 +418,7 @@ DIRECTIVE_HANDLER_DEF(Transform)
     a_str =  std::string_view{a.str+a.pos,(size_t)a.len};
     if(a_str != "]")
         throw std::runtime_error("syntax error");
-    //todo target->Transform(m, tok->loc);
+    builder.Transform(m);
 DIRECTIVE_HANDLER_DEF_END
 
 DIRECTIVE_HANDLER_DEF(Translate)
@@ -420,7 +428,7 @@ DIRECTIVE_HANDLER_DEF(Translate)
         auto tok = tokenQueue.waitAndDequeue();
         v[i] = tokenToFloat<pbrt::Float>(tok);
     }
-    //todo target->Translate(v[0], v[1], v[2], tok->loc);
+    builder.Translate(v);
 DIRECTIVE_HANDLER_DEF_END
 
 DIRECTIVE_HANDLER_DEF(TransformTimes)
@@ -454,8 +462,7 @@ DIRECTIVE_HANDLER_DEF(Texture)
 DIRECTIVE_HANDLER_DEF_END
 
 DIRECTIVE_HANDLER_DEF(WorldBegin)
-    //todo target->WorldBegin(tok->loc);
-    builder.WordlBegin();
+    builder.WorldBegin();
 DIRECTIVE_HANDLER_DEF_END
 
 DIRECTIVE_HANDLER_DEF(WorldEnd)

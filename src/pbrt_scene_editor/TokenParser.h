@@ -9,7 +9,7 @@
 #include <cstdlib>
 
 struct PBRTSceneBuilder;
-struct AssetLoader;
+struct AssetManager;
 struct Token;
 
 namespace pbrt
@@ -32,11 +32,11 @@ static T tokenToFloat(const Token& t)
     }
 }
 
-typedef void(*DirectiveHandler)(Token& token, PBRTSceneBuilder&, LockFreeCircleQueue<Token>&,AssetLoader&);
+typedef void(*DirectiveHandler)(Token& token, PBRTSceneBuilder&, LockFreeCircleQueue<Token>&, AssetManager&);
 struct TokenParser
 {
     TokenParser();
-    void parse(PBRTSceneBuilder& builder, LockFreeCircleQueue<Token>& tokenQueue,AssetLoader& assetLoader)
+    void parse(PBRTSceneBuilder& builder, LockFreeCircleQueue<Token>& tokenQueue, AssetManager& assetLoader)
     {
         while (true)
         {

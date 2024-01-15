@@ -1,7 +1,7 @@
 #pragma once
 
 #include "editorComponent.hpp"
-#include "AssetLoader.hpp"
+#include "AssetManager.hpp"
 
 struct AssetFileTree : EditorComponentGUI
 {
@@ -9,6 +9,6 @@ struct AssetFileTree : EditorComponentGUI
 	void init();
 	~AssetFileTree() override;
 
-	AssetLoader assetLoader;
+	AssetManager assetLoader;
 };
 
