@@ -6,10 +6,10 @@
 #include <vector>
 #include <functional>
 
-using framebufferResizeCallbackT = std::function<void(int, int)>;
-using keyCallbackT = std::function<void(int, int, int, int)>;
-using scrollCallbackT = std::function<void(double, double)>;
-using mouseButtonCallbackT = std::function<void(int, int, int)>;
+using framebufferResizeCallbackT = std::function<void(int width, int height)>;
+using keyCallbackT = std::function<void(int key, int scancode, int action, int mods)>;
+using scrollCallbackT = std::function<void(double xoffset, double yoffset)>;
+using mouseButtonCallbackT = std::function<void(int button, int action, int mods)>;
 
 struct Window {
 public:
@@ -20,11 +20,18 @@ public:
 	bool shouldClose();
 	void pollEvents();
 	GLFWwindow* getRawWindowHandle() const;
-	
-	static void registryFramebufferResizeCallback(framebufferResizeCallbackT fn);
-	static void registrykeyCallback(keyCallbackT fn);
-	static void registryScrollCallback(scrollCallbackT fn);
-	static void registryMouseButtonCallback(mouseButtonCallbackT fn);
+
+    /*(width, height)*/
+	static void registerFramebufferResizeCallback(framebufferResizeCallbackT fn);
+
+    /*(key, scancode, action, mods)*/
+	static void registerKeyCallback(keyCallbackT fn);
+
+    /*(xoffset, yoffset)*/
+	static void registerScrollCallback(scrollCallbackT fn);
+
+    /*(button, action, modes)*/
+	static void registerMouseButtonCallback(mouseButtonCallbackT fn);
 
 private:
 	GLFWwindow* window;

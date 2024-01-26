@@ -9,6 +9,6 @@ struct AssetFileTree : EditorComponentGUI
 	void init();
 	~AssetFileTree() override;
 
-	AssetManager assetLoader;
+	AssetManager assetManager;
 };
 

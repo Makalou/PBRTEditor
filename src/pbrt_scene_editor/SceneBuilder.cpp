@@ -142,7 +142,29 @@ void PBRTSceneBuilder::ObjectInstance(const std::string & instanceName){
         for(const auto obj : _objInstances)
         {
             if(obj->name == instanceName)
+            {
                 _currentVisitNode->children.push_back(obj);
+//                auto* instanceCopy = new SceneGraphNode;
+//                instanceCopy->name = obj->name;
+//                instanceCopy->_selfTransform = obj->_selfTransform;
+//                instanceCopy->_finalTransform = _currentVisitNode->_finalTransform * obj->_finalTransform;
+//
+//                for(auto shape : obj->shapes)
+//                {
+//                    instanceCopy->shapes.push_back(shape);
+//                }
+//                for(auto light : obj->lights)
+//                {
+//                    instanceCopy->lights.push_back(light);
+//                }
+//                for(auto areaLight : obj->areaLights)
+//                {
+//                    instanceCopy->areaLights.push_back(areaLight);
+//                }
+//
+//                _currentVisitNode->children.push_back(instanceCopy);
+            }
+
         }
     }
 }

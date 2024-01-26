@@ -69,17 +69,17 @@ AssetRequest<TextureHostObject> AssetManager::loadImgAsync(const std::string &re
     return _loadRequestQueue.emplace_back(fileName,std::async(std::launch::async,loadTask));
 }
 
-void AssetManager::loadMeshPBRTPLY(const std::string &relative_path) {
+MeshHostObject* AssetManager::loadMeshPBRTPLY(const std::string &relative_path) {
     auto fileName = fs::absolute(_currentWorkDir / relative_path).make_preferred().string();
     if(loadedMeshCache.find(fileName) != loadedMeshCache.end()){
-        return;
+        return &loadedMeshCache.find(fileName)->second;
     }
     auto postProcessFlags = aiProcess_Triangulate;
     const aiScene* scene = _assimpImporter.ReadFile(fileName, postProcessFlags);
     if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) {
         //throw std::runtime_error(_assimpImporter.GetErrorString());
         GlobalLogger::getInstance().error(_assimpImporter.GetErrorString());
-        return;
+        return nullptr;
     }
     assert(scene->mNumMeshes == 1);
     GlobalLogger::getInstance().info("Load Mesh " + fileName);
@@ -181,6 +181,7 @@ void AssetManager::loadMeshPBRTPLY(const std::string &relative_path) {
         assert(current_idx == meshHostObj.index_count);
     }
     loadedMeshCache.emplace(fileName,meshHostObj);
+    return &loadedMeshCache.find(fileName)->second;
 }
 
 void AssetManager::unloadAllImg() {

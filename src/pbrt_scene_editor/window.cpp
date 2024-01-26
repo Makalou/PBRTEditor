@@ -3,8 +3,8 @@
 
 Window::Window()
 {
-	width = 1920;
-	height = 1080;
+	width = 800;
+	height = 600;
 	title = "PBRTv4 Editor";
 }
 
@@ -57,19 +57,19 @@ std::vector<keyCallbackT> Window::keyCallbackList = {};
 std::vector<scrollCallbackT> Window::scrollCallbackList = {};
 std::vector<mouseButtonCallbackT> Window::mouseButtonCallbackList = {};
 
-void Window::registryFramebufferResizeCallback(framebufferResizeCallbackT fn)
+void Window::registerFramebufferResizeCallback(framebufferResizeCallbackT fn)
 {
 	framebufferResizeCallbackList.push_back(fn);
 }
-void Window::registrykeyCallback(keyCallbackT fn)
+void Window::registerKeyCallback(keyCallbackT fn)
 {
 	keyCallbackList.push_back(fn);
 }
-void Window::registryScrollCallback(scrollCallbackT fn)
+void Window::registerScrollCallback(scrollCallbackT fn)
 {
 	scrollCallbackList.push_back(fn);
 }
-void Window::registryMouseButtonCallback(mouseButtonCallbackT fn)
+void Window::registerMouseButtonCallback(mouseButtonCallbackT fn)
 {
 	mouseButtonCallbackList.push_back(fn);
 }

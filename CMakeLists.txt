@@ -7,6 +7,10 @@ execute_process(COMMAND ./vcpkg install assimap meshoptimizer WORKING_DIRECTORY 
 
 project(PBRTEditor LANGUAGES CXX C)
 
+# Get the absolute path of the current source directory
+get_filename_component(PROJECT_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}" ABSOLUTE)
+message(STATUS "Project source directory: ${PROJECT_SOURCE_DIR}")
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -49,6 +53,7 @@ include_directories(src/ext/tinyobjloader)
 include_directories(src/ext/imgui/include)
 include_directories(src/ext/stb)
 include_directories(src/ext/vma)
+include_directories(src/ext/spirv_reflect)
 
 add_executable(editor_exe src/pbrt_scene_editor/main.cpp 
                           src/pbrt_scene_editor/viewer.cpp 
@@ -75,7 +80,15 @@ add_executable(editor_exe src/pbrt_scene_editor/main.cpp
         src/pbrt_scene_editor/SceneBuilder.cpp
         src/pbrt_scene_editor/Insepctor.cpp
         src/pbrt_scene_editor/RenderScene.h
-        src/pbrt_scene_editor/RenderScene.cpp)
+        src/pbrt_scene_editor/RenderScene.cpp
+        src/pbrt_scene_editor/GPUPass.h
+        src/pbrt_scene_editor/ShaderManager.cpp
+        src/pbrt_scene_editor/ShaderManager.h
+        src/pbrt_scene_editor/Singleton.h
+        src/pbrt_scene_editor/GPUPass.cpp
+        src/pbrt_scene_editor/VukanExtension.cpp)
+
+target_compile_definitions(editor_exe PRIVATE EDITOR_PROJECT_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 
 target_link_libraries(editor_exe PRIVATE Vulkan::Vulkan)
 target_link_libraries(editor_exe PRIVATE glfw)
@@ -84,6 +97,9 @@ target_link_libraries(editor_exe PRIVATE stb)
 target_link_libraries(editor_exe PRIVATE vma)
 target_link_libraries(editor_exe PRIVATE assimp::assimp)
 target_link_libraries(editor_exe PRIVATE meshoptimizer::meshoptimizer)
+target_link_libraries(editor_exe PRIVATE spirv_reflect)
+
+
 
 
 

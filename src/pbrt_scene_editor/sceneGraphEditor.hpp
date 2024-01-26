@@ -88,7 +88,7 @@ struct SceneGraphNode : Inspectable
         _finalTransform = _selfTransform;
     }
 
-    void visit(SceneGraphVisitor& visitor){
+    void visit(const SceneGraphVisitor& visitor){
         visitor(this);
         for(auto* child : children){
             child->visit(visitor);
@@ -107,7 +107,7 @@ struct SceneGraphNode : Inspectable
     }
 
     template<class Payload>
-    void visit(SceneGraphVisitorPayloaded<Payload>& visitor){
+    void visitPayload(SceneGraphVisitorPayloaded<Payload>& visitor){
         auto* payload = new Payload;
         visitor(this,payload);
         delete payload;
@@ -117,7 +117,7 @@ struct SceneGraphNode : Inspectable
     }
 
     template<class Payload>
-    void visit(const SceneGraphPreVisitorPayloaded<Payload>& pre_visitor,
+    void visitPayload(const SceneGraphPreVisitorPayloaded<Payload>& pre_visitor,
                const SceneGraphPostVisitorPayloaded<Payload>& post_visitor){
         auto* payload = new Payload;
         auto pair =  pre_visitor(this,payload);

@@ -21,10 +21,91 @@ struct MeshHostObject
     unsigned int* indices = nullptr;
     unsigned int vertex_count = 0;
     float* position = nullptr;
+    //optional below
     float* normal = nullptr;
     float* tangent = nullptr;
     float* bitangent = nullptr;
     float* uv = nullptr;
+
+    struct AttributeLayout
+    {
+        int VertexStride;
+        int normalOffset = -1;
+        int tangentOffset = -1;
+        int biTangentOffset = -1;
+        int uvOffset = -1;
+    };
+
+public:
+    std::pair<unsigned char*,AttributeLayout> getInterleavingAttributes()
+    {
+        if(interleavingAttributes == nullptr)
+        {
+            int current_offset = 16; // Position aligned with 16
+            int current_size = 16;
+
+            if(normal!= nullptr)
+            {
+                attributeLayout.normalOffset = current_offset;
+                current_size += 16;
+                current_offset += 16;
+            }
+            if(tangent!= nullptr)
+            {
+                attributeLayout.tangentOffset = current_offset;
+                current_size += 16;
+                current_offset += 16;
+            }
+            if(bitangent!= nullptr)
+            {
+                attributeLayout.biTangentOffset = current_offset;
+                current_size += 16;
+                current_offset += 16;
+            }
+            if(uv!= nullptr)
+            {
+                attributeLayout.uvOffset = current_offset;
+                current_size += 8;
+            }
+            //don't forget position must aligned with 16, so some padding might be necessary.
+            if(current_size % 16 != 0)
+                current_size += (16 - (current_size % 16));
+            attributeLayout.VertexStride = current_size;
+
+            static_assert(sizeof(unsigned char ) == 1);
+            interleavingAttributes = (unsigned char *)std::aligned_alloc(16,vertex_count * current_size);
+
+            for(int i = 0; i < vertex_count; i ++)
+            {
+                auto current_vertex_start = interleavingAttributes + attributeLayout.VertexStride * i;
+                memcpy(current_vertex_start, position + i * 3 * sizeof(float), 3 * sizeof(float));
+                if(normal != nullptr)
+                {
+                    memcpy( current_vertex_start + attributeLayout.normalOffset,&normal[i * 3], 3 * sizeof(float));
+                }
+
+                if(tangent != nullptr)
+                {
+                    memcpy(current_vertex_start  + attributeLayout.tangentOffset,&tangent[i * 3], 3 * sizeof(float));
+                }
+
+                if(bitangent != nullptr)
+                {
+                    memcpy(current_vertex_start + attributeLayout.biTangentOffset,&bitangent[i * 3], 3 * sizeof(float));
+                }
+
+                if(uv != nullptr)
+                {
+                    memcpy(current_vertex_start  + attributeLayout.uvOffset,&uv[i * 2], 2 * sizeof(float));
+                }
+            }
+        }
+        return {interleavingAttributes,attributeLayout};
+    }
+
+private:
+    unsigned char* interleavingAttributes = nullptr;
+    AttributeLayout attributeLayout;
 };
 
 namespace fs = std::filesystem;
@@ -96,7 +177,7 @@ struct AssetManager
     /*
     *  For PBRT PLY file we assume that each file only contain single mesh
     */
-    void loadMeshPBRTPLY(const std::string & relative_path);
+    MeshHostObject* loadMeshPBRTPLY(const std::string & relative_path);
     void setWorkDir(const fs::path & path);
     void unloadAllImg();
 

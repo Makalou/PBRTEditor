@@ -125,7 +125,7 @@ void EditorGUI::showMenuFile()
 				auto& histroy = recentOpenCache[idx];
 				if (ImGui::MenuItem(histroy.first.c_str())) {
 					// todo : repush hit histroy
-					_sceneGraphEditor->parsePBRTSceneFile(histroy.second, _assetFileTree->assetLoader);
+					_sceneGraphEditor->parsePBRTSceneFile(histroy.second, _assetFileTree->assetManager);
 				}
 				if (ImGui::IsItemHovered())
 					ImGui::SetTooltip("%s",histroy.second.string().c_str());
@@ -140,7 +140,7 @@ void EditorGUI::showMenuFile()
 						auto& histroy = recentOpenCache[idx];
 						if (ImGui::MenuItem(histroy.first.c_str())) {
 							//todo : re-push hit history
-							_sceneGraphEditor->parsePBRTSceneFile(histroy.second, _assetFileTree->assetLoader);
+							_sceneGraphEditor->parsePBRTSceneFile(histroy.second, _assetFileTree->assetManager);
 						}
 						if (ImGui::IsItemHovered())
 							ImGui::SetTooltip("%s",histroy.second.string().c_str());
@@ -299,8 +299,8 @@ void EditorGUI::constructFrame()
 						recentOpenCache.pop_front();
 					}
 				}
-				auto* sceneGraph = _sceneGraphEditor->parsePBRTSceneFile(fsPath, _assetFileTree->assetLoader);
-                if(viewer!= nullptr) viewer->setCurrentSceneGraph(sceneGraph);
+				auto* sceneGraph = _sceneGraphEditor->parsePBRTSceneFile(fsPath, _assetFileTree->assetManager);
+                if(viewer!= nullptr) viewer->setCurrentSceneGraph(sceneGraph,_assetFileTree->assetManager);
 				fileSelectorOpen = false;
 			}
 		}
