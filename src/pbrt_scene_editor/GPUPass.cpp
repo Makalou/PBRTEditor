@@ -3,6 +3,7 @@
 //
 
 #include "GPUPass.h"
+#include <stack>
 
 bool isDepthStencilFormat(vk::Format format)
 {
@@ -230,7 +231,11 @@ void GPUFrame::compileAOT() {
         for(int j = 0; j < pass->inputs.size(); j++)
         {
             auto inputName = pass->inputs[j]->name;
-            if(inputName == "SwapchainImage") continue;
+            if(inputName == "SwapchainImage")
+            {
+                pass->inputs[j]->outputHandle = swapchainAttachment;
+                continue;
+            }
             size_t pos = inputName.find("::");
             if(pos == std::string::npos)
                 throw std::invalid_argument("Input resource must using PassName as name space");
@@ -275,25 +280,92 @@ void GPUFrame::compileAOT() {
     }
 
     // Topological sorting
+    std::stack<int> pass_idx_stk;
+    std::vector<bool> visitedMasks(_rasterPasses.size());
+    std::unordered_set<int> visited;
+    sortedIndices.reserve(_rasterPasses.size());
 
-    // Allocate real Image and ImageView
+    auto getPassIdx = [&](const std::string& name) ->int
+    {
+        for(int i = 0; i < _rasterPasses.size();i++)
+        {
+            if(_rasterPasses[i]->_name == name)
+                return i;
+        }
+        return -1;
+    };
+
+    for(int i = 0; i < _rasterPasses.size(); i ++)
+    {
+        if(!visitedMasks[i])
+        {
+            pass_idx_stk.push(i);
+            while(!pass_idx_stk.empty()){
+                auto current = pass_idx_stk.top();
+                bool allChildrenVisited = true;
+
+                for(auto child : _rasterPasses[current]->edges)
+                {
+                    int child_idx = getPassIdx(child->_name);
+                    if(!visitedMasks[child_idx]){
+                        pass_idx_stk.push(child_idx);
+                        allChildrenVisited = false;
+                    }
+                }
+
+                if(allChildrenVisited){
+                    pass_idx_stk.pop();
+                    if(visited.find(current) == visited.end())
+                    {
+                        sortedIndices.push_back(current);
+                        visited.insert(current);
+                    }
+                    visitedMasks[current] = true;
+                }
+            }
+        }
+    }
+
+    std::reverse(sortedIndices.begin(), sortedIndices.end());
+
     backingImageViews.emplace("SwapchainImage",backendDevice->_swapchain.get_image_views().value()[frameIdx]);
 
-    for(auto & pass : _rasterPasses)
+    for(int passIdx = 0; passIdx < sortedIndices.size(); passIdx++)
     {
+        auto & pass = _rasterPasses[sortedIndices[passIdx]];
+        for(int i = 0; i < pass->inputs.size();i++)
+        {
+            if(pass->inputs[i]->outputHandle)
+                connectResources(pass->inputs[i]->outputHandle,pass->inputs[i]);
+        }
         int kk = 0;
         for(int i = 0; i < pass->outputs.size(); i++)
         {
             if(pass->outputs[i]->getType() == Attachment)
             {
-                auto name = pass->_name + "::" + pass->outputs[i]->name;
+                auto * outputi = dynamic_cast<PassAttachmentDescription*>(pass->outputs[i]);
+                auto name = pass->_name + "::" + outputi->name;
                 bool match = false;
                 for(;kk<pass->inputs.size(); kk++)
                 {
                     if(pass->inputs[kk]->getType() == Attachment)
                     {
                         match = true;
-                        backingImageViews.emplace(name,backingImageViews[pass->inputs[kk]->name]);
+                        auto * inputkk = dynamic_cast<PassAttachmentDescription*>(pass->inputs[kk]);
+                        //deduce information
+                        if(outputi->format == vk::Format::eUndefined)
+                        {
+                            outputi->format = inputkk->format;
+                        }
+                        if(outputi->width == 0)
+                        {
+                            outputi->width = inputkk->width;
+                        }
+                        if(outputi->height == 0)
+                        {
+                            outputi->height = inputkk->height;
+                        }
+                        backingImageViews.emplace(name,backingImageViews[inputkk->name]);
                         break;
                     }
                 }

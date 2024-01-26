@@ -289,6 +289,11 @@ struct GPUFrame
             perThreadMainCommandAllocators.emplace_back(pool);
         }
 
+        vk::Format swapChainFormat = static_cast<vk::Format>(backendDevice->_swapchain.image_format);
+        auto swapChainExtent = backendDevice->_swapchain.extent;
+        swapchainAttachment = new PassAttachmentDescription("SwapchainImage",swapChainFormat,swapChainExtent.width,swapChainExtent.height,
+                                                        vk::AttachmentLoadOp::eDontCare,vk::AttachmentStoreOp::eDontCare);
+
         //todo multiple queues stuffs ...
     }
 
@@ -363,6 +368,8 @@ struct GPUFrame
         return backingImageViews[name];
     }
 
+    PassAttachmentDescription* swapchainAttachment;
+    std::vector<int> sortedIndices;
     std::vector<std::shared_ptr<GPURasterizedPass>> _rasterPasses;
     std::unordered_map<std::string,vk::ImageView> backingImageViews;
     std::unordered_map<std::string,VMAImage> backingImages;

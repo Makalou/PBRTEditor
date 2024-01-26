@@ -50,6 +50,8 @@ struct GBufferPass : GPURasterizedPass
     {
         beginPass(cmdBuf);
         bindPassData(cmdBuf,frameIdx);
+        endPass(cmdBuf);
+        return;
         for(auto & instanceRigidDynamic : scene->_dynamicRigidMeshBatch)
         {
             // how to define current pipeline?

@@ -30,11 +30,11 @@ void SceneViewer::init(std::shared_ptr<DeviceExtended> device) {
 
     auto gBufferPass = std::make_shared<GBufferPass>();
     gBufferPass->addOutput(std::make_unique<PassAttachmentDescription>("depth",vk::Format::eD32Sfloat,800,600,
-                                                                       vk::AttachmentLoadOp::eDontCare,vk::AttachmentStoreOp::eStore));
-    gBufferPass->addOutput(std::make_unique<PassAttachmentDescription>("wPosition",vk::Format::eR16G16B16Sfloat,800,600,
-                                                                       vk::AttachmentLoadOp::eDontCare,vk::AttachmentStoreOp::eStore));
-    gBufferPass->addOutput(std::make_unique<PassAttachmentDescription>("wNormal",vk::Format::eR16G16B16Sfloat,800,600,
-                                                                       vk::AttachmentLoadOp::eDontCare,vk::AttachmentStoreOp::eStore));
+                                                                       vk::AttachmentLoadOp::eClear,vk::AttachmentStoreOp::eStore));
+    gBufferPass->addOutput(std::make_unique<PassAttachmentDescription>("wPosition",vk::Format::eR16G16B16A16Sfloat,800,600,
+                                                                       vk::AttachmentLoadOp::eClear,vk::AttachmentStoreOp::eStore));
+    gBufferPass->addOutput(std::make_unique<PassAttachmentDescription>("wNormal",vk::Format::eR16G16B16A16Sfloat,800,600,
+                                                                       vk::AttachmentLoadOp::eClear,vk::AttachmentStoreOp::eStore));
     frameGraph.registerRasterizedGPUPass(gBufferPass);
 
     auto shadowPass = std::make_shared<ShadowPass>();
