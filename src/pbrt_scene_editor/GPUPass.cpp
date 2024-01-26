@@ -52,12 +52,14 @@ void GPURasterizedPass::buildRenderPass(const DeviceExtended &device, GPUFrame *
         if(outputs[i]->getType() == Attachment)
         {
             vk::AttachmentDescription attachment{};
-            auto passAttachment = dynamic_cast<PassAttachmentDescription*>(outputs[i].get());
+            auto * passAttachment = dynamic_cast<PassAttachmentDescription*>(outputs[i].get());
             attachment.setFormat(passAttachment->format);
             attachment.setSamples(vk::SampleCountFlagBits::e1);
-            attachment.setInitialLayout(vk::ImageLayout::eColorAttachmentOptimal);
-            attachment.setFinalLayout(vk::ImageLayout::eColorAttachmentOptimal);
+            //todo how to deduce attachment layout and load/store OP?
+            attachment.setInitialLayout(passAttachment->initialLayout);
+            attachment.setFinalLayout(passAttachment->finalLayout);
             attachment.setLoadOp(passAttachment->loadOp);
+            attachment.setStoreOp(passAttachment->storeOp);
             attachment.setStencilLoadOp(vk::AttachmentLoadOp::eDontCare);
             attachment.setStencilStoreOp(vk::AttachmentStoreOp::eDontCare);
             attachmentDescriptions.emplace_back(attachment);
@@ -92,7 +94,8 @@ void GPURasterizedPass::buildRenderPass(const DeviceExtended &device, GPUFrame *
     //subpass.setResolveAttachments();
     // We only use one subpass per render pass
     renderPassCreateInfo.setSubpasses(subpassInfo);
-    // Since we only have one subpass, we don't care about the dependency ... or do we?
+    // Since we only have one subpass, we don't care about the dependency ...
+    // todo or do we?
     renderPassCreateInfo.setDependencies({});
     renderPass = device.createRenderPass(renderPassCreateInfo);
 }
@@ -101,7 +104,7 @@ void GPURasterizedPass::buildRenderPass(const DeviceExtended &device, GPUFrame *
  * May need recreate when swapChain resize
  */
 void GPURasterizedPass::buildFrameBuffer(const DeviceExtended& device, GPUFrame* frame) {
-    vk::FramebufferCreateInfo framebufferCreateInfo{};
+    assert(renderPass!=VK_NULL_HANDLE);
     framebufferCreateInfo.setRenderPass(renderPass);
     //For now, we assume every attachment has same size
     int width = 0;
@@ -111,39 +114,33 @@ void GPURasterizedPass::buildFrameBuffer(const DeviceExtended& device, GPUFrame*
 
     for(int i = 0; i < outputs.size();i++)
     {
-        if(outputs[i]->getType() == Buffer)
+        if(outputs[i]->getType() == Attachment)
         {
-            continue;
-        }
+            auto passAttachment = dynamic_cast<PassAttachmentDescription*>(outputs[i].get());
 
-        auto passAttachment = dynamic_cast<PassAttachmentDescription*>(outputs[i].get());
+            if ( width == 0 ) {
+                width = passAttachment->width;
+            } else {
+                assert( width == passAttachment->width );
+            }
 
-        if ( width == 0 ) {
-            width = passAttachment->width;
-        } else {
-            assert( width == passAttachment->width );
-        }
-
-        if ( height == 0 ) {
-            height = passAttachment->height;
-        } else {
-            assert( height == passAttachment->height );
-        }
-
-        if(passAttachment->format == vk::Format::eD32Sfloat)
-        {
-
-        }else{
-
+            if ( height == 0 ) {
+                height = passAttachment->height;
+            } else {
+                assert( height == passAttachment->height );
+            }
+            // The most interesting thing in frame buffer creation
+            // is we need the frame graph to provide the underlying
+            // memory of each attachment.
+            //auto imgViewIdentifier = (outputs[i]->name == "SwapChainImage") ? "SwapChainImage" : _name+"::"+outputs[i]->name;
+            auto imgViewIdentifier = _name+"::"+outputs[i]->name;
+            imageViews.push_back(frame->getBackingImageView(imgViewIdentifier));
         }
     }
 
     framebufferCreateInfo.setWidth(width);
     framebufferCreateInfo.setHeight(height);
     framebufferCreateInfo.setLayers(1);
-    // The most interesting thing in frame buffer creation
-    // is we need the frame graph to provide the underlying
-    // memory of each attachment.
     framebufferCreateInfo.setAttachments(imageViews);
     frameBuffer = device.createFramebuffer(framebufferCreateInfo);
 }
@@ -155,7 +152,7 @@ bool isResourceTypeCompatible(PassResourceType outputType, PassResourceType inpu
 }
 
 /*
- * Deduce information for input
+ * Deduce information for input and output
  */
 void connectResources(PassResourceDescriptionBase* output, PassResourceDescriptionBase* input)
 {
@@ -181,6 +178,15 @@ void connectResources(PassResourceDescriptionBase* output, PassResourceDescripti
             {
                 inputAttachment->height = outputAttachment->height;
             }
+
+            if(isDepthStencilFormat(inputAttachment->format))
+            {
+                outputAttachment->finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+                inputAttachment->initialLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+            }else{
+                outputAttachment->finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
+                inputAttachment->initialLayout = vk::ImageLayout::eColorAttachmentOptimal;
+            }
         }else{
             auto inputTexture = dynamic_cast<PassTextureDescription*>(input);
             if(inputTexture->format == vk::Format::eUndefined)
@@ -194,6 +200,13 @@ void connectResources(PassResourceDescriptionBase* output, PassResourceDescripti
             if(inputTexture->height == 0)
             {
                 inputTexture->height = outputAttachment->height;
+            }
+
+            if(isDepthStencilFormat(outputAttachment->format))
+            {
+                outputAttachment->finalLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal;
+            }else{
+                outputAttachment->finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
             }
         }
     }else if(output->getType() == Texture)
@@ -261,7 +274,7 @@ void GPUFrame::compileAOT() {
             PassResourceDescriptionBase* output = nullptr;
             for(int k = 0; k < producePass->outputs.size();k++)
             {
-                //todo : check concurrent usage
+                //todo : check concurrent usage to avoid RW or WW
                 if(producePass->outputs[k]->name == resourceName)
                 {
                     output = producePass->outputs[k].get();

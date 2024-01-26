@@ -70,6 +70,13 @@ struct PassAttachmentDescription : PassResourceDescriptionBase
     int height = 0;
     vk::AttachmentLoadOp loadOp{};
     vk::AttachmentStoreOp storeOp{};
+    //If the format has depth and/or stencil components,
+    // loadOp and storeOp apply only to the depth data,
+    // while stencilLoadOp and stencilStoreOp define how the stencil data is handled.
+    vk::AttachmentLoadOp stencilLoadOp{};
+    vk::AttachmentStoreOp stencilStoreOp{};
+    vk::ImageLayout initialLayout = vk::ImageLayout::eUndefined;
+    vk::ImageLayout finalLayout = vk::ImageLayout::eUndefined;
 
     PassAttachmentDescription(const std::string& name, vk::Format format, int width, int height, vk::AttachmentLoadOp loadOp, vk::AttachmentStoreOp storeOp)
     : PassResourceDescriptionBase(name)
@@ -263,6 +270,7 @@ struct GPURasterizedPass : GPUPass
 
     vk::RenderPass renderPass;
     vk::Framebuffer frameBuffer;
+    vk::FramebufferCreateInfo framebufferCreateInfo{};
 
     std::vector<std::pair<std::pair<const VertexShader*, const FragmentShader*>, VulkanGraphicsPipeline>> graphicsPipelines;
     vk::PipelineLayout passBaseLayout;
