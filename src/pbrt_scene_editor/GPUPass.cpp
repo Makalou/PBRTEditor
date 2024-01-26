@@ -52,7 +52,7 @@ void GPURasterizedPass::buildRenderPass(const DeviceExtended &device, GPUFrame *
         if(outputs[i]->getType() == Attachment)
         {
             vk::AttachmentDescription attachment{};
-            auto passAttachment = dynamic_cast<PassAttachmentDescription*>(outputs[i]);
+            auto passAttachment = dynamic_cast<PassAttachmentDescription*>(outputs[i].get());
             attachment.setFormat(passAttachment->format);
             attachment.setSamples(vk::SampleCountFlagBits::e1);
             attachment.setInitialLayout(vk::ImageLayout::eColorAttachmentOptimal);
@@ -116,7 +116,7 @@ void GPURasterizedPass::buildFrameBuffer(const DeviceExtended& device, GPUFrame*
             continue;
         }
 
-        auto passAttachment = dynamic_cast<PassAttachmentDescription*>(outputs[i]);
+        auto passAttachment = dynamic_cast<PassAttachmentDescription*>(outputs[i].get());
 
         if ( width == 0 ) {
             width = passAttachment->width;
@@ -264,7 +264,7 @@ void GPUFrame::compileAOT() {
                 //todo : check concurrent usage
                 if(producePass->outputs[k]->name == resourceName)
                 {
-                    output = producePass->outputs[k];
+                    output = producePass->outputs[k].get();
                     pass->inputs[j]->outputHandle = output;
                     break;
                 }
@@ -336,14 +336,14 @@ void GPUFrame::compileAOT() {
         for(int i = 0; i < pass->inputs.size();i++)
         {
             if(pass->inputs[i]->outputHandle)
-                connectResources(pass->inputs[i]->outputHandle,pass->inputs[i]);
+                connectResources(pass->inputs[i]->outputHandle,pass->inputs[i].get());
         }
         int kk = 0;
         for(int i = 0; i < pass->outputs.size(); i++)
         {
             if(pass->outputs[i]->getType() == Attachment)
             {
-                auto * outputi = dynamic_cast<PassAttachmentDescription*>(pass->outputs[i]);
+                auto * outputi = dynamic_cast<PassAttachmentDescription*>(pass->outputs[i].get());
                 auto name = pass->_name + "::" + outputi->name;
                 bool match = false;
                 for(;kk<pass->inputs.size(); kk++)
@@ -351,7 +351,7 @@ void GPUFrame::compileAOT() {
                     if(pass->inputs[kk]->getType() == Attachment)
                     {
                         match = true;
-                        auto * inputkk = dynamic_cast<PassAttachmentDescription*>(pass->inputs[kk]);
+                        auto * inputkk = dynamic_cast<PassAttachmentDescription*>(pass->inputs[kk].get());
                         //deduce information
                         if(outputi->format == vk::Format::eUndefined)
                         {
@@ -373,7 +373,7 @@ void GPUFrame::compileAOT() {
                 if(!match)
                 {
                     // Need to create new image
-                    auto attachmentDesc = dynamic_cast<PassAttachmentDescription*>(pass->outputs[i]);
+                    auto attachmentDesc = dynamic_cast<PassAttachmentDescription*>(pass->outputs[i].get());
                     VMAImage image;
                     if(isDepthStencilFormat(attachmentDesc->format))
                     {

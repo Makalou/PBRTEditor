@@ -153,8 +153,8 @@ struct GPUPass
     }
 
     DeviceExtended* backend_device;
-    std::vector<PassResourceDescriptionBase*> inputs;
-    std::vector<PassResourceDescriptionBase*> outputs;
+    std::vector<std::unique_ptr<PassResourceDescriptionBase>> inputs;
+    std::vector<std::unique_ptr<PassResourceDescriptionBase>> outputs;
     std::vector<GPUPassHandle> edges;
     bool enabled = true;
     /*
@@ -175,12 +175,24 @@ struct GPUPass
 
     void addInput(std::unique_ptr<PassResourceDescriptionBase> resource)
     {
-        inputs.push_back(resource.release());
+        inputs.push_back(std::move(resource));
     }
 
     void addOutput(std::unique_ptr<PassResourceDescriptionBase> resource)
     {
-        outputs.push_back(resource.release());
+        outputs.push_back(std::move(resource));
+    }
+
+    template<typename T,class... Args>
+    void addInput(Args&& ... args)
+    {
+        inputs.emplace_back(std::make_unique<T>(args...));
+    }
+
+    template<typename T,class... Args>
+    void addOutput(Args&& ... args)
+    {
+        outputs.emplace_back(std::make_unique<T>(args...));
     }
 };
 
