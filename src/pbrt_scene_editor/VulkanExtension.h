@@ -116,7 +116,7 @@ struct DeviceExtended : vkb::Device, vk::Device
         imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
         imageInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
         imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        imageInfo.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
         return allocateVMAImageForAttachment(imageInfo);
     }
@@ -137,7 +137,7 @@ struct DeviceExtended : vkb::Device, vk::Device
         imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
         imageInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
         imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        imageInfo.initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         return allocateVMAImageForAttachment(imageInfo);
     }
 
@@ -320,15 +320,16 @@ struct LinearCachedCommandAllocator {
                                                         void set##state##Info(const vk::Pipeline##state##StateCreateInfo & info) { \
                                                              _##state##StateInfo = info;                                          \
                                                         }
-struct VulkanGraphicsPipeline : vk::Pipeline
+struct VulkanGraphicsPipeline
 {
     vk::Pipeline _pipeline = VK_NULL_HANDLE;
-
     VK_GRAPHICS_PIPELINE_STATE_DEF_HELPER(InputAssembly)
     VK_GRAPHICS_PIPELINE_STATE_DEF_HELPER(ColorBlend)
     VK_GRAPHICS_PIPELINE_STATE_DEF_HELPER(DepthStencil)
     VK_GRAPHICS_PIPELINE_STATE_DEF_HELPER(Rasterization)
+    VK_GRAPHICS_PIPELINE_STATE_DEF_HELPER(Multisample)
     VK_GRAPHICS_PIPELINE_STATE_DEF_HELPER(Viewport)
+    VK_GRAPHICS_PIPELINE_STATE_DEF_HELPER(Dynamic)
 
     vk::Device device = VK_NULL_HANDLE;
     vk::PipelineShaderStageCreateInfo vsInfo;
@@ -336,6 +337,8 @@ struct VulkanGraphicsPipeline : vk::Pipeline
     vk::PipelineVertexInputStateCreateInfo vertexInputInfo;
     vk::RenderPass renderPass = VK_NULL_HANDLE ;
     vk::PipelineLayout pipelineLayout = VK_NULL_HANDLE ;
+
+    vk::PipelineColorBlendAttachmentState defaultAttachmentState{};
 
     VulkanGraphicsPipeline(vk::Device _device,
         vk::PipelineShaderStageCreateInfo _vsInfo,
@@ -352,6 +355,38 @@ struct VulkanGraphicsPipeline : vk::Pipeline
         pipelineLayout = _pipelineLayout;
 
         //set default state
+        _InputAssemblyStateInfo.setTopology(vk::PrimitiveTopology::eTriangleStrip);
+        _InputAssemblyStateInfo.setPrimitiveRestartEnable(vk::False);
+
+        _RasterizationStateInfo.setRasterizerDiscardEnable(vk::False);
+        _RasterizationStateInfo.setFrontFace(vk::FrontFace::eClockwise);
+        _RasterizationStateInfo.setPolygonMode(vk::PolygonMode::eFill);
+        _RasterizationStateInfo.setCullMode(vk::CullModeFlagBits::eBack);
+        _RasterizationStateInfo.setLineWidth(1.0);
+
+        auto colorComponentAll = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG|vk::ColorComponentFlagBits::eB|vk::ColorComponentFlagBits::eA;
+        defaultAttachmentState.setColorWriteMask(colorComponentAll);
+        defaultAttachmentState.setSrcColorBlendFactor(vk::BlendFactor::eOne);
+        defaultAttachmentState.setDstColorBlendFactor(vk::BlendFactor::eZero);
+        defaultAttachmentState.setColorBlendOp(vk::BlendOp::eAdd);
+        defaultAttachmentState.setSrcAlphaBlendFactor(vk::BlendFactor::eOne);
+        defaultAttachmentState.setDstAlphaBlendFactor(vk::BlendFactor::eZero);
+        defaultAttachmentState.setAlphaBlendOp(vk::BlendOp::eAdd);
+        defaultAttachmentState.blendEnable = VK_FALSE;
+
+        _ColorBlendStateInfo.setAttachments(defaultAttachmentState);
+        _ColorBlendStateInfo.setBlendConstants({1,1,1,1});
+        _ColorBlendStateInfo.setLogicOpEnable(vk::False);
+
+        _MultisampleStateInfo.setRasterizationSamples(vk::SampleCountFlagBits::e1);
+        _MultisampleStateInfo.setSampleShadingEnable(vk::False);
+
+        _ViewportStateInfo.setViewportCount(1);
+        _ViewportStateInfo.setScissorCount(1);
+
+        // By default, use dynamic viewport for flexible
+        auto dynamicStates = {vk::DynamicState::eViewport,vk::DynamicState::eScissor};
+        _DynamicStateInfo.setDynamicStates(dynamicStates);
     }
 
     void setInputAssemblyState(const vk::PipelineInputAssemblyStateCreateInfo& ){
@@ -361,23 +396,32 @@ struct VulkanGraphicsPipeline : vk::Pipeline
     /*
      *  Make sure you have set all desired state before calling create
      */
-    void create()
+    void build()
     {
         assert(device!=VK_NULL_HANDLE);
         assert(renderPass!=VK_NULL_HANDLE);
-        assert(pipelineLayout!=VK_NULL_HANDLE);
+        //assert(pipelineLayout!=VK_NULL_HANDLE);
+        if(pipelineLayout == VK_NULL_HANDLE)
+        {
+            //create empty pipeline layout
+            vk::PipelineLayoutCreateInfo emptyLayoutInfo{};
+            emptyLayoutInfo.setSetLayoutCount(0);
+            pipelineLayout = device.createPipelineLayout(emptyLayoutInfo);
+        }
 
         vk::GraphicsPipelineCreateInfo createInfo{};
         std::array<vk::PipelineShaderStageCreateInfo,2> stages{vsInfo,fsInfo};
         createInfo.setStages(stages);
         createInfo.setRenderPass(renderPass);
-        createInfo.layout = pipelineLayout;
+        createInfo.setLayout(pipelineLayout);
         createInfo.setPVertexInputState(&vertexInputInfo);
         createInfo.setPInputAssemblyState(&_InputAssemblyStateInfo);
         createInfo.setPColorBlendState(&_ColorBlendStateInfo);
         createInfo.setPDepthStencilState(&_DepthStencilStateInfo);
         createInfo.setPRasterizationState(&_RasterizationStateInfo);
+        createInfo.setPMultisampleState(&_MultisampleStateInfo);
         createInfo.setPViewportState(&_ViewportStateInfo);
+        createInfo.setPDynamicState(&_DynamicStateInfo);
 
         auto newPipeline = device.createGraphicsPipeline(nullptr,createInfo);
         if(newPipeline.result != vk::Result::eSuccess)

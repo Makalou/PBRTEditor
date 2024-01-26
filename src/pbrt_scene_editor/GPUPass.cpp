@@ -36,6 +36,12 @@ void GPURasterizedPass::beginPass(vk::CommandBuffer cmdBuf) {
     vk::RenderPassBeginInfo beginInfo{};
     beginInfo.setRenderPass(renderPass);
     beginInfo.setFramebuffer(frameBuffer);
+    vk::Rect2D renderArea{};
+    renderArea.offset.x = 0;
+    renderArea.offset.y = 0;
+    renderArea.extent.width = framebufferCreateInfo.width;
+    renderArea.extent.height = framebufferCreateInfo.height;
+    beginInfo.setRenderArea(renderArea);
     cmdBuf.beginRenderPass(beginInfo,vk::SubpassContents::eInline);
 }
 
@@ -57,6 +63,15 @@ void GPURasterizedPass::buildRenderPass(const DeviceExtended &device, GPUFrame *
             attachment.setSamples(vk::SampleCountFlagBits::e1);
             //todo how to deduce attachment layout and load/store OP?
             attachment.setInitialLayout(passAttachment->initialLayout);
+            if(passAttachment->finalLayout == vk::ImageLayout::eUndefined)
+            {
+                if(isDepthStencilFormat(passAttachment->format))
+                {
+                    passAttachment->finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+                }else{
+                    passAttachment->finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
+                }
+            }
             attachment.setFinalLayout(passAttachment->finalLayout);
             attachment.setLoadOp(passAttachment->loadOp);
             attachment.setStoreOp(passAttachment->storeOp);
@@ -72,7 +87,7 @@ void GPURasterizedPass::buildRenderPass(const DeviceExtended &device, GPUFrame *
     subpassInfo.setPipelineBindPoint(vk::PipelineBindPoint::eGraphics);
     std::vector<vk::AttachmentReference> colorAttachmentRefs;
     colorAttachmentRefs.reserve(attachmentDescriptions.size());
-    vk::AttachmentReference depthStencilAttachmentRef;
+    vk::AttachmentReference depthStencilAttachmentRef{};
 
     for(int i = 0; i < attachmentDescriptions.size(); i ++)
     {
@@ -80,17 +95,20 @@ void GPURasterizedPass::buildRenderPass(const DeviceExtended &device, GPUFrame *
         {
             depthStencilAttachmentRef.attachment = i;
             //the layout the attachment uses during the subpass.
-            depthStencilAttachmentRef.layout = attachmentDescriptions[i].initialLayout;
+            depthStencilAttachmentRef.layout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
         }else{
             vk::AttachmentReference colorRef{};
             colorRef.attachment = i;
-            colorRef.layout = attachmentDescriptions[i].initialLayout;
+            colorRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
             colorAttachmentRefs.emplace_back(colorRef);
         }
     }
 
     subpassInfo.setColorAttachments(colorAttachmentRefs);
-    subpassInfo.setPDepthStencilAttachment(&depthStencilAttachmentRef);
+    if(depthStencilAttachmentRef.layout != vk::ImageLayout::eUndefined)
+    {
+        subpassInfo.setPDepthStencilAttachment(&depthStencilAttachmentRef);
+    }
     //subpass.setResolveAttachments();
     // We only use one subpass per render pass
     renderPassCreateInfo.setSubpasses(subpassInfo);
@@ -435,5 +453,11 @@ void GPUFrame::compileAOT() {
         // but we only need to build render pass once.
         pass->buildRenderPass(*backendDevice,this);
         pass->buildFrameBuffer(*backendDevice,this);
+    }
+
+    // Pass ahead of time preparation
+    for(auto & pass : _rasterPasses)
+    {
+        pass->prepareAOT(this);
     }
 }

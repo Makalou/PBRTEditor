@@ -154,12 +154,12 @@ struct GPUPass
     // as the name space.
     std::string _name;
 
-    GPUPass(const std::string& name) : _name(name)
+    GPUPass(std::string  name) : _name(std::move(name))
     {
 
     }
 
-    DeviceExtended* backend_device;
+    //DeviceExtended* backend_device;
     std::vector<std::unique_ptr<PassResourceDescriptionBase>> inputs;
     std::vector<std::unique_ptr<PassResourceDescriptionBase>> outputs;
     std::vector<GPUPassHandle> edges;
@@ -171,14 +171,14 @@ struct GPUPass
      * Ideally one should do as many ahead of time jobs as possible. Such as build all the shaders and pipelines
      * that would be used by the pass, prepare other immutable per pass resources.
      */
-    virtual void compileAOT() = 0;
+    virtual void prepareAOT(const GPUFrame* frame) = 0;
 
     /*
      * For some passes, it's hard or impossible to decide which shaders or pipeline to use ahead of time.
      * And maybe new shader variants can appear at every frame.
      * Also per pass data can change every frame, so this function also plays the role of 'Prepare'
      * */
-    virtual void compileJIT(){};
+    virtual void prepareJIT(const GPUFrame* frame){};
 
     void addInput(std::unique_ptr<PassResourceDescriptionBase> resource)
     {
@@ -272,14 +272,14 @@ struct GPURasterizedPass : GPUPass
     vk::Framebuffer frameBuffer;
     vk::FramebufferCreateInfo framebufferCreateInfo{};
 
-    std::vector<std::pair<std::pair<const VertexShader*, const FragmentShader*>, VulkanGraphicsPipeline>> graphicsPipelines;
+    std::vector<VulkanGraphicsPipeline> graphicsPipelines;
     vk::PipelineLayout passBaseLayout;
     vk::PipelineLayoutCreateInfo passBaseLayoutInfo{};
     vk::DescriptorSet passDataDescriptorSet;
     //We should guarantee that each pipelineLayouts must be compatible with passBaseLayout
     std::vector<std::pair<std::vector<vk::DescriptorSetLayout>, vk::PipelineLayout>> pipelineLayouts;
 
-    GPURasterizedPass(const std::string& name) : GPUPass(name){};
+    explicit GPURasterizedPass(const std::string& name) : GPUPass(name){};
 };
 
 struct TransferPass : GPUPass
@@ -361,6 +361,7 @@ struct GPUFrame
             vk::CommandBufferBeginInfo beginInfo{};
             beginInfo.setFlags(vk::CommandBufferUsageFlagBits::eSimultaneousUse);
             cmdPrimary.begin(beginInfo);
+            _rasterPasses[i]->prepareJIT(this);
             _rasterPasses[i]->record(cmdPrimary,frameIdx);
             cmdPrimary.end();
         }

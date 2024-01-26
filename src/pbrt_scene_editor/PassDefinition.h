@@ -12,21 +12,31 @@
 #define RASTERIZEDPASS_DEF_END(name) };
 
 RASTERIZEDPASS_DEF_BEGIN(SkyBoxPass)
-    void compileAOT() override
+    void prepareAOT(const GPUFrame* frame) override
     {
-
+        auto vs = ShaderManager::getInstance().createVertexShader(frame->backendDevice.get(),"fullScreenQuad.vert");
+        auto fs = ShaderManager::getInstance().createFragmentShader(frame->backendDevice.get(),"proceduralSkyBox.frag");
+        vk::PipelineVertexInputStateCreateInfo emptyVertexInputState{};
+        emptyVertexInputState.setVertexBindingDescriptionCount(0);
+        emptyVertexInputState.setVertexAttributeDescriptionCount(0);
+        VulkanGraphicsPipeline pipeline(frame->backendDevice->device,vs->getStageCreateInfo(),fs->getStageCreateInfo(),emptyVertexInputState,renderPass,
+                                        nullptr);
+        pipeline.build();
+        this->graphicsPipelines.push_back(pipeline);
     }
 
     void record(vk::CommandBuffer cmdBuf, int frameIdx) override
     {
-
+        return;
+        beginPass(cmdBuf);
+        cmdBuf.bindPipeline(vk::PipelineBindPoint::eGraphics,graphicsPipelines[0]._pipeline);
+        cmdBuf.draw(3,1,0,0);
+        endPass(cmdBuf);
     }
 RASTERIZEDPASS_DEF_END(SkyBoxPass)
 
-struct ShadowPass : GPURasterizedPass
-{
-    ShadowPass() : GPURasterizedPass("ShadowPass"){};
-    void compileAOT() override
+RASTERIZEDPASS_DEF_BEGIN(ShadowPass)
+    void prepareAOT(const GPUFrame* frame) override
     {
 
     }
@@ -35,23 +45,19 @@ struct ShadowPass : GPURasterizedPass
     {
 
     }
-};
+RASTERIZEDPASS_DEF_END(ShadowPass)
 
-struct GBufferPass : GPURasterizedPass
-{
-
-    GBufferPass() : GPURasterizedPass("GBufferPass"){};
-    void compileAOT() override
+RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
+    void prepareAOT(const GPUFrame* frame) override
     {
 
     }
 
     void record(vk::CommandBuffer cmdBuf,int frameIdx) override
     {
+        return;
         beginPass(cmdBuf);
         bindPassData(cmdBuf,frameIdx);
-        endPass(cmdBuf);
-        return;
         for(auto & instanceRigidDynamic : scene->_dynamicRigidMeshBatch)
         {
             // how to define current pipeline?
@@ -75,8 +81,8 @@ struct GBufferPass : GPURasterizedPass
                 macroList.emplace_back("HAS_VERTEX_UV","1");
             }
 
-            VertexShader* vs = ShaderManager::getInstance().createVertexShader(backend_device,"simple.vert");
-            FragmentShader* fs = ShaderManager::getInstance().createFragmentShader(backend_device,"simple.frag");
+            //VertexShader* vs = ShaderManager::getInstance().createVertexShader(backend_device,"simple.vert");
+            //FragmentShader* fs = ShaderManager::getInstance().createFragmentShader(backend_device,"simple.frag");
             //Pass is responsible to check if the pipeline layout is compatible
 
             VulkanGraphicsPipeline *currentPipeline = nullptr; //= getGraphicsPipeline(vs,fs);
@@ -88,13 +94,11 @@ struct GBufferPass : GPURasterizedPass
     }
 
     renderScene::RenderScene* scene{};
-};
+    std::vector<std::pair<int,int>> pipelinesMap;
+RASTERIZEDPASS_DEF_END(GBufferPass)
 
-struct DeferredLightingPass : GPURasterizedPass
-{
-    DeferredLightingPass() : GPURasterizedPass("DeferredLightingPass"){};
-
-    void compileAOT() override
+RASTERIZEDPASS_DEF_BEGIN(DeferredLightingPass)
+    void prepareAOT(const GPUFrame* frame) override
     {
 
     }
@@ -103,19 +107,29 @@ struct DeferredLightingPass : GPURasterizedPass
     {
 
     }
-
-};
+RASTERIZEDPASS_DEF_END(DefereredLightingPass)
 
 RASTERIZEDPASS_DEF_BEGIN(PostProcessPass)
 
-    void compileAOT() override
+    void prepareAOT(const GPUFrame* frame) override
     {
-
+        auto vs = ShaderManager::getInstance().createVertexShader(frame->backendDevice.get(),"fullScreenQuad.vert");
+        auto fs = ShaderManager::getInstance().createFragmentShader(frame->backendDevice.get(),"postProcess.frag");
+        vk::PipelineVertexInputStateCreateInfo emptyVertexInputState{};
+        emptyVertexInputState.setVertexBindingDescriptionCount(0);
+        emptyVertexInputState.setVertexAttributeDescriptionCount(0);
+        VulkanGraphicsPipeline pipeline(frame->backendDevice->device,vs->getStageCreateInfo(),fs->getStageCreateInfo(),emptyVertexInputState,renderPass,
+                                        nullptr);
+        pipeline.build();
+        this->graphicsPipelines.push_back(pipeline);
     }
 
     void record(vk::CommandBuffer cmdBuf,int frameIdx) override
     {
-
+        beginPass(cmdBuf);
+        cmdBuf.bindPipeline(vk::PipelineBindPoint::eGraphics,graphicsPipelines[0]._pipeline);
+        cmdBuf.draw(3,1,0,0);
+        endPass(cmdBuf);
     }
 
 RASTERIZEDPASS_DEF_END(PostProcessPass)

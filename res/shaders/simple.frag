@@ -17,6 +17,10 @@ layout(location = 4) in vec2 inFragUV;
 
 layout(location = 0) out vec4 outFragColor;
 
+#if HAS_NORMALMAP
+
+#endif
+
 void main() {
-    fragColor = vec4(1.0, 0.0, 0.0, 1.0);
+    outFragColor = vec4(1.0, 0.0, 0.0, 1.0);
 }
