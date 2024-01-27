@@ -88,8 +88,18 @@ struct ComputeShader : Shader
 struct ShaderManager : Singleton<ShaderManager>
 {
 public:
+    /*
+     * Why we still need macro given that we have specialization constants in Vulkan?
+     * Because sometimes we want to control the layout, code structure of shader
+     * in addition to the execution flow.
+     *
+     * For example, vertex shader does/doesn't have per vertex normal attribute, uv attribute,
+     * normal map on/off, will affect the layout declaration of the shader, which cannot be controlled
+     * by specialization constants.
+     */
     using ShaderMacro = std::pair<std::string,std::string>;
     using ShaderMacroList = std::vector<ShaderMacro>;
+
     VertexShader* createVertexShader(DeviceExtended* backendDev, const std::string& fileName, const ShaderMacroList & macro_defs);
 
     VertexShader* createVertexShader(DeviceExtended* backendDev, const std::string& name);

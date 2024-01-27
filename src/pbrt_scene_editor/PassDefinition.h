@@ -127,6 +127,10 @@ RASTERIZEDPASS_DEF_BEGIN(PostProcessPass)
     void record(vk::CommandBuffer cmdBuf,int frameIdx) override
     {
         beginPass(cmdBuf);
+        //vk::Viewport viewport{};
+        //cmdBuf.setViewport(0,viewport);
+        //vk::Rect2D scissor{};
+        //cmdBuf.setScissor(0,scissor);
         cmdBuf.bindPipeline(vk::PipelineBindPoint::eGraphics,graphicsPipelines[0]._pipeline);
         cmdBuf.draw(3,1,0,0);
         endPass(cmdBuf);
