@@ -1,10 +1,11 @@
 #include "window.h"
+#include "window_config.h"
 #include <stdexcept>
 
 Window::Window()
 {
-	width = 800;
-	height = 600;
+	width = WINDOW_WIDTH;
+	height = WINDOW_HEIGHT;
 	title = "PBRTv4 Editor";
 }
 
