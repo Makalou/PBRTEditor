@@ -327,10 +327,10 @@ void EditorGUI::render(vk::CommandBuffer cmdBuf, unsigned int idx)
 	renderPassBegInfo.setFramebuffer(frameBuffers[idx]);
 	renderPassBegInfo.renderArea.extent.width = backendDevice->_swapchain.extent.width;
 	renderPassBegInfo.renderArea.extent.height = backendDevice->_swapchain.extent.height;
-	renderPassBegInfo.setClearValueCount(1);
-	auto clearValue = vk::ClearValue{};
-	clearValue.setColor(vk::ClearColorValue{});
-	renderPassBegInfo.setClearValues(clearValue);
+//	renderPassBegInfo.setClearValueCount(1);
+//	auto clearValue = vk::ClearValue{};
+//	clearValue.setColor(vk::ClearColorValue{});
+//	renderPassBegInfo.setClearValues(clearValue);
 	cmdBuf.beginRenderPass(renderPassBegInfo,vk::SubpassContents::eInline);//todo
 
 	ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmdBuf);
@@ -415,7 +415,7 @@ void EditorGUI::createRenderPass(SwapchainExtended* swapchain)
 	vk::AttachmentDescription attachDesc = {};
 	attachDesc.format = vk::Format(swapchain->image_format);
 	attachDesc.samples = vk::SampleCountFlagBits::e1;
-	attachDesc.loadOp = vk::AttachmentLoadOp::eClear;
+	attachDesc.loadOp = vk::AttachmentLoadOp::eLoad;
 	attachDesc.storeOp = vk::AttachmentStoreOp::eStore;
 	attachDesc.stencilLoadOp = vk::AttachmentLoadOp::eDontCare;
 	attachDesc.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;

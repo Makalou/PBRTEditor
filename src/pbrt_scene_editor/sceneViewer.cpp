@@ -22,43 +22,43 @@ void SceneViewer::init(std::shared_ptr<DeviceExtended> device) {
     _renderScene = new renderScene::RenderScene;
     _renderScene->backendDevice = backendDevice;
 
-    GPUFrame frameGraph(8,backendDevice);
-    auto skyBoxPass = std::make_shared<SkyBoxPass>();
-    skyBoxPass->addOutput<PassAttachmentDescription>("result",vk::Format::eR8G8B8A8Srgb,800,600,
-                                                     vk::AttachmentLoadOp::eDontCare,vk::AttachmentStoreOp::eStore);
-    frameGraph.registerRasterizedGPUPass(skyBoxPass);
-
-    auto gBufferPass = std::make_shared<GBufferPass>();
-    gBufferPass->addOutput<PassAttachmentDescription>("depth",vk::Format::eD32Sfloat,800,600,
-                                                      vk::AttachmentLoadOp::eClear,vk::AttachmentStoreOp::eStore);
-    gBufferPass->addOutput<PassAttachmentDescription>("wPosition",vk::Format::eR16G16B16A16Sfloat,800,600,
-                                                      vk::AttachmentLoadOp::eClear,vk::AttachmentStoreOp::eStore);
-    gBufferPass->addOutput<PassAttachmentDescription>("wNormal",vk::Format::eR16G16B16A16Sfloat,800,600,
-                                                      vk::AttachmentLoadOp::eClear,vk::AttachmentStoreOp::eStore);
-    frameGraph.registerRasterizedGPUPass(gBufferPass);
-
-    auto shadowPass = std::make_shared<ShadowPass>();
-    shadowPass->addOutput<PassAttachmentDescription>("mainShadowMap",vk::Format::eD32Sfloat,800,600,
-                                                                      vk::AttachmentLoadOp::eDontCare,vk::AttachmentStoreOp::eStore);
-    frameGraph.registerRasterizedGPUPass(shadowPass);
-
-    auto deferredLightingPass = std::make_shared<DeferredLightingPass>();
-    deferredLightingPass->addInput<PassAttachmentDescription>("SkyBoxPass::result",
-                                                              vk::AttachmentLoadOp::eDontCare,vk::AttachmentStoreOp::eStore);
-    deferredLightingPass->addInput<PassTextureDescription>("GBufferPass::wPosition");
-    deferredLightingPass->addInput<PassTextureDescription>("GBufferPass::wNormal");
-    deferredLightingPass->addInput<PassTextureDescription>("ShadowPass::mainShadowMap");
-    deferredLightingPass->addOutput<PassAttachmentDescription>("result",vk::AttachmentLoadOp::eDontCare,vk::AttachmentStoreOp::eStore);
-    frameGraph.registerRasterizedGPUPass(deferredLightingPass);
-
-    auto postProcessPass = std::make_shared<PostProcessPass>();
-    postProcessPass->addInput<PassAttachmentDescription>("SwapchainImage",vk::AttachmentLoadOp::eDontCare,vk::AttachmentStoreOp::eStore);
-    postProcessPass->addInput<PassTextureDescription>("DeferredLightingPass::result");
-    postProcessPass->addOutput<PassAttachmentDescription>("result",vk::AttachmentLoadOp::eDontCare,vk::AttachmentStoreOp::eStore);
-    frameGraph.registerRasterizedGPUPass(postProcessPass);
-
     for(int i = 0 ; i < 3; i ++)
     {
+        GPUFrame frameGraph(8,backendDevice);
+        auto skyBoxPass = std::make_shared<SkyBoxPass>();
+        skyBoxPass->addOutput<PassAttachmentDescription>("result",vk::Format::eR8G8B8A8Srgb,800,600,
+                                                         vk::AttachmentLoadOp::eDontCare,vk::AttachmentStoreOp::eStore);
+        frameGraph.registerRasterizedGPUPass(skyBoxPass);
+
+        auto gBufferPass = std::make_shared<GBufferPass>();
+        gBufferPass->addOutput<PassAttachmentDescription>("depth",vk::Format::eD32Sfloat,800,600,
+                                                          vk::AttachmentLoadOp::eClear,vk::AttachmentStoreOp::eStore);
+        gBufferPass->addOutput<PassAttachmentDescription>("wPosition",vk::Format::eR16G16B16A16Sfloat,800,600,
+                                                          vk::AttachmentLoadOp::eClear,vk::AttachmentStoreOp::eStore);
+        gBufferPass->addOutput<PassAttachmentDescription>("wNormal",vk::Format::eR16G16B16A16Sfloat,800,600,
+                                                          vk::AttachmentLoadOp::eClear,vk::AttachmentStoreOp::eStore);
+        frameGraph.registerRasterizedGPUPass(gBufferPass);
+
+        auto shadowPass = std::make_shared<ShadowPass>();
+        shadowPass->addOutput<PassAttachmentDescription>("mainShadowMap",vk::Format::eD32Sfloat,800,600,
+                                                         vk::AttachmentLoadOp::eDontCare,vk::AttachmentStoreOp::eStore);
+        frameGraph.registerRasterizedGPUPass(shadowPass);
+
+        auto deferredLightingPass = std::make_shared<DeferredLightingPass>();
+        deferredLightingPass->addInput<PassAttachmentDescription>("SkyBoxPass::result",
+                                                                  vk::AttachmentLoadOp::eDontCare,vk::AttachmentStoreOp::eStore);
+        deferredLightingPass->addInput<PassTextureDescription>("GBufferPass::wPosition");
+        deferredLightingPass->addInput<PassTextureDescription>("GBufferPass::wNormal");
+        deferredLightingPass->addInput<PassTextureDescription>("ShadowPass::mainShadowMap");
+        deferredLightingPass->addOutput<PassAttachmentDescription>("result",vk::AttachmentLoadOp::eDontCare,vk::AttachmentStoreOp::eStore);
+        frameGraph.registerRasterizedGPUPass(deferredLightingPass);
+
+        auto postProcessPass = std::make_shared<PostProcessPass>();
+        postProcessPass->addInput<PassAttachmentDescription>("SwapchainImage",vk::AttachmentLoadOp::eClear,vk::AttachmentStoreOp::eStore);
+        postProcessPass->addInput<PassTextureDescription>("DeferredLightingPass::result");
+        postProcessPass->addOutput<PassAttachmentDescription>("result",vk::AttachmentLoadOp::eClear,vk::AttachmentStoreOp::eStore);
+        frameGraph.registerRasterizedGPUPass(postProcessPass);
+
         _gpuFrames.push_back(frameGraph);
     }
 

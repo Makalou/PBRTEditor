@@ -271,6 +271,11 @@ struct GPURasterizedPass : GPUPass
     vk::RenderPass renderPass;
     vk::Framebuffer frameBuffer;
     vk::FramebufferCreateInfo framebufferCreateInfo{};
+    vk::RenderPassCreateInfo renderPassCreateInfo{};
+    std::vector<vk::AttachmentDescription> attachmentDescriptions{};
+    std::vector<vk::AttachmentReference> colorAttachmentRefs;
+    vk::AttachmentReference depthStencilAttachmentRef{};
+    vk::SubpassDescription subpassInfo{};
 
     std::vector<VulkanGraphicsPipeline> graphicsPipelines;
     vk::PipelineLayout passBaseLayout;

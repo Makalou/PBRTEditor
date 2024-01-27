@@ -42,6 +42,11 @@ void GPURasterizedPass::beginPass(vk::CommandBuffer cmdBuf) {
     renderArea.extent.width = framebufferCreateInfo.width;
     renderArea.extent.height = framebufferCreateInfo.height;
     beginInfo.setRenderArea(renderArea);
+    //todo hard-code for now
+    beginInfo.setClearValueCount(1);
+    auto clearValue = vk::ClearValue{};
+    clearValue.setColor(vk::ClearColorValue{});
+    beginInfo.setClearValues(clearValue);
     cmdBuf.beginRenderPass(beginInfo,vk::SubpassContents::eInline);
 }
 
@@ -50,9 +55,8 @@ void GPURasterizedPass::endPass(vk::CommandBuffer cmdBuf) {
 }
 
 void GPURasterizedPass::buildRenderPass(const DeviceExtended &device, GPUFrame *frame) {
-    vk::RenderPassCreateInfo renderPassCreateInfo{};
-    std::vector<vk::AttachmentDescription> attachmentDescriptions;
 
+    attachmentDescriptions.clear();
     for(int i = 0;i<outputs.size();i++)
     {
         if(outputs[i]->getType() == Attachment)
@@ -83,11 +87,12 @@ void GPURasterizedPass::buildRenderPass(const DeviceExtended &device, GPUFrame *
 
     renderPassCreateInfo.setAttachments(attachmentDescriptions);
 
-    vk::SubpassDescription subpassInfo{};
+    subpassInfo = vk::SubpassDescription{};
     subpassInfo.setPipelineBindPoint(vk::PipelineBindPoint::eGraphics);
-    std::vector<vk::AttachmentReference> colorAttachmentRefs;
+
+    colorAttachmentRefs.clear();
     colorAttachmentRefs.reserve(attachmentDescriptions.size());
-    vk::AttachmentReference depthStencilAttachmentRef{};
+    depthStencilAttachmentRef = vk::AttachmentReference{};
 
     for(int i = 0; i < attachmentDescriptions.size(); i ++)
     {
