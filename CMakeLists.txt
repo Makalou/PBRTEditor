@@ -87,7 +87,8 @@ add_executable(editor_exe src/pbrt_scene_editor/main.cpp
         src/pbrt_scene_editor/Singleton.h
         src/pbrt_scene_editor/GPUPass.cpp
         src/pbrt_scene_editor/VukanExtension.cpp
-        src/pbrt_scene_editor/ApplicationConfig.h)
+        src/pbrt_scene_editor/ApplicationConfig.h
+        src/pbrt_scene_editor/ThreadPool.h)
 
 target_compile_definitions(editor_exe PRIVATE EDITOR_PROJECT_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 

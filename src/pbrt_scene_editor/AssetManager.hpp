@@ -30,7 +30,7 @@ struct MeshHostObject
 
     struct AttributeLayout
     {
-        int VertexStride;
+        int VertexStride{};
         int normalOffset = -1;
         int tangentOffset = -1;
         int biTangentOffset = -1;
