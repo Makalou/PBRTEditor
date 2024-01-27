@@ -384,11 +384,11 @@ namespace renderScene {
                         if(meshRigidPtr == nullptr)
                         {
                             // Existing mesh not found
-                            MeshHostObject* meshHost = assetManager.loadMeshPBRTPLY(shape_uuid);
+                            MeshHostObject* meshHost = assetManager.getOrLoadPBRTPLY(shape_uuid);
 
                             auto interleaveAttribute = meshHost->getInterleavingAttributes();
 
-                            auto indexBufferSize = meshHost->index_count * sizeof(meshHost->indices[0]);
+                            auto indexBufferSize = meshHost->index_count * sizeof(meshHost->indices.get()[0]);
                             auto vertexBufferSize = meshHost->vertex_count * interleaveAttribute.second.VertexStride;
                             auto interleavingBufferAttribute = interleaveAttribute.second;
 
@@ -409,7 +409,7 @@ namespace renderScene {
                             meshRigid.vertexCount = meshHost->vertex_count;
                             meshRigid.indexCount = meshHost->index_count;
 
-                            backendDevice->oneTimeUploadSync(meshHost->indices,indexBufferSize,meshRigid.indexBuffer.buffer);
+                            backendDevice->oneTimeUploadSync(meshHost->indices.get(),indexBufferSize,meshRigid.indexBuffer.buffer);
                             backendDevice->oneTimeUploadSync(interleaveAttribute.first,vertexBufferSize,meshRigid.vertexBuffer.buffer);
 
                             meshes.emplace_back(shape_uuid,meshRigid);

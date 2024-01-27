@@ -368,7 +368,7 @@ DIRECTIVE_HANDLER_DEF(Shape)
         for (const auto& para : shapeParamList)
         {
             if (para.first == "filename") {
-                assetLoader.loadMeshPBRTPLY(std::get<std::string>(para.second));
+                assetLoader.getOrLoadMeshAsync(std::get<std::string>(para.second));
                 break;
             }
         }
@@ -453,7 +453,7 @@ DIRECTIVE_HANDLER_DEF(Texture)
         for (const auto& para : textureParamList)
         {
             if (para.first == "filename") {
-                assetLoader.loadImgAsync(std::get<std::string>(para.second));
+                assetLoader.getOrLoadImgAsync(std::get<std::string>(para.second));
                 break;
             }
 
