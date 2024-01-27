@@ -89,7 +89,7 @@ MeshHostObject* AssetManager::loadMeshPBRTPLY(const std::string &relative_path) 
     meshHostObj.vertex_count = mesh->mNumVertices;
     //we assume each vertex include position
     assert(mesh->HasPositions());
-    meshHostObj.position = new float[vertex_count * 3];
+    meshHostObj.position = (float*)std::malloc(sizeof(float) * vertex_count * 3);
     for(int i = 0; i < vertex_count; i++)
     {
         meshHostObj.position[i*3] = mesh->mVertices[i].x;
@@ -99,7 +99,7 @@ MeshHostObject* AssetManager::loadMeshPBRTPLY(const std::string &relative_path) 
     //normal, tangent and uv is optional
     if(mesh->HasNormals())
     {
-        meshHostObj.normal = new float[vertex_count * 3];
+        meshHostObj.normal = (float*)std::malloc(sizeof(float) * vertex_count * 3);
         for(int i = 0; i < vertex_count; i++)
         {
             meshHostObj.normal[i*3] = mesh->mNormals[i].x;
@@ -109,8 +109,8 @@ MeshHostObject* AssetManager::loadMeshPBRTPLY(const std::string &relative_path) 
     }
     if(mesh->HasTangentsAndBitangents())
     {
-        meshHostObj.tangent = new float[vertex_count*3];
-        meshHostObj.bitangent = new float[vertex_count*3];
+        meshHostObj.tangent = (float*)std::malloc(sizeof(float) * vertex_count * 3);
+        meshHostObj.bitangent = (float*)std::malloc(sizeof(float) * vertex_count * 3);
         for(int i = 0; i < vertex_count; i++)
         {
             meshHostObj.tangent[i*3] = mesh->mTangents[i].x;
@@ -128,7 +128,7 @@ MeshHostObject* AssetManager::loadMeshPBRTPLY(const std::string &relative_path) 
     //We assume each mesh has at most one UV coord, and is stored at idx 0
     if(mesh->HasTextureCoords(0))
     {
-        meshHostObj.uv = new float[vertex_count*2];
+        meshHostObj.uv = (float*)std::malloc(sizeof(float) * vertex_count * 2);
         for(int i = 0; i < vertex_count; i++)
         {
             meshHostObj.uv[i*2] = mesh->mTextureCoords[0][i].x;

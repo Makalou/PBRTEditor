@@ -372,7 +372,7 @@ void GPUFrame::compileAOT() {
         for(int i = 0; i < pass->inputs.size();i++)
         {
             if(pass->inputs[i]->outputHandle)
-                connectResources(pass->inputs[i]->outputHandle,pass->inputs[i].get());
+                connectResources(pass->inputs[i]->outputHandle.pointer,pass->inputs[i].get());
         }
         int kk = 0;
         for(int i = 0; i < pass->outputs.size(); i++)

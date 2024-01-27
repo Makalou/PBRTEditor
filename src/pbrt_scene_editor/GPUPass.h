@@ -18,9 +18,41 @@ struct GPUFrame;
 struct PassResourceDescriptionBase;
 
 //we use pointer as handle... may be not best idea
+template<typename T>
+struct pointer_view
+{
+    T * pointer;
 
-using GPUPassHandle = GPUPass*;
-using PassResourceHandle = PassResourceDescriptionBase*;
+    pointer_view() = default;
+
+    pointer_view(T* ptr) : pointer(ptr) {}
+
+    pointer_view(const pointer_view& other) : pointer(other.pointer) {}
+
+    pointer_view(pointer_view&& other) noexcept : pointer(other.pointer){}
+
+    pointer_view& operator=(const pointer_view& other) {
+        pointer = other.pointer;
+        return *this;
+    }
+
+    pointer_view& operator=(pointer_view&& other) noexcept {
+        pointer = other.pointer;
+        return *this;
+    }
+
+    T* operator->() {
+        return pointer;
+    }
+
+    explicit operator bool() const {
+        return pointer != nullptr;
+    }
+
+    ~ pointer_view() = default;
+};
+using GPUPassHandle = pointer_view<GPUPass>;
+using PassResourceHandle = pointer_view<PassResourceDescriptionBase>;
 
 enum PassResourceType
 {
@@ -34,9 +66,9 @@ bool isDepthStencilFormat(vk::Format format);
 struct PassResourceDescriptionBase
 {
     int ref_count = 0;
-    GPUPassHandle producer;
+    GPUPassHandle producer{};
     //used to link an input to its output resource
-    PassResourceHandle outputHandle;
+    PassResourceHandle outputHandle{};
     // uuid
     std::string name;
 
@@ -47,9 +79,7 @@ struct PassResourceDescriptionBase
 
     }
 
-    virtual ~PassResourceDescriptionBase(){
-
-    };
+    virtual ~PassResourceDescriptionBase()= default;
 };
 
 /* Used to determine the render pass and framebuffer composition of a given node.
@@ -154,10 +184,12 @@ struct GPUPass
     // as the name space.
     std::string _name;
 
-    GPUPass(std::string  name) : _name(std::move(name))
+    explicit GPUPass(std::string  name) : _name(std::move(name))
     {
 
     }
+
+    virtual ~GPUPass() = default;
 
     //DeviceExtended* backend_device;
     std::vector<std::unique_ptr<PassResourceDescriptionBase>> inputs;
@@ -285,6 +317,8 @@ struct GPURasterizedPass : GPUPass
     std::vector<std::pair<std::vector<vk::DescriptorSetLayout>, vk::PipelineLayout>> pipelineLayouts;
 
     explicit GPURasterizedPass(const std::string& name) : GPUPass(name){};
+
+    virtual ~GPURasterizedPass() = default;
 };
 
 struct TransferPass : GPUPass
@@ -374,7 +408,7 @@ struct GPUFrame
         return cmdPrimary;
     }
 
-    void registerRasterizedGPUPass(const std::shared_ptr<GPURasterizedPass> & pass)
+    void registerRasterizedGPUPass(std::unique_ptr<GPURasterizedPass> && pass)
     {
         for(const auto & reg_pass : _rasterPasses)
         {
@@ -383,7 +417,7 @@ struct GPUFrame
                 throw std::invalid_argument("Pass has been registered.");
             }
         }
-        _rasterPasses.emplace_back(pass);
+        _rasterPasses.emplace_back(std::move(pass));
     }
 
     //https://app.diagrams.net/#G1gIpgDwpK7Vyhzypl7A_RbQFETWhS1_1q
@@ -396,7 +430,7 @@ struct GPUFrame
 
     PassAttachmentDescription* swapchainAttachment;
     std::vector<int> sortedIndices;
-    std::vector<std::shared_ptr<GPURasterizedPass>> _rasterPasses;
+    std::vector<std::unique_ptr<GPURasterizedPass>> _rasterPasses;
     std::unordered_map<std::string,vk::ImageView> backingImageViews;
     std::unordered_map<std::string,VMAImage> backingImages;
     int frameIdx{};

@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <future>
 #include "LockFreeCircleQueue.hpp"
+#include <utility>
 #include <variant>
 #include "assimp/Importer.hpp"
 
@@ -77,7 +78,7 @@ public:
 
             for(int i = 0; i < vertex_count; i ++)
             {
-                auto current_vertex_start = interleavingAttributes + attributeLayout.VertexStride * i;
+                auto * current_vertex_start = interleavingAttributes + attributeLayout.VertexStride * i;
                 memcpy(current_vertex_start, position + i * 3 * sizeof(float), 3 * sizeof(float));
                 if(normal != nullptr)
                 {
@@ -103,6 +104,18 @@ public:
         return {interleavingAttributes,attributeLayout};
     }
 
+    ~MeshHostObject()
+    {
+        //todo WTF ??? Who release these?
+//        if(indices!= nullptr) std::free(indices);
+//        if(position!= nullptr) std::free(position);
+//        if(normal!= nullptr) std::free(normal);
+//        if(tangent!= nullptr) std::free(tangent);
+//        if(bitangent!= nullptr) std::free(bitangent);
+//        if(uv!= nullptr) std::free(uv);
+        if(interleavingAttributes != nullptr)
+            std::free(interleavingAttributes);
+    }
 private:
     unsigned char* interleavingAttributes = nullptr;
     AttributeLayout attributeLayout;
@@ -113,8 +126,8 @@ namespace fs = std::filesystem;
 template<typename T>
 struct AssetFuture
 {
-    explicit AssetFuture(const std::string & name, std::shared_future<void*> future) :
-                                                _request_name(name),
+    explicit AssetFuture(std::string  name, std::shared_future<void*> future) :
+                                                _request_name(std::move(name)),
                                                 _sharedFuture(std::move(future)){
         _refCount = std::make_shared<std::atomic_int>(1);
     }
