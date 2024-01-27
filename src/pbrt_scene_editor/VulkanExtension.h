@@ -261,7 +261,11 @@ struct CommandPoolExtended : vk::CommandPool
 
     void reset()
     {
-        vkResetCommandPool(_device->device,_cmdPool,VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT);
+        //To reset the pool the flag RESET_COMMAND_BUFFER_BIT is not required,
+        // and it is actually better to avoid it since it prevents it from using
+        // a single large allocator for all buffers in the pool thus increasing memory overhead.
+        //https://arm-software.github.io/vulkan_best_practice_for_mobile_developers/samples/performance/command_buffer_usage/command_buffer_usage_tutorial.html#resetting-the-command-pool
+        vkResetCommandPool(_device->device,_cmdPool,0);
     }
 };
 
