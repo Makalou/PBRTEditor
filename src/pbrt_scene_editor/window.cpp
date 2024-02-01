@@ -25,6 +25,7 @@ void Window::init()
 	glfwSetKeyCallback(window, keyCallback);
 	glfwSetScrollCallback(window, scrollCallback);
 	glfwSetMouseButtonCallback(window, mouseButtonCallback);
+    glfwSetCursorPosCallback(window,cursorPosCallback);
 }
 
 Window::~Window()
@@ -57,22 +58,27 @@ std::vector<framebufferResizeCallbackT> Window::framebufferResizeCallbackList = 
 std::vector<keyCallbackT> Window::keyCallbackList = {};
 std::vector<scrollCallbackT> Window::scrollCallbackList = {};
 std::vector<mouseButtonCallbackT> Window::mouseButtonCallbackList = {};
+std::vector<cursorPosCallbackT> Window::cursorPosCallbackList = {};
 
-void Window::registerFramebufferResizeCallback(framebufferResizeCallbackT fn)
+void Window::registerFramebufferResizeCallback(const framebufferResizeCallbackT& fn)
 {
 	framebufferResizeCallbackList.push_back(fn);
 }
-void Window::registerKeyCallback(keyCallbackT fn)
+void Window::registerKeyCallback(const keyCallbackT& fn)
 {
 	keyCallbackList.push_back(fn);
 }
-void Window::registerScrollCallback(scrollCallbackT fn)
+void Window::registerScrollCallback(const scrollCallbackT& fn)
 {
 	scrollCallbackList.push_back(fn);
 }
-void Window::registerMouseButtonCallback(mouseButtonCallbackT fn)
+void Window::registerMouseButtonCallback(const mouseButtonCallbackT& fn)
 {
 	mouseButtonCallbackList.push_back(fn);
+}
+
+void Window::registerCursorPosCallback(const cursorPosCallbackT& fn) {
+    cursorPosCallbackList.emplace_back(fn);
 }
 
 void Window::framebufferResizeCallback(GLFWwindow* window, int width, int height)
@@ -102,4 +108,10 @@ void Window::mouseButtonCallback(GLFWwindow* window, int button, int action, int
 	{
 		callback(button,action,mods);
 	}
+}
+void Window::cursorPosCallback(GLFWwindow *window, double xPos, double yPos) {
+    for(auto & callback : cursorPosCallbackList)
+    {
+        callback(xPos,yPos);
+    }
 }

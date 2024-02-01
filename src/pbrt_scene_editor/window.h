@@ -10,6 +10,7 @@ using framebufferResizeCallbackT = std::function<void(int width, int height)>;
 using keyCallbackT = std::function<void(int key, int scancode, int action, int mods)>;
 using scrollCallbackT = std::function<void(double xoffset, double yoffset)>;
 using mouseButtonCallbackT = std::function<void(int button, int action, int mods)>;
+using cursorPosCallbackT = std::function<void(double xPos, double yPos)>;
 
 struct Window {
 public:
@@ -22,16 +23,19 @@ public:
 	GLFWwindow* getRawWindowHandle() const;
 
     /*(width, height)*/
-	static void registerFramebufferResizeCallback(framebufferResizeCallbackT fn);
+	static void registerFramebufferResizeCallback(const framebufferResizeCallbackT& fn);
 
     /*(key, scancode, action, mods)*/
-	static void registerKeyCallback(keyCallbackT fn);
+	static void registerKeyCallback(const keyCallbackT& fn);
 
     /*(xoffset, yoffset)*/
-	static void registerScrollCallback(scrollCallbackT fn);
+	static void registerScrollCallback(const scrollCallbackT& fn);
 
     /*(button, action, modes)*/
-	static void registerMouseButtonCallback(mouseButtonCallbackT fn);
+	static void registerMouseButtonCallback(const mouseButtonCallbackT& fn);
+
+    /*(xPos, yPos)*/
+    static void registerCursorPosCallback(const cursorPosCallbackT& fn);
 
 private:
 	GLFWwindow* window;
@@ -42,10 +46,12 @@ private:
 	static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
 	static void scrollCallback(GLFWwindow* window,double xoffset, double yoffset);
 	static void mouseButtonCallback(GLFWwindow* window,int button, int action, int mods);
+    static void cursorPosCallback(GLFWwindow* window,double xPos, double yPos);
 
 	static std::vector<framebufferResizeCallbackT> framebufferResizeCallbackList;
 	static std::vector<keyCallbackT> keyCallbackList;
 	static std::vector<scrollCallbackT> scrollCallbackList;
 	static std::vector<mouseButtonCallbackT> mouseButtonCallbackList;
+    static std::vector<cursorPosCallbackT> cursorPosCallbackList;
 
 };
