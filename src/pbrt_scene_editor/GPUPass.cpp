@@ -552,6 +552,24 @@ vk::CommandBuffer GPUFrame::recordMainQueueCommands() {
     _frameGlobalDataBuffer->cursorPos.x = this->x;
     _frameGlobalDataBuffer->cursorPos.y = this->y;
 
+    //Resetting a descriptor pool recycles all of the resources from all of the descriptor sets
+    // allocated from the descriptor pool back to the descriptor pool, and the descriptor sets are implicitly freed.
+
+    //Once all pending uses have completed, it is legal to update and reuse a descriptor set.
+    //https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/vkCmdBindDescriptorSets.html
+    vk::WriteDescriptorSet write{};
+    write.setDescriptorType(vk::DescriptorType::eUniformBuffer);
+    write.setDescriptorCount(1);
+    write.setDstBinding(0);
+    write.setDstSet(_frameGlobalDescriptorSet);
+    vk::DescriptorBufferInfo bufferInfo;
+    bufferInfo.setOffset(0);
+    bufferInfo.setBuffer(_frameGlobalDataBuffer.getBuffer());
+    bufferInfo.setRange(vk::WholeSize);
+    write.setBufferInfo(bufferInfo);
+
+    backendDevice->updateDescriptorSets(write,{});
+
     for(auto allocator : perThreadMainCommandAllocators)
     {
         allocator.reset();
