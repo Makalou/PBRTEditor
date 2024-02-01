@@ -111,6 +111,8 @@ RASTERIZEDPASS_DEF_END(DefereredLightingPass)
 
 RASTERIZEDPASS_DEF_BEGIN(PostProcessPass)
 
+    vk::PipelineLayout pipelineLayout;
+
     void prepareAOT(const GPUFrame* frame) override
     {
         auto vs = ShaderManager::getInstance().createVertexShader(frame->backendDevice.get(),"fullScreenQuad.vert");
@@ -118,8 +120,13 @@ RASTERIZEDPASS_DEF_BEGIN(PostProcessPass)
         vk::PipelineVertexInputStateCreateInfo emptyVertexInputState{};
         emptyVertexInputState.setVertexBindingDescriptionCount(0);
         emptyVertexInputState.setVertexAttributeDescriptionCount(0);
+
+        vk::PipelineLayoutCreateInfo pipelineLayoutCreateInfo{};
+        pipelineLayoutCreateInfo.setSetLayouts(frame->_frameGlobalDescriptorSetLayout);
+        pipelineLayout = frame->backendDevice->createPipelineLayout(pipelineLayoutCreateInfo);
+
         VulkanGraphicsPipeline pipeline(frame->backendDevice->device,vs->getStageCreateInfo(),fs->getStageCreateInfo(),emptyVertexInputState,renderPass,
-                                        nullptr);
+                                        pipelineLayout);
         pipeline.build();
         this->graphicsPipelines.push_back(pipeline);
     }

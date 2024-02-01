@@ -334,27 +334,12 @@ struct GPURayTracingPass : GPUPass
 
 struct GPUFrame
 {
-    GPUFrame(int threadsNum, std::shared_ptr<DeviceExtended> backendDevice) :
-    workThreadsNum(threadsNum),backendDevice(backendDevice)
+    struct frameGlobalData
     {
-        uint32_t mainQueueFamilyIdx = backendDevice->get_queue_index(vkb::QueueType::graphics).value();
-        vk::CommandPoolCreateInfo poolInfo{};
-        poolInfo.queueFamilyIndex = mainQueueFamilyIdx;
-        poolInfo.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
+        glm::vec4 time;
+    };
 
-        for (int i = 0; i < workThreadsNum; i++)
-        {
-            CommandPoolExtended pool(backendDevice,backendDevice->createCommandPool(poolInfo));
-            perThreadMainCommandAllocators.emplace_back(pool);
-        }
-
-        vk::Format swapChainFormat = static_cast<vk::Format>(backendDevice->_swapchain.image_format);
-        auto swapChainExtent = backendDevice->_swapchain.extent;
-        swapchainAttachment = new PassAttachmentDescription("SwapchainImage",swapChainFormat,swapChainExtent.width,swapChainExtent.height,
-                                                        vk::AttachmentLoadOp::eDontCare,vk::AttachmentStoreOp::eDontCare);
-
-        //todo multiple queues stuffs ...
-    }
+    GPUFrame(int threadsNum, const std::shared_ptr<DeviceExtended>& backendDevice);
 
     int workThreadsNum;
     /* Note that allocated command buffer only means we don't need to reallocate them from pool.
@@ -369,44 +354,7 @@ struct GPUFrame
 
     std::shared_ptr<DeviceExtended> backendDevice;
 
-    vk::CommandBuffer recordMainQueueCommands()
-    {
-
-        for(auto allocator : perThreadMainCommandAllocators)
-        {
-            allocator.reset();
-        }
-
-        /*
-         * Multi-threading passes recording.
-         *
-         * Note: as for the command synchronization problem, there is no different
-         * whether you record commands into one command buffer or separate them into many.
-         * No matter what you need to explicitly do the synchronization job.(By using pipeline barriers).
-         *
-         * Pipeline barrier will affect all commands that have been submitted to the queue, and commands would be submitted
-         * in to the same queue, no matter whether there are recorded into same command buffer.
-         *
-         * All in all, the only two reason we use multiple command buffers is 1. we want to serve different type of
-         * operation(which doesn't make too much different if we only use omnipotent main queue)
-         * 2. we cannot operate on single command buffer in parallel.
-         */
-        int threadId = 0;
-        auto cmdAllocator = perThreadMainCommandAllocators[threadId];
-        auto cmdPrimary = cmdAllocator.getOrAllocateNextPrimary();
-
-        for(int i = 0 ; i < _rasterPasses.size(); i ++)
-        {
-            vk::CommandBufferBeginInfo beginInfo{};
-            beginInfo.setFlags(vk::CommandBufferUsageFlagBits::eSimultaneousUse);
-            cmdPrimary.begin(beginInfo);
-            _rasterPasses[i]->prepareJIT(this);
-            _rasterPasses[i]->record(cmdPrimary,frameIdx);
-            cmdPrimary.end();
-        }
-
-        return cmdPrimary;
-    }
+    vk::CommandBuffer recordMainQueueCommands();
 
     void registerRasterizedGPUPass(std::unique_ptr<GPURasterizedPass> && pass)
     {
@@ -433,6 +381,13 @@ struct GPUFrame
     std::vector<std::unique_ptr<GPURasterizedPass>> _rasterPasses;
     std::unordered_map<std::string,vk::ImageView> backingImageViews;
     std::unordered_map<std::string,VMAImage> backingImages;
+
+    vk::DescriptorSet _frameGlobalDescriptorSet;
+    vk::DescriptorSetLayout _frameGlobalDescriptorSetLayout;
+    vk::DescriptorPool _frameGlobalDescriptorSetPool;
+    VMAObservedBufferMapped<frameGlobalData> _frameGlobalDataBuffer;
+    vk::PipelineLayout _frameLevelPipelineLayout;
+
     int frameIdx{};
 };
 

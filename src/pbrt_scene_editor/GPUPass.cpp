@@ -256,6 +256,63 @@ void connectResources(PassResourceDescriptionBase* output, PassResourceDescripti
     }
 }
 
+GPUFrame::GPUFrame(int threadsNum, const std::shared_ptr<DeviceExtended> &backendDevice) : workThreadsNum(threadsNum),backendDevice(backendDevice)
+{
+    uint32_t mainQueueFamilyIdx = backendDevice->get_queue_index(vkb::QueueType::graphics).value();
+    vk::CommandPoolCreateInfo commandPoolInfo{};
+    commandPoolInfo.queueFamilyIndex = mainQueueFamilyIdx;
+    commandPoolInfo.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
+
+    for (int i = 0; i < workThreadsNum; i++)
+    {
+        CommandPoolExtended pool(backendDevice,backendDevice->createCommandPool(commandPoolInfo));
+        perThreadMainCommandAllocators.emplace_back(pool);
+    }
+
+    auto swapChainFormat = static_cast<vk::Format>(backendDevice->_swapchain.image_format);
+    auto swapChainExtent = backendDevice->_swapchain.extent;
+    swapchainAttachment = new PassAttachmentDescription("SwapchainImage",swapChainFormat,swapChainExtent.width,swapChainExtent.height,
+                                                        vk::AttachmentLoadOp::eDontCare,vk::AttachmentStoreOp::eDontCare);
+
+    //todo multiple queues stuffs ...
+    std::array<vk::DescriptorSetLayoutBinding,1> bindings;
+
+    for(auto & binding : bindings)
+    {
+        binding.setBinding(0);
+        binding.setStageFlags(vk::ShaderStageFlagBits::eAll);
+        binding.setDescriptorType(vk::DescriptorType::eUniformBuffer);
+        binding.setDescriptorCount(1);
+    }
+
+    vk::DescriptorSetLayoutCreateInfo layoutCreateInfo;
+    layoutCreateInfo.setBindings(bindings);
+    _frameGlobalDescriptorSetLayout = backendDevice->createDescriptorSetLayout(layoutCreateInfo);
+
+    vk::PipelineLayoutCreateInfo pipelineLayoutCreateInfo{};
+    pipelineLayoutCreateInfo.setSetLayouts(_frameGlobalDescriptorSetLayout);
+    _frameLevelPipelineLayout = backendDevice->createPipelineLayout(pipelineLayoutCreateInfo);
+
+    vk::DescriptorPoolCreateInfo descriptorPoolInfo{};
+    descriptorPoolInfo.setFlags(vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet);
+    descriptorPoolInfo.setMaxSets(100);
+    std::array<vk::DescriptorPoolSize,1> poolSizes;
+    for(auto & poolSz : poolSizes)
+    {
+        poolSz.setType(vk::DescriptorType::eUniformBuffer);
+        poolSz.setDescriptorCount(1);
+    }
+    descriptorPoolInfo.setPoolSizes(poolSizes);
+    _frameGlobalDescriptorSetPool = backendDevice->createDescriptorPool(descriptorPoolInfo);
+    vk::DescriptorSetAllocateInfo allocateInfo{};
+    allocateInfo.setSetLayouts(_frameGlobalDescriptorSetLayout);
+    allocateInfo.setDescriptorPool(_frameGlobalDescriptorSetPool);
+    allocateInfo.setDescriptorSetCount(1);
+    _frameGlobalDescriptorSet = backendDevice->allocateDescriptorSets(allocateInfo)[0];
+    auto buf = backendDevice->allocateObservedBufferPull<frameGlobalData>(VkBufferUsageFlagBits::VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT).value();
+    _frameGlobalDataBuffer = buf;
+}
+
 void GPUFrame::compileAOT() {
     // And pass dependencies
     // After this process we guarantee that every input
@@ -465,4 +522,62 @@ void GPUFrame::compileAOT() {
     {
         pass->prepareAOT(this);
     }
+}
+
+vk::CommandBuffer GPUFrame::recordMainQueueCommands() {
+    _frameGlobalDataBuffer->time.x = static_cast<float>(glfwGetTime());
+
+    //Resetting a descriptor pool recycles all of the resources from all of the descriptor sets
+    // allocated from the descriptor pool back to the descriptor pool, and the descriptor sets are implicitly freed.
+
+    //Once all pending uses have completed, it is legal to update and reuse a descriptor set.
+    //https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/vkCmdBindDescriptorSets.html
+    vk::WriteDescriptorSet write{};
+    write.setDescriptorType(vk::DescriptorType::eUniformBuffer);
+    write.setDescriptorCount(1);
+    write.setDstBinding(0);
+    write.setDstSet(_frameGlobalDescriptorSet);
+    vk::DescriptorBufferInfo bufferInfo;
+    bufferInfo.setOffset(0);
+    bufferInfo.setBuffer(_frameGlobalDataBuffer.getBuffer());
+    bufferInfo.setRange(vk::WholeSize);
+    write.setBufferInfo(bufferInfo);
+
+    backendDevice->updateDescriptorSets(write,{});
+
+    for(auto allocator : perThreadMainCommandAllocators)
+    {
+        allocator.reset();
+    }
+
+    /*
+     * Multi-threading passes recording.
+     *
+     * Note: as for the command synchronization problem, there is no different
+     * whether you record commands into one command buffer or separate them into many.
+     * No matter what you need to explicitly do the synchronization job.(By using pipeline barriers).
+     *
+     * Pipeline barrier will affect all commands that have been submitted to the queue, and commands would be submitted
+     * in to the same queue, no matter whether there are recorded into same command buffer.
+     *
+     * All in all, the only two reason we use multiple command buffers is 1. we want to serve different type of
+     * operation(which doesn't make too much different if we only use omnipotent main queue)
+     * 2. we cannot operate on single command buffer in parallel.
+     */
+    int threadId = 0;
+    auto cmdAllocator = perThreadMainCommandAllocators[threadId];
+    auto cmdPrimary = cmdAllocator.getOrAllocateNextPrimary();
+
+    for(int i = 0 ; i < _rasterPasses.size(); i ++)
+    {
+        vk::CommandBufferBeginInfo beginInfo{};
+        beginInfo.setFlags(vk::CommandBufferUsageFlagBits::eSimultaneousUse);
+        cmdPrimary.begin(beginInfo);
+        cmdPrimary.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,_frameLevelPipelineLayout,0,_frameGlobalDescriptorSet,nullptr);
+        _rasterPasses[i]->prepareJIT(this);
+        _rasterPasses[i]->record(cmdPrimary,frameIdx);
+        cmdPrimary.end();
+    }
+
+    return cmdPrimary;
 }
