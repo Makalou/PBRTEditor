@@ -75,6 +75,9 @@ struct DeviceExtended : vkb::Device, vk::Device
                         &mappedBuffer.allocation,
                         &mappedBuffer.allocationInfo) == VK_SUCCESS)
         {
+            VkMemoryPropertyFlags memPropFlags;
+            vmaGetAllocationMemoryProperties(_globalVMAAllocator,mappedBuffer.allocation, &memPropFlags);
+            assert(memPropFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
             return mappedBuffer;
         }
 
