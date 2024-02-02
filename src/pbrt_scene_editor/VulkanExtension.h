@@ -96,17 +96,27 @@ struct DeviceExtended : vkb::Device, vk::Device
         vmaDestroyBuffer(_globalVMAAllocator,buffer,allocation);
     }
 
-    std::optional<VMAImage> allocateVMAImage(VkImageCreateInfo imageInfo,VkImageUsageFlagBits usage)
+    std::optional<VMAImage> allocateVMAImage(VkImageCreateInfo imageInfo)
     {
+        VMAImage image{};
         VmaAllocationCreateInfo allocCreateInfo = {};
         allocCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
+        allocCreateInfo.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
+        if(vmaCreateImage(_globalVMAAllocator,&imageInfo,&allocCreateInfo,
+                          &image.image,
+                          &image.allocation,
+                          &image.allocationInfo) == VK_SUCCESS)
+        {
+            return image;
+        }
+
         return {};
     }
 
     /*
      * Exclusive
      */
-    std::optional<VMAImage> allocateVMAImageForColorAttachment(VkFormat format, uint32_t width, uint32_t height)
+    std::optional<VMAImage> allocateVMAImageForColorAttachment(VkFormat format, uint32_t width, uint32_t height, bool sampled_need = false)
     {
         VkImageCreateInfo imageInfo{};
         imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -117,7 +127,7 @@ struct DeviceExtended : vkb::Device, vk::Device
         imageInfo.arrayLayers = 1;
         imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
         imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-        imageInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        imageInfo.usage = sampled_need? (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |VK_IMAGE_USAGE_SAMPLED_BIT ): VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
         imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
@@ -127,7 +137,7 @@ struct DeviceExtended : vkb::Device, vk::Device
     /*
      * Exclusive
      */
-    std::optional<VMAImage> allocateVMAImageForDepthStencilAttachment(VkFormat format, uint32_t width, uint32_t height)
+    std::optional<VMAImage> allocateVMAImageForDepthStencilAttachment(VkFormat format, uint32_t width, uint32_t height, bool sampled_need = false)
     {
         VkImageCreateInfo imageInfo{};
         imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -138,7 +148,8 @@ struct DeviceExtended : vkb::Device, vk::Device
         imageInfo.arrayLayers = 1;
         imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
         imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-        imageInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+        imageInfo.usage = sampled_need? (VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT):
+                VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
         imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         return allocateVMAImageForAttachment(imageInfo);
@@ -220,6 +231,13 @@ struct DeviceExtended : vkb::Device, vk::Device
      * Not thread-safe! (staging buffer is not thread-safe).
      * */
     void oneTimeUploadSync(void* data, int size,VkBuffer dst);
+
+    auto createPipelineLayout2(std::vector<vk::DescriptorSetLayout>&& descriptorSetLayouts)
+    {
+        vk::PipelineLayoutCreateInfo createInfo{};
+        createInfo.setSetLayouts(descriptorSetLayouts);
+        return createPipelineLayout(createInfo);
+    }
 
     ~DeviceExtended(){
         vmaDestroyAllocator(_globalVMAAllocator);

@@ -441,6 +441,25 @@ void GPUFrame::compileAOT() {
 
     backingImageViews.emplace("SwapchainImage",backendDevice->_swapchain.get_image_views().value()[frameIdx]);
 
+    //create default sampler
+    vk::SamplerCreateInfo defaultSamplerInfo{};
+    defaultSamplerInfo.setAddressModeU(vk::SamplerAddressMode::eClampToBorder);
+    defaultSamplerInfo.setAddressModeV(vk::SamplerAddressMode::eClampToBorder);
+    defaultSamplerInfo.setAddressModeW(vk::SamplerAddressMode::eClampToBorder);
+    defaultSamplerInfo.setAnisotropyEnable(vk::False);
+    defaultSamplerInfo.setMaxAnisotropy(0.0);
+    defaultSamplerInfo.setBorderColor(vk::BorderColor::eFloatOpaqueBlack);
+    defaultSamplerInfo.setCompareEnable(vk::False);
+    defaultSamplerInfo.setCompareOp(vk::CompareOp::eNever);
+    defaultSamplerInfo.setMagFilter(vk::Filter::eLinear);
+    defaultSamplerInfo.setMinFilter(vk::Filter::eLinear);
+    defaultSamplerInfo.setMaxLod(0);
+    defaultSamplerInfo.setMinLod(0);
+    defaultSamplerInfo.setMipLodBias(0);
+    defaultSamplerInfo.setMipmapMode(vk::SamplerMipmapMode::eLinear);
+
+    samplers.emplace_back(backendDevice->createSampler(defaultSamplerInfo));
+
     for(int passIdx = 0; passIdx < sortedIndices.size(); passIdx++)
     {
         auto & pass = _rasterPasses[sortedIndices[passIdx]];
@@ -486,14 +505,16 @@ void GPUFrame::compileAOT() {
                     // Need to create new image
                     auto attachmentDesc = dynamic_cast<PassAttachmentDescription*>(pass->outputs[i].get());
                     VMAImage image;
+                    bool sampled_need = true;
                     if(isDepthStencilFormat(attachmentDesc->format))
                     {
                         image = backendDevice->allocateVMAImageForDepthStencilAttachment(
-                                static_cast<VkFormat>(attachmentDesc->format), attachmentDesc->width, attachmentDesc->height).value();
+                                static_cast<VkFormat>(attachmentDesc->format), attachmentDesc->width, attachmentDesc->height,sampled_need).value();
                     }else{
                         image = backendDevice->allocateVMAImageForColorAttachment(
-                                static_cast<VkFormat>(attachmentDesc->format), attachmentDesc->width, attachmentDesc->height).value();
+                                static_cast<VkFormat>(attachmentDesc->format), attachmentDesc->width, attachmentDesc->height,sampled_need).value();
                     }
+
                     backingImages.emplace(name,image);
                     // create image view
                     vk::ImageViewCreateInfo imageViewInfo{};
@@ -542,8 +563,8 @@ void GPUFrame::compileAOT() {
     }
 
     Window::registerCursorPosCallback([this](double xPos, double yPos){
-        this->x = xPos * 2;
-        this->y = yPos * 2;
+        this->x = xPos;
+        this->y = yPos;
     });
 }
 
@@ -593,16 +614,94 @@ vk::CommandBuffer GPUFrame::recordMainQueueCommands() {
     auto cmdAllocator = perThreadMainCommandAllocators[threadId];
     auto cmdPrimary = cmdAllocator.getOrAllocateNextPrimary();
 
+    vk::CommandBufferBeginInfo beginInfo{};
+    beginInfo.setFlags(vk::CommandBufferUsageFlagBits::eSimultaneousUse);
+    cmdPrimary.begin(beginInfo);
+    cmdPrimary.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,_frameLevelPipelineLayout,0,_frameGlobalDescriptorSet,nullptr);
     for(int i = 0 ; i < _rasterPasses.size(); i ++)
     {
-        vk::CommandBufferBeginInfo beginInfo{};
-        beginInfo.setFlags(vk::CommandBufferUsageFlagBits::eSimultaneousUse);
-        cmdPrimary.begin(beginInfo);
-        cmdPrimary.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,_frameLevelPipelineLayout,0,_frameGlobalDescriptorSet,nullptr);
         _rasterPasses[i]->prepareJIT(this);
         _rasterPasses[i]->record(cmdPrimary,frameIdx);
-        cmdPrimary.end();
     }
+    cmdPrimary.end();
 
     return cmdPrimary;
+}
+
+GPUFrame::PassDataDescriptorSetBaseLayout GPUFrame::getPassDataDescriptorSetBaseLayout(GPUPass *pass) const
+{
+    PassDataDescriptorSetBaseLayout baseLayout{};
+    int bindingCount = 0;
+    int imgInfoCount = 0;
+    int bufInfoCount = 0;
+
+    for(auto & input : pass->inputs)
+    {
+        if(input->getType() == PassResourceType::Texture || input->getType() == PassResourceType::Buffer) {
+            bindingCount ++;
+            if(input->getType() == PassResourceType::Texture)
+            {
+                imgInfoCount ++;
+            }
+            if(input->getType() == PassResourceType::Buffer)
+            {
+                bufInfoCount ++;
+            }
+        }
+    }
+
+    baseLayout.bindings.reserve(bindingCount);
+    baseLayout.writes.reserve(bindingCount);
+
+    if(imgInfoCount > 0)
+    {
+        std::unique_ptr<vk::DescriptorImageInfo[]> s(new vk::DescriptorImageInfo[imgInfoCount]);
+        baseLayout.imgInfos.swap(s);
+    }
+    if(bufInfoCount > 0)
+    {
+        std::unique_ptr<vk::DescriptorBufferInfo[]> s(new vk::DescriptorBufferInfo[bufInfoCount]);
+        baseLayout.bufInfos.swap(s);
+    }
+
+    int imgInfoBackIdx = 0;
+    int bufInfoBackIdx = 0;
+
+    for(auto & input : pass->inputs)
+    {
+        if(input->getType() == PassResourceType::Texture || input->getType() == PassResourceType::Buffer)
+        {
+            vk::DescriptorSetLayoutBinding binding;
+            binding.setBinding(baseLayout.bindings.size());
+            binding.setDescriptorCount(1);
+            binding.setStageFlags(vk::ShaderStageFlagBits::eAllGraphics);
+            vk::WriteDescriptorSet write{};
+            write.setDescriptorCount(binding.descriptorCount);
+            write.setDstBinding(binding.binding);
+
+            if(input->getType() == PassResourceType::Texture)
+            {
+                binding.setDescriptorType(vk::DescriptorType::eCombinedImageSampler);
+                write.setDescriptorType(binding.descriptorType);
+                vk::DescriptorImageInfo imgInfo{};
+                imgInfo.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+                imgInfo.setSampler(samplers[0]); // use default sampler
+                auto imgView = getBackingImageView(input->name);
+                imgInfo.setImageView(imgView);
+                baseLayout.imgInfos[imgInfoBackIdx] = imgInfo;
+                write.setPImageInfo(&baseLayout.imgInfos[imgInfoBackIdx]);
+                imgInfoBackIdx ++;
+            }
+            if(input->getType() == PassResourceType::Buffer)
+            {
+                binding.setDescriptorType(vk::DescriptorType::eStorageBuffer);
+                write.setDescriptorType(binding.descriptorType);
+                //todo
+            }
+            baseLayout.bindings.push_back(binding);
+            baseLayout.writes.push_back(write);
+        }
+    }
+
+    return std::move(baseLayout);
 }

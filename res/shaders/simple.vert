@@ -1,4 +1,5 @@
 #version 450
+#extension GL_GOOGLE_include_directive : enable
 
 layout(location = 0) in vec3 inVertexPosition;
 
@@ -32,6 +33,13 @@ layout(location = 3) out vec3 outVertexBiTangent;
 #if HAS_VERTEX_UV
 layout(location = 4) out vec2 outVertexUV;
 #endif
+
+#include "built_in/frameGlobalData.glsl"
+#include "built_in/camera.glsl"
+
+USE_FRAME_GLOBAL_DATA
+
+layout(set = 1, binding = 0) uniform BCAMERA_BLOCK_LAYOUT camera;
 
 void main() {
     gl_Position = vec4(vec3(0.0), 1.0);

@@ -369,12 +369,54 @@ struct GPUFrame
         _rasterPasses.emplace_back(std::move(pass));
     }
 
+    struct PassDataDescriptorSetBaseLayout
+    {
+        PassDataDescriptorSetBaseLayout()
+        {
+
+        }
+
+        std::vector<vk::DescriptorSetLayoutBinding> bindings;
+        // Initial write is incomplete. DstSet need to be set.
+        std::vector<vk::WriteDescriptorSet> writes;
+        std::unique_ptr<vk::DescriptorImageInfo[]> imgInfos{};
+        std::unique_ptr<vk::DescriptorBufferInfo[]> bufInfos{};
+
+        PassDataDescriptorSetBaseLayout(const PassDataDescriptorSetBaseLayout & other) = delete;
+        PassDataDescriptorSetBaseLayout& operator=(const PassDataDescriptorSetBaseLayout & other) = delete;
+
+        PassDataDescriptorSetBaseLayout(PassDataDescriptorSetBaseLayout && other) noexcept
+        {
+            bindings = std::move(other.bindings);
+            writes = std::move(other.writes);
+            imgInfos = std::move(other.imgInfos);
+            bufInfos = std::move(other.bufInfos);
+        }
+        PassDataDescriptorSetBaseLayout& operator=(PassDataDescriptorSetBaseLayout && other) noexcept
+        {
+            if (this != &other) {
+                bindings = std::move(other.bindings);
+                writes = std::move(other.writes);
+                imgInfos = std::move(other.imgInfos);
+                bufInfos = std::move(other.bufInfos);
+            }
+            return *this;
+        }
+    };
+
+    /*
+     * Get base layout(include previous pass attachment as input texture).
+     * Note that writeDescriptorSets cannot be directly used : caller must
+     * manually set the dstSet.
+     * */
+    PassDataDescriptorSetBaseLayout getPassDataDescriptorSetBaseLayout(GPUPass* pass) const;
+
     //https://app.diagrams.net/#G1gIpgDwpK7Vyhzypl7A_RbQFETWhS1_1q
     void compileAOT();
 
-    vk::ImageView getBackingImageView(const std::string & name)
+    vk::ImageView getBackingImageView(const std::string & name) const
     {
-        return backingImageViews[name];
+        return backingImageViews.find(name)->second;
     }
 
     PassAttachmentDescription* swapchainAttachment;
@@ -382,6 +424,7 @@ struct GPUFrame
     std::vector<std::unique_ptr<GPURasterizedPass>> _rasterPasses;
     std::unordered_map<std::string,vk::ImageView> backingImageViews;
     std::unordered_map<std::string,VMAImage> backingImages;
+    std::vector<vk::Sampler> samplers;
 
     vk::DescriptorSet _frameGlobalDescriptorSet;
     vk::DescriptorSetLayout _frameGlobalDescriptorSetLayout;
