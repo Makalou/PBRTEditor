@@ -86,7 +86,7 @@ add_executable(editor_exe src/pbrt_scene_editor/main.cpp
         src/pbrt_scene_editor/ShaderManager.h
         src/pbrt_scene_editor/Singleton.h
         src/pbrt_scene_editor/GPUPass.cpp
-        src/pbrt_scene_editor/VukanExtension.cpp
+        src/pbrt_scene_editor/VulkanExtension.cpp
         src/pbrt_scene_editor/ApplicationConfig.h
         src/pbrt_scene_editor/ThreadPool.h)
 

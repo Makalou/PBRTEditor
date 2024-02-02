@@ -99,6 +99,94 @@ vk::CommandBuffer DeviceExtended::allocateOnceTransferCommand()
     return cmdbuf;
 }
 
+DeviceExtended::DeviceExtended(vkb::Device device, vk::Instance instance): vkb::Device(device), vk::Device(device.device) {
+    _instance = instance;
+    VmaVulkanFunctions vulkanFunctions = {};
+    vulkanFunctions.vkGetInstanceProcAddr = &vkGetInstanceProcAddr;
+    vulkanFunctions.vkGetDeviceProcAddr = &vkGetDeviceProcAddr;
+
+    VmaAllocatorCreateInfo allocatorCreateInfo = {};
+    allocatorCreateInfo.vulkanApiVersion = VK_API_VERSION_1_3;
+    allocatorCreateInfo.physicalDevice = device.physical_device;
+    allocatorCreateInfo.device = device;
+    allocatorCreateInfo.instance = instance;
+    allocatorCreateInfo.pVulkanFunctions = &vulkanFunctions;
+
+    vmaCreateAllocator(&allocatorCreateInfo, &_globalVMAAllocator);
+}
+
+std::optional<VMAImage> DeviceExtended::allocateVMAImage(VkImageCreateInfo imageInfo) {
+    VMAImage image{};
+    VmaAllocationCreateInfo allocCreateInfo = {};
+    allocCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
+    allocCreateInfo.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
+    if(vmaCreateImage(_globalVMAAllocator,&imageInfo,&allocCreateInfo,
+                      &image.image,
+                      &image.allocation,
+                      &image.allocationInfo) == VK_SUCCESS)
+    {
+        return image;
+    }
+
+    return {};
+}
+
+std::optional<VMAImage>
+DeviceExtended::allocateVMAImageForColorAttachment(VkFormat format, uint32_t width, uint32_t height,
+                                                   bool sampled_need) {
+    VkImageCreateInfo imageInfo{};
+    imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    imageInfo.imageType = VK_IMAGE_TYPE_2D;
+    imageInfo.format = format;
+    imageInfo.extent = VkExtent3D{width,height,1};
+    imageInfo.mipLevels = 1;
+    imageInfo.arrayLayers = 1;
+    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    imageInfo.usage = sampled_need? (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |VK_IMAGE_USAGE_SAMPLED_BIT ): VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+    return allocateVMAImageForAttachment(imageInfo);
+}
+
+std::optional<VMAImage>
+DeviceExtended::allocateVMAImageForDepthStencilAttachment(VkFormat format, uint32_t width, uint32_t height,
+                                                          bool sampled_need)
+{
+    VkImageCreateInfo imageInfo{};
+    imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    imageInfo.imageType = VK_IMAGE_TYPE_2D;
+    imageInfo.format = format;
+    imageInfo.extent = VkExtent3D{width,height,1};
+    imageInfo.mipLevels = 1;
+    imageInfo.arrayLayers = 1;
+    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    imageInfo.usage = sampled_need? (VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT):
+                      VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+    imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    return allocateVMAImageForAttachment(imageInfo);
+}
+
+std::optional<VMAImage> DeviceExtended::allocateVMAImageForAttachment(VkImageCreateInfo imageInfo)
+{
+    VMAImage image{};
+    VmaAllocationCreateInfo allocCreateInfo = {};
+    allocCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
+    allocCreateInfo.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
+    if(vmaCreateImage(_globalVMAAllocator,&imageInfo,&allocCreateInfo,
+                      &image.image,
+                      &image.allocation,
+                      &image.allocationInfo) == VK_SUCCESS)
+    {
+        return image;
+    }
+
+    return {};
+}
+
 void DeviceExtended::oneTimeUploadSync(void* data, int size,VkBuffer dst)
 {
     if(std::get<0>(stagingBuffer) == VK_NULL_HANDLE)

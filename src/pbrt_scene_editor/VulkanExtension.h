@@ -35,21 +35,7 @@ struct DeviceExtended : vkb::Device, vk::Device
 
     }
 
-    DeviceExtended(vkb::Device device,vk::Instance instance) : vkb::Device(device), vk::Device(device.device) {
-        _instance = instance;
-        VmaVulkanFunctions vulkanFunctions = {};
-        vulkanFunctions.vkGetInstanceProcAddr = &vkGetInstanceProcAddr;
-        vulkanFunctions.vkGetDeviceProcAddr = &vkGetDeviceProcAddr;
-
-        VmaAllocatorCreateInfo allocatorCreateInfo = {};
-        allocatorCreateInfo.vulkanApiVersion = VK_API_VERSION_1_3;
-        allocatorCreateInfo.physicalDevice = device.physical_device;
-        allocatorCreateInfo.device = device;
-        allocatorCreateInfo.instance = instance;
-        allocatorCreateInfo.pVulkanFunctions = &vulkanFunctions;
-
-        vmaCreateAllocator(&allocatorCreateInfo, &_globalVMAAllocator);
-    }
+    DeviceExtended(vkb::Device device,vk::Instance instance);
 
     std::optional<VMABuffer> allocateBuffer(vk::DeviceSize size, VkBufferUsageFlags usage, VmaMemoryUsage vmaUsage) const;
 
@@ -58,7 +44,7 @@ struct DeviceExtended : vkb::Device, vk::Device
         return allocateBuffer(size,usage,VMA_MEMORY_USAGE_AUTO);
     }
 
-    template<class T>
+    template<typename T>
     std::optional<VMAObservedBufferMapped<T>> allocateObservedBufferPull(VkBufferUsageFlagBits usage)
     {
         VMAObservedBufferMapped<T> mappedBuffer;
@@ -84,10 +70,9 @@ struct DeviceExtended : vkb::Device, vk::Device
         return {};
     }
 
-    template<class T>
+    template<typename T>
     std::optional<VMAObservedBufferPush<T>> allocateObservedBufferPush(VkBufferUsageFlagBits usage)
     {
-
         return {};
     }
 
@@ -96,81 +81,19 @@ struct DeviceExtended : vkb::Device, vk::Device
         vmaDestroyBuffer(_globalVMAAllocator,buffer,allocation);
     }
 
-    std::optional<VMAImage> allocateVMAImage(VkImageCreateInfo imageInfo)
-    {
-        VMAImage image{};
-        VmaAllocationCreateInfo allocCreateInfo = {};
-        allocCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
-        allocCreateInfo.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
-        if(vmaCreateImage(_globalVMAAllocator,&imageInfo,&allocCreateInfo,
-                          &image.image,
-                          &image.allocation,
-                          &image.allocationInfo) == VK_SUCCESS)
-        {
-            return image;
-        }
-
-        return {};
-    }
+    std::optional<VMAImage> allocateVMAImage(VkImageCreateInfo imageInfo);
 
     /*
-     * Exclusive
+     * Exclusive sharing mode
      */
-    std::optional<VMAImage> allocateVMAImageForColorAttachment(VkFormat format, uint32_t width, uint32_t height, bool sampled_need = false)
-    {
-        VkImageCreateInfo imageInfo{};
-        imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-        imageInfo.imageType = VK_IMAGE_TYPE_2D;
-        imageInfo.format = format;
-        imageInfo.extent = VkExtent3D{width,height,1};
-        imageInfo.mipLevels = 1;
-        imageInfo.arrayLayers = 1;
-        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-        imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-        imageInfo.usage = sampled_need? (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |VK_IMAGE_USAGE_SAMPLED_BIT ): VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-        imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-
-        return allocateVMAImageForAttachment(imageInfo);
-    }
+    std::optional<VMAImage> allocateVMAImageForColorAttachment(VkFormat format, uint32_t width, uint32_t height, bool sampled_need = false);
 
     /*
-     * Exclusive
+     * Exclusive sharing mode
      */
-    std::optional<VMAImage> allocateVMAImageForDepthStencilAttachment(VkFormat format, uint32_t width, uint32_t height, bool sampled_need = false)
-    {
-        VkImageCreateInfo imageInfo{};
-        imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-        imageInfo.imageType = VK_IMAGE_TYPE_2D;
-        imageInfo.format = format;
-        imageInfo.extent = VkExtent3D{width,height,1};
-        imageInfo.mipLevels = 1;
-        imageInfo.arrayLayers = 1;
-        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-        imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-        imageInfo.usage = sampled_need? (VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT):
-                VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-        imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        return allocateVMAImageForAttachment(imageInfo);
-    }
+    std::optional<VMAImage> allocateVMAImageForDepthStencilAttachment(VkFormat format, uint32_t width, uint32_t height, bool sampled_need = false);
 
-    std::optional<VMAImage> allocateVMAImageForAttachment(VkImageCreateInfo imageInfo)
-    {
-        VMAImage image{};
-        VmaAllocationCreateInfo allocCreateInfo = {};
-        allocCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
-        allocCreateInfo.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
-        if(vmaCreateImage(_globalVMAAllocator,&imageInfo,&allocCreateInfo,
-                           &image.image,
-                           &image.allocation,
-                           &image.allocationInfo) == VK_SUCCESS)
-        {
-            return image;
-        }
-
-        return {};
-    }
+    std::optional<VMAImage> allocateVMAImageForAttachment(VkImageCreateInfo imageInfo);
 
     void deAllocateImage(VkImage image, VmaAllocation allocation)
     {
@@ -231,6 +154,34 @@ struct DeviceExtended : vkb::Device, vk::Device
      * Not thread-safe! (staging buffer is not thread-safe).
      * */
     void oneTimeUploadSync(void* data, int size,VkBuffer dst);
+
+    auto createDescriptorSetLayout2(std::vector<vk::DescriptorSetLayoutBinding>&& descripotSetBindings)
+    {
+        vk::DescriptorSetLayoutCreateInfo createInfo{};
+        createInfo.setBindings(descripotSetBindings);
+        return createDescriptorSetLayout(createInfo);
+    }
+
+    auto createDescriptorSetLayout2(const std::vector<vk::DescriptorSetLayoutBinding>& descripotSetBindings)
+    {
+        vk::DescriptorSetLayoutCreateInfo createInfo{};
+        createInfo.setBindings(descripotSetBindings);
+        return createDescriptorSetLayout(createInfo);
+    }
+
+    auto allocateDescriptorSets2(vk::DescriptorPool pool, int count, vk::DescriptorSetLayout layout)
+    {
+        vk::DescriptorSetAllocateInfo allocateInfo{};
+        allocateInfo.setDescriptorPool(pool);
+        allocateInfo.setSetLayouts(layout);
+        allocateInfo.setDescriptorSetCount(count);
+        return allocateDescriptorSets(allocateInfo);
+    }
+
+    vk::DescriptorSet allocateSingleDescriptorSet(vk::DescriptorPool pool, vk::DescriptorSetLayout layout)
+    {
+        return allocateDescriptorSets2(pool,1,layout)[0];
+    }
 
     auto createPipelineLayout2(std::vector<vk::DescriptorSetLayout>&& descriptorSetLayouts)
     {
