@@ -3,6 +3,7 @@
 //
 
 #include "VulkanExtension.h"
+#include "ShaderManager.h"
 
 void SwapchainExtended::registerRecreateCallback(std::function<void(SwapchainExtended *)> callback) {
     recreateCallbacks.push_back(callback);
@@ -199,10 +200,14 @@ void DeviceExtended::oneTimeUploadSync(void* data, int size,VkBuffer dst)
         allocCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
         allocCreateInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
 
-        vmaCreateBuffer(_globalVMAAllocator,&bufferCreateInfo,&allocCreateInfo,
+        auto result = vmaCreateBuffer(_globalVMAAllocator,&bufferCreateInfo,&allocCreateInfo,
                         &std::get<0>(stagingBuffer),
                         &std::get<1>(stagingBuffer),
                         &std::get<2>(stagingBuffer));
+        assert(result == VK_SUCCESS);
+        VkMemoryPropertyFlags memPropFlags;
+        vmaGetAllocationMemoryProperties(_globalVMAAllocator,std::get<1>(stagingBuffer), &memPropFlags);
+        assert(memPropFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
     }
 
     memcpy(std::get<2>(stagingBuffer).pMappedData,data,size);
@@ -216,6 +221,105 @@ void DeviceExtended::oneTimeUploadSync(void* data, int size,VkBuffer dst)
     copyRegion.dstOffset = 0;
     transfer_cmd.copyBuffer(std::get<0>(stagingBuffer),dst,copyRegion);
     transfer_cmd.end();
-    auto wait_handle = this->submitOnceTransferCommand(transfer_cmd);
+    auto wait_handle = submitOnceTransferCommand(transfer_cmd);
     wait_handle();
+}
+
+bool VulkanGraphicsPipeline::compatibleWithVertexShader(const std::string &shaderVariantUUID) {
+    return _vs->_uuid == shaderVariantUUID;
+}
+
+bool VulkanGraphicsPipeline::compatibleWithFragmentShader(const std::string &shaderVariantUUID) {
+    return _fs->_uuid == shaderVariantUUID;
+}
+
+VulkanGraphicsPipelineBuilder::VulkanGraphicsPipelineBuilder(vk::Device device,
+                                                             VertexShader* vs,
+                                                             FragmentShader* fs,
+                                                             vk::PipelineVertexInputStateCreateInfo vertexInputInfo,
+                                                             vk::RenderPass renderPass) {
+    _device = device;
+    _vs = vs;
+    _fs = fs;
+    _vertexInputInfo = VulkanPipelineVertexInputStateInfo(vertexInputInfo);
+    _renderPass = renderPass;
+
+    //set default state
+    _InputAssemblyStateInfo.setTopology(vk::PrimitiveTopology::eTriangleStrip);
+    _InputAssemblyStateInfo.setPrimitiveRestartEnable(vk::False);
+
+    _RasterizationStateInfo.setRasterizerDiscardEnable(vk::False);
+    _RasterizationStateInfo.setFrontFace(vk::FrontFace::eClockwise);
+    _RasterizationStateInfo.setPolygonMode(vk::PolygonMode::eFill);
+    _RasterizationStateInfo.setCullMode(vk::CullModeFlagBits::eBack);
+    _RasterizationStateInfo.setLineWidth(1.0);
+
+    auto colorComponentAll = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG|vk::ColorComponentFlagBits::eB|vk::ColorComponentFlagBits::eA;
+    defaultAttachmentState.setColorWriteMask(colorComponentAll);
+    defaultAttachmentState.setSrcColorBlendFactor(vk::BlendFactor::eOne);
+    defaultAttachmentState.setDstColorBlendFactor(vk::BlendFactor::eZero);
+    defaultAttachmentState.setColorBlendOp(vk::BlendOp::eAdd);
+    defaultAttachmentState.setSrcAlphaBlendFactor(vk::BlendFactor::eOne);
+    defaultAttachmentState.setDstAlphaBlendFactor(vk::BlendFactor::eZero);
+    defaultAttachmentState.setAlphaBlendOp(vk::BlendOp::eAdd);
+    defaultAttachmentState.blendEnable = VK_FALSE;
+
+    _ColorBlendStateInfo.setAttachments(defaultAttachmentState);
+    _ColorBlendStateInfo.setBlendConstants({1,1,1,1});
+    _ColorBlendStateInfo.setLogicOpEnable(vk::False);
+
+    _MultisampleStateInfo.setRasterizationSamples(vk::SampleCountFlagBits::e1);
+    _MultisampleStateInfo.setSampleShadingEnable(vk::False);
+
+    _ViewportStateInfo.setViewportCount(1);
+    _ViewportStateInfo.setScissorCount(1);
+
+    // By default, use dynamic viewport for flexible
+    auto dynamicStates = {vk::DynamicState::eViewport,vk::DynamicState::eScissor};
+    _DynamicStateInfo.setDynamicStates(dynamicStates);
+}
+
+VulkanGraphicsPipeline VulkanGraphicsPipelineBuilder::build() const {
+    assert(_device!=VK_NULL_HANDLE);
+    assert(_renderPass!=VK_NULL_HANDLE);
+
+    vk::GraphicsPipelineCreateInfo createInfo{};
+    std::array<vk::PipelineShaderStageCreateInfo,2> stages{_vs->getStageCreateInfo(),_fs->getStageCreateInfo()};
+    createInfo.setStages(stages);
+    createInfo.setRenderPass(_renderPass);
+    createInfo.setLayout(_pipelineLayout);
+    auto vis = _vertexInputInfo.getCreateInfo();
+    createInfo.setPVertexInputState(&vis);
+    createInfo.setPInputAssemblyState(&_InputAssemblyStateInfo);
+    createInfo.setPColorBlendState(&_ColorBlendStateInfo);
+    createInfo.setPDepthStencilState(&_DepthStencilStateInfo);
+    createInfo.setPRasterizationState(&_RasterizationStateInfo);
+    createInfo.setPMultisampleState(&_MultisampleStateInfo);
+    createInfo.setPViewportState(&_ViewportStateInfo);
+    createInfo.setPDynamicState(&_DynamicStateInfo);
+
+    auto newPipeline = _device.createGraphicsPipeline(nullptr,createInfo);
+    if(newPipeline.result != vk::Result::eSuccess)
+    {
+        throw std::runtime_error("Failed to create pipeline");
+    }
+
+    VulkanGraphicsPipeline pipeline;
+    // fill the metadata
+    pipeline._pipeline = newPipeline.value;
+    pipeline.device = _device;
+    pipeline.renderPass = _renderPass;
+    pipeline.pipelineLayout = _pipelineLayout;
+    pipeline._vs= _vs;
+    pipeline._fs = _fs;
+    pipeline.vertexInputStateInfo = VulkanPipelineVertexInputStateInfo(_vertexInputInfo);
+    pipeline._InputAssemblyStateInfo = _InputAssemblyStateInfo;
+    pipeline._ColorBlendStateInfo = _ColorBlendStateInfo;
+    pipeline._DepthStencilStateInfo = _DepthStencilStateInfo;
+    pipeline._RasterizationStateInfo = _RasterizationStateInfo;
+    pipeline._MultisampleStateInfo = _MultisampleStateInfo;
+    pipeline._ViewportStateInfo = _ViewportStateInfo;
+    pipeline._DynamicStateInfo = _DynamicStateInfo;
+
+    return pipeline;
 }

@@ -43,6 +43,11 @@ void createSynchronizeObjects()
 EditorGUI editorGUI;
 SceneViewer viewer;
 
+auto waitForFence(vk::Fence* fence, uint64_t timeout)
+{
+    return device->waitForFences(1, fence, vk::True, timeout);
+}
+
 void drawFrame()
 {
     //https://app.diagrams.net/#G1e5FP16h8o5Py-69lOYuoYUjs2gC5e5ae
@@ -60,7 +65,7 @@ void drawFrame()
     // would only happen after presenting has finished.
     //auto begin = std::chrono::steady_clock::now();
 
-    auto waitResult = device->waitForFences(1, &inFlightFrameFence[currentFrameIdx], vk::True, timeout);
+    auto waitResult = waitForFence(&inFlightFrameFence[currentFrameIdx],timeout);
 
     //auto end = std::chrono::steady_clock::now();
     //auto microseconds_count = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();

@@ -18,6 +18,7 @@
 
 struct Shader
 {
+    const std::string _uuid;
     const vk::ShaderModule _module;
     const vk::ShaderStageFlagBits _stageFlagBits;
 
@@ -29,7 +30,7 @@ struct Shader
         return info;
     }
 
-    Shader(vk::ShaderModule module, vk::ShaderStageFlagBits stageFlagBits): _module(module), _stageFlagBits(stageFlagBits)
+    Shader(std::string uuid, vk::ShaderModule module, vk::ShaderStageFlagBits stageFlagBits): _uuid(std::move(uuid)),_module(module), _stageFlagBits(stageFlagBits)
     {
         info.setModule(_module);
         info.setStage(_stageFlagBits);
@@ -55,8 +56,8 @@ struct VertexShaderReflectedInputAttribute
 
 struct VertexShader : Shader
 {
-    VertexShader(vk::ShaderModule module, const std::vector<VertexShaderReflectedInputAttribute>& reflectedInput)
-                : Shader(module,vk::ShaderStageFlagBits::eVertex), reflectedInputLayout(reflectedInput)
+    VertexShader(std::string uuid,vk::ShaderModule module, const std::vector<VertexShaderReflectedInputAttribute>& reflectedInput)
+                : Shader(uuid,module,vk::ShaderStageFlagBits::eVertex), reflectedInputLayout(reflectedInput)
     {
 
     }
@@ -71,7 +72,7 @@ struct VertexShader : Shader
 
 struct FragmentShader : Shader
 {
-    FragmentShader(vk::ShaderModule module) : Shader(module,vk::ShaderStageFlagBits::eFragment)
+    FragmentShader(std::string uuid,vk::ShaderModule module) : Shader(uuid,module,vk::ShaderStageFlagBits::eFragment)
     {
 
     }
@@ -79,7 +80,7 @@ struct FragmentShader : Shader
 
 struct ComputeShader : Shader
 {
-    ComputeShader(vk::ShaderModule module) : Shader(module,vk::ShaderStageFlagBits::eCompute)
+    ComputeShader(std::string uuid,vk::ShaderModule module) : Shader(uuid,module,vk::ShaderStageFlagBits::eCompute)
     {
 
     }
@@ -99,6 +100,20 @@ public:
      */
     using ShaderMacro = std::pair<std::string,std::string>;
     using ShaderMacroList = std::vector<ShaderMacro>;
+
+    static std::string queryShaderVariantUUID(const std::string& shaderName, const ShaderMacroList & macro_defs)
+    {
+        std::string variantSuffix = "@DEFAULT";
+        if(!macro_defs.empty())
+        {
+            variantSuffix = "@";
+            for(const auto &def : macro_defs)
+            {
+                variantSuffix+=(def.first+def.second);
+            }
+        }
+        return shaderName + variantSuffix;
+    }
 
     VertexShader* createVertexShader(DeviceExtended* backendDev, const std::string& fileName, const ShaderMacroList & macro_defs);
 

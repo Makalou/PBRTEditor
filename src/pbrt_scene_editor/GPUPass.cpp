@@ -505,6 +505,9 @@ void GPUFrame::compileAOT() {
                     // Need to create new image
                     auto attachmentDesc = dynamic_cast<PassAttachmentDescription*>(pass->outputs[i].get());
                     VMAImage image;
+                    /*todo frame graph should some how determine whether an attachment need to create with sample bit or not.
+                     * For color attachment, it seems that every attachment need to be sampled by further passes, except swapchainimage
+                     * For depth attachment, it might not be the case.*/
                     bool sampled_need = true;
                     if(isDepthStencilFormat(attachmentDesc->format))
                     {
@@ -620,8 +623,8 @@ vk::CommandBuffer GPUFrame::recordMainQueueCommands() {
     cmdPrimary.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,_frameLevelPipelineLayout,0,_frameGlobalDescriptorSet,nullptr);
     for(int i = 0 ; i < _rasterPasses.size(); i ++)
     {
-        _rasterPasses[i]->prepareJIT(this);
-        _rasterPasses[i]->record(cmdPrimary,frameIdx);
+        _rasterPasses[i]->prepareIncremental(this);
+        _rasterPasses[i]->record(cmdPrimary,this);
     }
     cmdPrimary.end();
 

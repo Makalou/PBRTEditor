@@ -3,6 +3,7 @@
 #include "assimp/scene.h"
 #include "assimp/postprocess.h"
 #include <cassert>
+#include <meshoptimizer.h>
 
 void AssetManager::setWorkDir(const fs::path &path) {
     _currentWorkDir = path;
@@ -86,51 +87,58 @@ MeshHostObject parseAssimpMesh(aiMesh* mesh)
     meshHostObj.vertex_count = mesh->mNumVertices;
     //we assume each vertex include position
     assert(mesh->HasPositions());
-    meshHostObj.position.reset(new float[vertex_count * 3]);
+    auto * position = new float[vertex_count * 3];
     for(int i = 0; i < vertex_count; i++)
     {
-        meshHostObj.position.get()[i*3] = mesh->mVertices[i].x;
-        meshHostObj.position.get()[i*3+1] = mesh->mVertices[i].y;
-        meshHostObj.position.get()[i*3+2] = mesh->mVertices[i].z;
+        position[i*3] = mesh->mVertices[i].x;
+        position[i*3+1] = mesh->mVertices[i].y;
+        position[i*3+2] = mesh->mVertices[i].z;
     }
+    meshHostObj.position.reset(position);
     //normal, tangent and uv is optional
     if(mesh->HasNormals())
     {
-        meshHostObj.normal.reset(new float[vertex_count * 3]);
+        auto * normal = new float[vertex_count * 3];
         for(int i = 0; i < vertex_count; i++)
         {
-            meshHostObj.normal.get()[i*3] = mesh->mNormals[i].x;
-            meshHostObj.normal.get()[i*3+1] = mesh->mNormals[i].y;
-            meshHostObj.normal.get()[i*3+2] = mesh->mNormals[i].z;
+            normal[i*3] = mesh->mNormals[i].x;
+            normal[i*3+1] = mesh->mNormals[i].y;
+            normal[i*3+2] = mesh->mNormals[i].z;
         }
+        meshHostObj.normal.reset(normal);
     }
     if(mesh->HasTangentsAndBitangents())
     {
-        meshHostObj.tangent.reset(new float[vertex_count * 3]);
-        meshHostObj.bitangent.reset(new float[vertex_count * 3]);
+        auto * tangent = new float [vertex_count * 3];
+        auto * bitangent = new float [vertex_count * 3];
+
         for(int i = 0; i < vertex_count; i++)
         {
-            meshHostObj.tangent.get()[i*3] = mesh->mTangents[i].x;
-            meshHostObj.tangent.get()[i*3+1] = mesh->mTangents[i].y;
-            meshHostObj.tangent.get()[i*3+2] = mesh->mTangents[i].z;
+            tangent[i*3] = mesh->mTangents[i].x;
+            tangent[i*3+1] = mesh->mTangents[i].y;
+            tangent[i*3+2] = mesh->mTangents[i].z;
         }
         for(int i = 0; i < vertex_count; i++)
         {
-            meshHostObj.bitangent.get()[i*3] = mesh->mBitangents[i].x;
-            meshHostObj.bitangent.get()[i*3+1] = mesh->mBitangents[i].y;
-            meshHostObj.bitangent.get()[i*3+2] = mesh->mBitangents[i].z;
+            bitangent[i*3] = mesh->mBitangents[i].x;
+            bitangent[i*3+1] = mesh->mBitangents[i].y;
+            bitangent[i*3+2] = mesh->mBitangents[i].z;
         }
+
+        meshHostObj.tangent.reset(tangent);
+        meshHostObj.bitangent.reset(bitangent);
     }
 
     //We assume each mesh has at most one UV coord, and is stored at idx 0
     if(mesh->HasTextureCoords(0))
     {
-        meshHostObj.uv.reset(new float[vertex_count * 2]);
+        auto * uv = new float[vertex_count * 2];
         for(int i = 0; i < vertex_count; i++)
         {
-            meshHostObj.uv.get()[i*2] = mesh->mTextureCoords[0][i].x;
-            meshHostObj.uv.get()[i*2+1] = mesh->mTextureCoords[0][i].y;
+            uv[i*2] = mesh->mTextureCoords[0][i].x;
+            uv[i*2+1] = mesh->mTextureCoords[0][i].y;
         }
+        meshHostObj.uv.reset(uv);
     }
 
     //we only handle triangle for now
@@ -149,7 +157,7 @@ MeshHostObject parseAssimpMesh(aiMesh* mesh)
 
         int current_idx = 0;
         meshHostObj.index_count = index_count;
-        meshHostObj.indices.reset(new unsigned int[meshHostObj.index_count]);
+        auto* indices = new unsigned int[meshHostObj.index_count];
         for(int i = 0;i < mesh->mNumFaces; i++)
         {
             auto face = mesh->mFaces[i];
@@ -161,10 +169,11 @@ MeshHostObject parseAssimpMesh(aiMesh* mesh)
                 }
             }
         }
+        meshHostObj.indices.reset(indices);
         assert(current_idx == index_count);
     }else{
         meshHostObj.index_count = mesh->mNumFaces * 3;
-        meshHostObj.indices.reset(new unsigned int[meshHostObj.index_count]);
+        auto* indices = new unsigned int[meshHostObj.index_count];
         int current_idx = 0;
         for(int i = 0;i < mesh->mNumFaces; i++)
         {
@@ -172,13 +181,46 @@ MeshHostObject parseAssimpMesh(aiMesh* mesh)
             assert(face.mNumIndices == 3);
             for(int j = 0; j < 3; j++)
             {
-                meshHostObj.indices.get()[current_idx++] = face.mIndices[j];
+                indices[current_idx++] = face.mIndices[j];
             }
         }
+        meshHostObj.indices.reset(indices);
         assert(current_idx == meshHostObj.index_count);
     }
 
     return std::move(meshHostObj);
+}
+
+MeshHostObject optimize(MeshHostObject&& rawMesh)
+{
+    //Indexing
+    auto * remap = new unsigned int [rawMesh.index_count];
+    auto vertexData = rawMesh.getInterleavingAttributes();
+    int vertexSize = vertexData.second.VertexStride;
+//    meshopt_generateVertexRemap(remap,rawMesh.indices.get(),rawMesh.index_count,(void*)vertexData.first,rawMesh.vertex_count,vertexSize);
+//
+//    auto * targetIndices = new unsigned int [rawMesh.index_count];
+//    void * targetVertices = std::aligned_alloc( 16 ,rawMesh.vertex_count * vertexData.second.VertexStride);
+//
+//    meshopt_remapIndexBuffer(targetIndices,rawMesh.indices.get(),rawMesh.index_count,&remap[0]);
+//    meshopt_remapVertexBuffer(targetVertices,(void*)vertexData.first,rawMesh.vertex_count,vertexSize,&remap[0]);
+    //Simplification
+    float threshold = 0.2f;
+    size_t target_index_count = size_t(rawMesh.index_count * threshold);
+    float target_error = 1e-1f;
+
+    std::vector<unsigned int> lod(rawMesh.index_count);
+    float lod_error = 0.f;
+    lod.resize(meshopt_simplifySloppy(&lod[0], rawMesh.indices.get(), rawMesh.index_count,
+                                      rawMesh.position.get(), rawMesh.vertex_count, sizeof(float) * 3,
+                                      target_index_count, target_error, &lod_error));
+
+    //Vertex cache optimization
+    //Overdraw optimization
+    //Vertex fetch optimization
+    //Vertex quantization
+    //Vertex/index buffer compression
+
 }
 
 MeshHostObject AssetManager::loadMeshPBRTPLY(const std::string &relative_path,int importerID) {
@@ -192,7 +234,6 @@ MeshHostObject AssetManager::loadMeshPBRTPLY(const std::string &relative_path,in
         throw std::runtime_error(importer.GetErrorString());
     }
     assert(scene->mNumMeshes == 1);
-
     auto meshHostObject = parseAssimpMesh(scene->mMeshes[0]);
     importer.FreeScene();
     return std::move(meshHostObject);
@@ -230,7 +271,6 @@ std::future<MeshHostObject *>* AssetManager::getOrLoadMeshAsync(const std::strin
         //logging
         GlobalLogger::getInstance().info("Loading Mesh " + fileName);
         auto meshHostObj = loadMeshPBRTPLY(relative_path,id);
-
         // Cache loaded mesh.
         std::lock_guard<std::mutex> lg(meshCacheLock);
         auto it = loadedMeshCache.find(fileName);

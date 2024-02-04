@@ -210,7 +210,7 @@ struct GPUPass
      * And maybe new shader variants can appear at every frame.
      * Also per pass data can change every frame, so this function also plays the role of 'Prepare'
      * */
-    virtual void prepareJIT(const GPUFrame* frame){};
+    virtual void prepareIncremental(const GPUFrame* frame){};
 
     void addInput(std::unique_ptr<PassResourceDescriptionBase> resource)
     {
@@ -286,15 +286,10 @@ struct GPUComputePass : GPUPass
 
 struct GPURasterizedPass : GPUPass
 {
-    virtual void record(vk::CommandBuffer cmdBuf, int frameIdx) = 0;
+    virtual void record(vk::CommandBuffer cmdBuf, const GPUFrame* frame) = 0;
     void beginPass(vk::CommandBuffer cmdBuf);
 
     void endPass(vk::CommandBuffer cmdBuf);
-
-    void bindPassData(vk::CommandBuffer cmdBuf, int frameIdx)
-    {
-        //cmdBuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,passBaseLayout,0,passDataDescriptorSet, nullptr);
-    }
 
     void buildRenderPass(const DeviceExtended& device, GPUFrame* frame);
 
@@ -312,7 +307,6 @@ struct GPURasterizedPass : GPUPass
     std::vector<VulkanGraphicsPipeline> graphicsPipelines;
     vk::PipelineLayout passBaseLayout;
     vk::PipelineLayoutCreateInfo passBaseLayoutInfo{};
-    vk::DescriptorSet passDataDescriptorSet;
     //We should guarantee that each pipelineLayouts must be compatible with passBaseLayout
     std::vector<std::pair<std::vector<vk::DescriptorSetLayout>, vk::PipelineLayout>> pipelineLayouts;
 
@@ -372,9 +366,7 @@ struct GPUFrame
     struct PassDataDescriptorSetBaseLayout
     {
         PassDataDescriptorSetBaseLayout()
-        {
-
-        }
+        = default;
 
         std::vector<vk::DescriptorSetLayoutBinding> bindings;
         // Initial write is incomplete. DstSet need to be set.

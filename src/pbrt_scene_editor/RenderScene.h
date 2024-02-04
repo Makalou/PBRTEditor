@@ -19,6 +19,7 @@ namespace renderScene {
         VMABuffer indexBuffer{};
         uint32_t vertexCount{};
         uint32_t indexCount{};
+        uint32_t _uuid;
 
         struct VertexAttribute
         {
@@ -33,13 +34,13 @@ namespace renderScene {
         const vk::VertexInputBindingDescription bindingDescription{};
         const std::vector<vk::VertexInputAttributeDescription> attributeDescriptions{};
 
-        vk::VertexInputBindingDescription initBindingDesc(const VertexAttribute& attribute)
+        auto initBindingDesc(const VertexAttribute& attribute) const
         {
             vk::VertexInputBindingDescription bindingDesc;
             bindingDesc.setInputRate(vk::VertexInputRate::eVertex);
             bindingDesc.setBinding(0);
             bindingDesc.setStride(vertexAttribute.stride);
-            return bindingDesc;
+            return std::move(bindingDesc);
         }
 
         auto initAttributeDescription(const VertexAttribute& attribute)
@@ -64,15 +65,13 @@ namespace renderScene {
                 attributeDesc.emplace_back(4,0,vk::Format::eR32G32Sfloat,vertexAttribute.uvOffset);
             }
 
-            return attributeDesc;
+            return std::move(attributeDesc);
         }
 
-        explicit MeshRigid(const VertexAttribute& attribute) : vertexAttribute(attribute),
+        explicit MeshRigid(const VertexAttribute& attribute,uint32_t uuid) : vertexAttribute(attribute),
                                                                 bindingDescription(initBindingDesc(attribute)),
-                                                                attributeDescriptions(initAttributeDescription(attribute))
-        {
-
-        }
+                                                                attributeDescriptions(initAttributeDescription(attribute)),
+                                                                _uuid(uuid){}
 
         /*
          * Only contains per vertex information.
@@ -99,6 +98,36 @@ namespace renderScene {
         }
     };
 
+    struct RenderScene;
+
+    struct MeshRigidHandle
+    {
+        RenderScene* scene = nullptr;
+        uint32_t idx = -1;
+
+        MeshRigid* operator->() const;
+
+        bool operator==(const MeshRigidHandle& other) const;
+    };
+
+    struct InstanceUUID
+    {
+        uint32_t low = 0;
+        uint32_t high = 0;
+
+        bool operator==(const InstanceUUID& other) const
+        {
+            return other.low == low && other.high == high;
+        }
+    };
+
+    struct InstanceUUIDHash {
+        std::size_t operator()(const InstanceUUID& uuid) const {
+            std::size_t hashLow = std::hash<int>{}(uuid.low);
+            std::size_t hashHigh = std::hash<int>{}(uuid.high);
+            return hashLow ^ (hashHigh << 1);
+        }
+    };
     /*
      * Static rigid mesh would never change its geometry or per instance data.
      * Such Mesh doesn't have to multiply the resource for multiple frame buffering.
@@ -113,8 +142,7 @@ namespace renderScene {
         }
 
         std::vector<PerInstDataT> perInstanceData;
-        std::vector<bool> visibilities;
-        std::vector<bool> visibilities_old;
+        std::vector<uint32_t> instanceDataIdx;
         MeshRigid *mesh{};
         size_t drawInstanceCount{};
 
@@ -130,15 +158,16 @@ namespace renderScene {
     template<class PerInstDataT>
     struct InstanceBatchRigidDynamic {
 
-        auto initPipelineVertexInputInfo(MeshRigid * meshPtr)
+        auto initPipelineVertexInputInfo(MeshRigidHandle meshHandle)
         {
             vk::PipelineVertexInputStateCreateInfo vertexInputStateCreateInfo{};
-            auto perVertexBindingDesc = mesh->getVertexInputBindingDesc();
-            auto perVertexAttributeDesc = mesh->getVertexInputAttributeDesc();
+            auto perVertexBindingDesc = meshHandle->getVertexInputBindingDesc();
+            auto perVertexAttributeDesc = meshHandle->getVertexInputAttributeDesc();
 
             vk::VertexInputBindingDescription perInstanceBindingDesc{};
             perInstanceBindingDesc.setInputRate(vk::VertexInputRate::eInstance);
-            perInstanceBindingDesc.setBinding(perVertexBindingDesc.binding + 1);
+            perInstanceBindingIdx = perVertexBindingDesc.binding + 1;
+            perInstanceBindingDesc.setBinding(perInstanceBindingIdx);
             perInstanceBindingDesc.setStride(sizeof(PerInstDataT));//todo wrong way to calculate stride
 
             vk::VertexInputAttributeDescription perInstanceAttributeDescription{};
@@ -146,7 +175,7 @@ namespace renderScene {
             perInstanceAttributeDescription.setOffset(0);
             perInstanceAttributeDescription.setLocation(5);
             // todo if we can modify the shader variant, then explicitly specific location may be unnecessary
-            perInstanceAttributeDescription.setFormat(vk::Format::eR32G32B32A32Sfloat);
+            perInstanceAttributeDescription.setFormat(vk::Format::eR32Uint);
 
             std::vector<vk::VertexInputBindingDescription> bindings{perVertexBindingDesc,perInstanceBindingDesc};
             perVertexAttributeDesc.push_back(perInstanceAttributeDescription);// misleading, but efficient ...
@@ -155,31 +184,33 @@ namespace renderScene {
             vertexInputStateCreateInfo.setPVertexAttributeDescriptions(perVertexAttributeDesc.data());
             vertexInputStateCreateInfo.setVertexAttributeDescriptionCount(perVertexAttributeDesc.size());
 
-            return vertexInputStateCreateInfo;
+            return VulkanPipelineVertexInputStateInfo(vertexInputStateCreateInfo);
         }
 
-        explicit InstanceBatchRigidDynamic(MeshRigid * meshPtr) : mesh(meshPtr),
-                    pipelineVertexInputStateInfo(initPipelineVertexInputInfo(meshPtr))
+        explicit InstanceBatchRigidDynamic(MeshRigidHandle handle) : mesh(handle),
+                    pipelineVertexInputStateInfo(initPipelineVertexInputInfo(handle))
         {
-
+            _uuid.high = mesh->_uuid;
         }
 
-        void drawAll(vk::CommandBuffer cmd) {
+        void drawAll(vk::CommandBuffer cmd) const{
             mesh->bind(cmd);
             //todo bind per instance data
+            //cmd.bindVertexBuffers(perInstanceBindingIdx,instDataIdxBuffer)
             cmd.draw(mesh->vertexCount,perInstanceData.size(),0,0);
         }
 
-        void drawCurrentVisible( vk::CommandBuffer cmd){
+        void drawOne(vk::CommandBuffer cmd) const{
+            mesh->bind(cmd);
+            //todo bind per instance data
+            //cmd.bindVertexBuffers(perInstanceBindingIdx,instDataIdxBuffer)
+            cmd.draw(mesh->vertexCount,1,0,0);
+        }
+
+        void drawCurrentVisible( vk::CommandBuffer cmd) const{
             mesh->bind(cmd);
             //todo bind per instance data
             cmd.draw(mesh->vertexCount,visibleInstanceCount,0,0);
-        }
-
-        void update(const PerInstDataT *newData, const uint32_t *InstanceIDs, uint32_t count) {
-            for (int i = 0; i < count; i++) {
-                perInstanceData[InstanceIDs[i]] = newData[i];
-            }
         }
 
         /*
@@ -198,11 +229,20 @@ namespace renderScene {
             return pipelineVertexInputStateInfo;
         }
 
+        inline InstanceUUID getUUID() const
+        {
+            return _uuid;
+        }
+
         std::vector<PerInstDataT> perInstanceData;
-        MeshRigid * const mesh{};
-        const vk::PipelineVertexInputStateCreateInfo pipelineVertexInputStateInfo{};
+        std::vector<uint32_t> instanceDataIdx;
+
+        int perInstanceBindingIdx;
+        MeshRigidHandle mesh;
+        const VulkanPipelineVertexInputStateInfo pipelineVertexInputStateInfo{};
         size_t visibleInstanceCount{};
         VMABuffer perInstDataBuffer{};
+        InstanceUUID _uuid;
     };
 
     struct DrawDataBindless
@@ -230,7 +270,7 @@ namespace renderScene {
         std::vector<PerInstDataT> perInstanceData;
         std::vector<uint> matInstanceIDs;
 
-        MeshRigid *mesh{};
+        int32_t meshIdx{};
     };
 
 
@@ -283,7 +323,7 @@ namespace renderScene {
      * */
     struct MeshInstanceDeformable {
 
-        MeshRigid *mesh; // the deformed information is encoded in per instance data
+        int32_t meshIdx; // the deformed information is encoded in per instance data
     };
 
     struct PerInstanceData {
@@ -319,7 +359,10 @@ namespace renderScene {
     };
 
     struct MainCameraData{
-        glm::vec3 position;
+        glm::vec4 position;
+        glm::vec4 target;
+        glm::mat4 view;
+        glm::mat4 proj;
     };
 
     struct MainCamera
@@ -341,10 +384,11 @@ namespace renderScene {
         int meshID;
     };
 
+    using InstanceBatchRigidDynamicType = InstanceBatchRigidDynamic<PerInstanceData>;
     struct RenderScene {
         std::vector<std::pair<std::string,MeshRigid>> meshes{}; //use file path as uuid
         std::vector<InstanceBatchRigidStatic<PerInstanceData>> _staticRigidMeshBatch{};
-        std::vector<InstanceBatchRigidDynamic<PerInstanceData>> _dynamicRigidMeshBatch{};
+        std::vector<InstanceBatchRigidDynamicType> _dynamicRigidMeshBatch{};
         std::vector<MeshDeformable> _deformableMeshes{};
 
         std::vector<InstanceData> instances;
@@ -370,30 +414,42 @@ namespace renderScene {
                             shape_uuid = dynamic_cast<PLYMeshShape *>(shape)->filename;
                         }
 
-                        MeshRigid* meshRigidPtr = nullptr;
+                        MeshRigidHandle meshHandle;
 
-                        for(auto & mesh  : this->meshes)
+                        for(int i = 0; i < meshes.size(); i ++)
                         {
-                            if(mesh.first == shape_uuid)
+                            if(meshes[i].first == shape_uuid)
                             {
-                                meshRigidPtr = &mesh.second;
+                                meshHandle.scene = this;
+                                meshHandle.idx = i;
                                 break;
                             }
                         }
 
-                        if(meshRigidPtr == nullptr)
+                        if(meshHandle.scene == nullptr)
                         {
                             // Existing mesh not found
                             MeshHostObject* meshHost = assetManager.getOrLoadPBRTPLY(shape_uuid);
 
                             auto interleaveAttribute = meshHost->getInterleavingAttributes();
 
-                            auto indexBufferSize = meshHost->index_count * sizeof(meshHost->indices.get()[0]);
+                            unsigned int * indicies = meshHost->indices.get();
+                            auto indexBufferSize = meshHost->index_count * sizeof(indicies[0]);
                             auto vertexBufferSize = meshHost->vertex_count * interleaveAttribute.second.VertexStride;
                             auto interleavingBufferAttribute = interleaveAttribute.second;
 
                             auto vertexBuffer = backendDevice->allocateBuffer(vertexBufferSize,(VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT),VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE);
                             auto indexBuffer = backendDevice->allocateBuffer(indexBufferSize,(VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT),VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE);
+
+                            if(!vertexBuffer)
+                            {
+                                throw std::runtime_error("Failed to allocate vertex buffer");
+                            }
+
+                            if(!indexBuffer)
+                            {
+                                throw std::runtime_error("Failed to allocate index buffer");
+                            }
 
                             MeshRigid::VertexAttribute vertexAttribute;
                             vertexAttribute.stride = interleavingBufferAttribute.VertexStride;
@@ -402,7 +458,7 @@ namespace renderScene {
                             vertexAttribute.biTangentOffset = interleavingBufferAttribute.biTangentOffset;
                             vertexAttribute.uvOffset = interleavingBufferAttribute.uvOffset;
 
-                            MeshRigid meshRigid{vertexAttribute};
+                            MeshRigid meshRigid{vertexAttribute,static_cast<uint32_t>(meshes.size())};
 
                             meshRigid.vertexBuffer = vertexBuffer.value();
                             meshRigid.indexBuffer = indexBuffer.value();
@@ -413,14 +469,15 @@ namespace renderScene {
                             backendDevice->oneTimeUploadSync(interleaveAttribute.first,vertexBufferSize,meshRigid.vertexBuffer.buffer);
 
                             meshes.emplace_back(shape_uuid,meshRigid);
-                            meshRigidPtr =  &meshes.back().second;
+                            meshHandle.scene = this;
+                            meshHandle.idx = meshes.size() - 1;
                         }
 
                         bool foundInstance = false;
 
                         for(auto & inst : _dynamicRigidMeshBatch)
                         {
-                            if(inst.mesh == meshRigidPtr)
+                            if(inst.mesh == meshHandle)
                             {
                                 foundInstance = true;
                                 inst.perInstanceData.push_back({node->_finalTransform});
@@ -431,7 +488,7 @@ namespace renderScene {
 
                         if(!foundInstance)
                         {
-                            InstanceBatchRigidDynamic<PerInstanceData> meshInstanceRigidDynamic(meshRigidPtr);
+                            InstanceBatchRigidDynamic<PerInstanceData> meshInstanceRigidDynamic(meshHandle);
                             meshInstanceRigidDynamic.perInstanceData.push_back({node->_finalTransform});
                             meshInstanceRigidDynamic.visibleInstanceCount ++;
                             _dynamicRigidMeshBatch.push_back(meshInstanceRigidDynamic);
@@ -463,8 +520,15 @@ namespace renderScene {
                 std::cout << key << std::endl;
             });
         }
-
         std::shared_ptr<DeviceExtended> backendDevice;
+
+        void forEachInstanceRigidDynamic(std::function<void(const InstanceBatchRigidDynamicType &)>&& visitor)
+        {
+            for(const auto & dynamicInstance : _dynamicRigidMeshBatch)
+            {
+                visitor(dynamicInstance);
+            }
+        }
     };
 
     struct RayTracingScene {

@@ -190,6 +190,36 @@ struct DeviceExtended : vkb::Device, vk::Device
         return createPipelineLayout(createInfo);
     }
 
+    auto getSupportedDepthStencilFormat() const
+    {
+        VkImageTiling tiling = VK_IMAGE_TILING_OPTIMAL;
+        VkFormatFeatureFlags features = VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;
+
+        VkFormat candidates[] = {
+                VK_FORMAT_D16_UNORM,
+                VK_FORMAT_D16_UNORM_S8_UINT,
+                VK_FORMAT_D24_UNORM_S8_UINT,
+                VK_FORMAT_D32_SFLOAT,
+                VK_FORMAT_D32_SFLOAT_S8_UINT
+        };
+        std::vector<VkFormat> formats;
+
+        for(auto & format : candidates)
+        {
+            VkFormatProperties props;
+            vkGetPhysicalDeviceFormatProperties(this->physical_device,format, &props);
+
+            if (tiling == VK_IMAGE_TILING_LINEAR && (props.linearTilingFeatures & features) == features) {
+                formats.push_back(format);
+            }
+            else if (tiling == VK_IMAGE_TILING_OPTIMAL && (props.optimalTilingFeatures & features) == features) {
+                formats.push_back(format);
+            }
+        }
+
+        return formats;
+    }
+
     ~DeviceExtended(){
         vmaDestroyAllocator(_globalVMAAllocator);
     }
@@ -292,119 +322,381 @@ struct LinearCachedCommandAllocator {
     int _current_secondary_idx = 0;
 };
 
-#define VK_GRAPHICS_PIPELINE_STATE_DEF_HELPER(state) vk::Pipeline##state##StateCreateInfo _##state##StateInfo{}; \
-                                                        void set##state##Info(const vk::Pipeline##state##StateCreateInfo & info) { \
-                                                             _##state##StateInfo = info;                                          \
+struct VulkanDescriptorSetLayout
+{
+    VulkanDescriptorSetLayout(vk::Device device, const vk::DescriptorSetLayoutCreateInfo& info)
+    {
+        bindingCount = info.bindingCount;
+        bindings.reset(new vk::DescriptorSetLayoutBinding[bindingCount]);
+
+        for(int i = 0; i < bindingCount; i++)
+        {
+            bindings[i] = info.pBindings[i];
+        }
+
+        _layout = device.createDescriptorSetLayout(info);
+    }
+
+    ~VulkanDescriptorSetLayout()
+    {
+        if(bindings.use_count() == 1)
+        {
+            device.destroy(_layout);
+        }
+    }
+
+    bool operator == (const VulkanDescriptorSetLayout& other) const
+    {
+        if(this->bindingCount!=other.bindingCount) return false;
+        //todo for now we assume the binding other matter
+        for(int i = 0; i < bindingCount; i++)
+        {
+            if(bindings[i].binding != other.bindings[i].binding) return false;
+            if(bindings[i].descriptorCount != other.bindings[i].descriptorCount) return false;
+            if(bindings[i].descriptorType != other.bindings[i].descriptorType) return false;
+            if(bindings[i].stageFlags != other.bindings[i].stageFlags) return false;
+            //todo immutable samplers
+        }
+        return true;
+    }
+
+    bool operator ==(const vk::DescriptorSetLayoutCreateInfo& info) const
+    {
+        //todo
+        return true;
+    }
+
+    vk::Device device;
+    vk::DescriptorSetLayout _layout = VK_NULL_HANDLE;
+    std::shared_ptr<vk::DescriptorSetLayoutBinding[]> bindings;
+    int bindingCount = 0;
+};
+
+struct VulkanPipelineLayout
+{
+    VulkanPipelineLayout(std::vector<VulkanDescriptorSetLayout>&& setLayouts)
+    {
+        setLayoutsCount = setLayouts.size();
+        device = setLayouts[0].device;
+        pSetLayouts.reset((VulkanDescriptorSetLayout*)new char[setLayoutsCount * sizeof(VulkanDescriptorSetLayout)]);
+        for(int i = 0; i < setLayoutsCount; i++)
+        {
+            *(pSetLayouts.get() + i) = setLayouts[i];
+        }
+    }
+
+    ~VulkanPipelineLayout()
+    {
+        if(pSetLayouts.use_count() == 1)
+        {
+            device.destroy(_layout);
+        }
+    }
+
+    bool operator == (const vk::PipelineLayoutCreateInfo info) const
+    {
+        //todo
+        return true;
+    }
+
+    bool operator == (const VulkanPipelineLayout& other) const
+    {
+        //todo
+        return true;
+    }
+
+    bool operator == (std::vector<VulkanDescriptorSetLayout>&& setLayouts) const
+    {
+        if(setLayouts.size() != setLayoutsCount) return false;
+        for(int i = 0; i < setLayoutsCount; i++)
+        {
+            if(!(*(pSetLayouts.get() + i) == setLayouts[i])) return false;
+        }
+        return true;
+    }
+
+    vk::Device device;
+    vk::PipelineLayout _layout;
+    std::shared_ptr<VulkanDescriptorSetLayout> pSetLayouts;
+    int setLayoutsCount = 0;
+};
+
+struct VulkanPipelineVertexInputStateInfo
+{
+    VulkanPipelineVertexInputStateInfo() = default;
+
+    explicit VulkanPipelineVertexInputStateInfo(const vk::PipelineVertexInputStateCreateInfo & info)
+    {
+        bindingCount = info.vertexBindingDescriptionCount;
+        attributeCount = info.vertexAttributeDescriptionCount;
+        for(int i = 0; i < bindingCount; i ++)
+        {
+            bindings[i] = info.pVertexBindingDescriptions[i];
+        }
+        for(int i = 0; i < attributeCount; i++)
+        {
+            attributes[i] = info.pVertexAttributeDescriptions[i];
+        }
+    }
+
+    vk::PipelineVertexInputStateCreateInfo getCreateInfo() const
+    {
+        vk::PipelineVertexInputStateCreateInfo createInfo{};
+        createInfo.vertexBindingDescriptionCount = bindingCount;
+        createInfo.vertexAttributeDescriptionCount = attributeCount;
+        createInfo.pVertexBindingDescriptions = bindings;
+        createInfo.pVertexAttributeDescriptions = attributes;
+        return createInfo;
+    }
+
+    vk::VertexInputBindingDescription bindings[16];
+    vk::VertexInputAttributeDescription attributes[16];
+
+    int bindingCount = 0;
+    int attributeCount = 0;
+
+    bool operator==(const VulkanPipelineVertexInputStateInfo& other) const
+    {
+        if(bindingCount!=other.bindingCount || attributeCount!=other.attributeCount) return false;
+        if(memcmp((void*)bindings,(void*)other.bindings,bindingCount * sizeof(vk::VertexInputBindingDescription))!=0)
+            return false;
+        if(memcmp((void*)attributes,(void*)other.attributes, attributeCount * sizeof(vk::VertexInputAttributeDescription))!=0)
+            return false;
+        return true;
+    }
+
+    bool operator==(const vk::PipelineVertexInputStateCreateInfo& other) const
+    {
+        if(bindingCount!=other.vertexBindingDescriptionCount || attributeCount!=other.vertexAttributeDescriptionCount) return false;
+
+        for (int i = 0; i < bindingCount; i ++)
+        {
+            int j = 0;
+            for(; j < bindingCount; j++)
+            {
+                if(bindings[i].binding == other.pVertexBindingDescriptions[j].binding)
+                {
+                    if(bindings[i].inputRate != other.pVertexBindingDescriptions[j].inputRate) return false;
+                    if(bindings[i].stride!=other.pVertexBindingDescriptions[j].stride) return false;
+                    break;
+                }
+            }
+            if(j == bindingCount) return false;
+        }
+
+        for(int i = 0; i < attributeCount; i++)
+        {
+            int j = 0;
+            for(; j < attributeCount; j++)
+            {
+                if(bindings[i].binding == other.pVertexAttributeDescriptions[j].binding)
+                {
+                    if(attributes[i].offset!=other.pVertexAttributeDescriptions[j].offset) return false;
+                    if(attributes[i].format!=other.pVertexAttributeDescriptions[j].format) return false;
+                    if(attributes[i].location!=other.pVertexAttributeDescriptions[j].location) return false;
+                    break;
+                }
+            }
+            if(j == attributeCount) return false;
+        }
+
+        return true;
+    }
+};
+
+struct VertexShader;
+struct FragmentShader;
+
+#define VK_GRAPHICS_PIPELINE_STATE_DEF_GETTER(state)    private: vk::Pipeline##state##StateCreateInfo _##state##StateInfo{}; \
+                                                        public: auto get##state##Info() const{ \
+                                                            return  _##state##StateInfo;                         \
                                                         }
 struct VulkanGraphicsPipeline
 {
+
+    bool compatibleWith(const VulkanPipelineVertexInputStateInfo& vertexInputStateInfo)
+    {
+        return this->vertexInputStateInfo == vertexInputStateInfo;
+    }
+
+    bool compatibleWith(const vk::PipelineVertexInputStateCreateInfo& vertexInputStateInfo)
+    {
+        return this->vertexInputStateInfo == vertexInputStateInfo;
+    }
+
+    bool compatibleWithVertexShader(const std::string& shaderVariantUUID);
+
+    bool compatibleWithFragmentShader(const std::string& shaderVariantUUID);
+
+    bool compatibleWith(const vk::PipelineShaderStageCreateInfo& shaderInfo)
+    {
+        return false;
+    }
+
+    bool compatibleWith(const vk::GraphicsPipelineCreateInfo& createInfo) const
+    {
+        return false;
+    }
+
+    bool operator==(const vk::GraphicsPipelineCreateInfo& createInfo) const
+    {
+        return compatibleWith(createInfo);
+    }
+
+    vk::PipelineLayout getLayout() const
+    {
+        return pipelineLayout;
+    }
+
+    VK_GRAPHICS_PIPELINE_STATE_DEF_GETTER(InputAssembly)
+    VK_GRAPHICS_PIPELINE_STATE_DEF_GETTER(ColorBlend)
+    VK_GRAPHICS_PIPELINE_STATE_DEF_GETTER(DepthStencil)
+    VK_GRAPHICS_PIPELINE_STATE_DEF_GETTER(Rasterization)
+    VK_GRAPHICS_PIPELINE_STATE_DEF_GETTER(Multisample)
+    VK_GRAPHICS_PIPELINE_STATE_DEF_GETTER(Viewport)
+    VK_GRAPHICS_PIPELINE_STATE_DEF_GETTER(Dynamic)
+
+    vk::Pipeline getPipeline() const
+    {
+        return _pipeline;
+    }
+
+    auto getBackendDevice() const
+    {
+        return device;
+    }
+
+    auto getVertexShaderInfo() const
+    {
+        return _vs;
+    }
+
+    auto getFragmentShaderInfo() const
+    {
+        return _fs;
+    }
+
+    auto getVertexInputStateInfo() const
+    {
+        return vertexInputStateInfo;
+    }
+
+    auto getRenderPass() const
+    {
+        return renderPass;
+    }
+
+    auto getPipelineLayout() const
+    {
+        return pipelineLayout;
+    }
+private:
     vk::Pipeline _pipeline = VK_NULL_HANDLE;
-    VK_GRAPHICS_PIPELINE_STATE_DEF_HELPER(InputAssembly)
-    VK_GRAPHICS_PIPELINE_STATE_DEF_HELPER(ColorBlend)
-    VK_GRAPHICS_PIPELINE_STATE_DEF_HELPER(DepthStencil)
-    VK_GRAPHICS_PIPELINE_STATE_DEF_HELPER(Rasterization)
-    VK_GRAPHICS_PIPELINE_STATE_DEF_HELPER(Multisample)
-    VK_GRAPHICS_PIPELINE_STATE_DEF_HELPER(Viewport)
-    VK_GRAPHICS_PIPELINE_STATE_DEF_HELPER(Dynamic)
+
+    friend struct VulkanGraphicsPipelineBuilder;
+    VulkanGraphicsPipeline() = default;
 
     vk::Device device = VK_NULL_HANDLE;
-    vk::PipelineShaderStageCreateInfo vsInfo;
-    vk::PipelineShaderStageCreateInfo fsInfo;
-    vk::PipelineVertexInputStateCreateInfo vertexInputInfo;
+
+    VertexShader* _vs;
+
+    FragmentShader* _fs;
+
+    VulkanPipelineVertexInputStateInfo vertexInputStateInfo;
+
     vk::RenderPass renderPass = VK_NULL_HANDLE ;
+
     vk::PipelineLayout pipelineLayout = VK_NULL_HANDLE ;
 
     vk::PipelineColorBlendAttachmentState defaultAttachmentState{};
+};
 
-    VulkanGraphicsPipeline(vk::Device _device,
-        vk::PipelineShaderStageCreateInfo _vsInfo,
-        vk::PipelineShaderStageCreateInfo _fsInfo,
-        vk::PipelineVertexInputStateCreateInfo _vertexInputInfo,
-        vk::RenderPass _renderPass,
-        vk::PipelineLayout _pipelineLayout)
+/*
+ * The reason I use a pipeline builder is that I want to
+ * keep the immutability of PSO. In other word, the setters are
+ * hidden from the user, once a pipeline object is built, you can
+ * only query the information, but you cannot modify it or try to
+ * rebuild it again.
+ *
+ * Builder state is mutable, but pipeline is not.
+ * */
+
+#define VK_GRAPHICS_PIPELINE_BUILDER_STATE_DEF_ACCESSOR(state) private : vk::Pipeline##state##StateCreateInfo _##state##StateInfo{}; \
+                                                        public : void setStateInfo(const vk::Pipeline##state##StateCreateInfo & info) { \
+                                                             _##state##StateInfo = info;                                          \
+                                                        }
+struct VulkanGraphicsPipelineBuilder
+{
+    VulkanGraphicsPipelineBuilder(vk::Device device,
+                                  VertexShader* vs,
+                                  FragmentShader* fs,
+                                  vk::PipelineVertexInputStateCreateInfo vertexInputInfo,
+                                  vk::RenderPass renderPass);
+
+    VulkanGraphicsPipelineBuilder(vk::Device device,
+                                  VertexShader* vs,
+                                  FragmentShader* fs,
+                                  vk::PipelineVertexInputStateCreateInfo vertexInputInfo,
+                                  vk::RenderPass renderPass,
+                                  vk::PipelineLayout pipelineLayout)
+                                  :VulkanGraphicsPipelineBuilder(device,vs,fs,vertexInputInfo,renderPass)
     {
-        device = _device;
-        vsInfo = _vsInfo;
-        fsInfo = _fsInfo;
-        vertexInputInfo = _vertexInputInfo;
-        renderPass = _renderPass;
-        pipelineLayout = _pipelineLayout;
-
-        //set default state
-        _InputAssemblyStateInfo.setTopology(vk::PrimitiveTopology::eTriangleStrip);
-        _InputAssemblyStateInfo.setPrimitiveRestartEnable(vk::False);
-
-        _RasterizationStateInfo.setRasterizerDiscardEnable(vk::False);
-        _RasterizationStateInfo.setFrontFace(vk::FrontFace::eClockwise);
-        _RasterizationStateInfo.setPolygonMode(vk::PolygonMode::eFill);
-        _RasterizationStateInfo.setCullMode(vk::CullModeFlagBits::eBack);
-        _RasterizationStateInfo.setLineWidth(1.0);
-
-        auto colorComponentAll = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG|vk::ColorComponentFlagBits::eB|vk::ColorComponentFlagBits::eA;
-        defaultAttachmentState.setColorWriteMask(colorComponentAll);
-        defaultAttachmentState.setSrcColorBlendFactor(vk::BlendFactor::eOne);
-        defaultAttachmentState.setDstColorBlendFactor(vk::BlendFactor::eZero);
-        defaultAttachmentState.setColorBlendOp(vk::BlendOp::eAdd);
-        defaultAttachmentState.setSrcAlphaBlendFactor(vk::BlendFactor::eOne);
-        defaultAttachmentState.setDstAlphaBlendFactor(vk::BlendFactor::eZero);
-        defaultAttachmentState.setAlphaBlendOp(vk::BlendOp::eAdd);
-        defaultAttachmentState.blendEnable = VK_FALSE;
-
-        _ColorBlendStateInfo.setAttachments(defaultAttachmentState);
-        _ColorBlendStateInfo.setBlendConstants({1,1,1,1});
-        _ColorBlendStateInfo.setLogicOpEnable(vk::False);
-
-        _MultisampleStateInfo.setRasterizationSamples(vk::SampleCountFlagBits::e1);
-        _MultisampleStateInfo.setSampleShadingEnable(vk::False);
-
-        _ViewportStateInfo.setViewportCount(1);
-        _ViewportStateInfo.setScissorCount(1);
-
-        // By default, use dynamic viewport for flexible
-        auto dynamicStates = {vk::DynamicState::eViewport,vk::DynamicState::eScissor};
-        _DynamicStateInfo.setDynamicStates(dynamicStates);
-    }
-
-    void setInputAssemblyState(const vk::PipelineInputAssemblyStateCreateInfo& ){
-
-    };
-
-    /*
-     *  Make sure you have set all desired state before calling create
-     */
-    void build()
-    {
-        assert(device!=VK_NULL_HANDLE);
-        assert(renderPass!=VK_NULL_HANDLE);
-        //assert(pipelineLayout!=VK_NULL_HANDLE);
-        if(pipelineLayout == VK_NULL_HANDLE)
+        if(_pipelineLayout == VK_NULL_HANDLE)
         {
             //create empty pipeline layout
             vk::PipelineLayoutCreateInfo emptyLayoutInfo{};
             emptyLayoutInfo.setSetLayoutCount(0);
-            pipelineLayout = device.createPipelineLayout(emptyLayoutInfo);
+            _pipelineLayout = device.createPipelineLayout(emptyLayoutInfo);
+        }else{
+            pipelineLayout = _pipelineLayout;
         }
-
-        vk::GraphicsPipelineCreateInfo createInfo{};
-        std::array<vk::PipelineShaderStageCreateInfo,2> stages{vsInfo,fsInfo};
-        createInfo.setStages(stages);
-        createInfo.setRenderPass(renderPass);
-        createInfo.setLayout(pipelineLayout);
-        createInfo.setPVertexInputState(&vertexInputInfo);
-        createInfo.setPInputAssemblyState(&_InputAssemblyStateInfo);
-        createInfo.setPColorBlendState(&_ColorBlendStateInfo);
-        createInfo.setPDepthStencilState(&_DepthStencilStateInfo);
-        createInfo.setPRasterizationState(&_RasterizationStateInfo);
-        createInfo.setPMultisampleState(&_MultisampleStateInfo);
-        createInfo.setPViewportState(&_ViewportStateInfo);
-        createInfo.setPDynamicState(&_DynamicStateInfo);
-
-        auto newPipeline = device.createGraphicsPipeline(nullptr,createInfo);
-        if(newPipeline.result != vk::Result::eSuccess)
-        {
-            throw std::runtime_error("Failed to create pipeline");
-        }
-        _pipeline = newPipeline.value;
     }
+
+    template<typename... Args>
+    VulkanGraphicsPipelineBuilder(vk::Device device,
+                                  VertexShader* vs,
+                                  FragmentShader* fs,
+                                  vk::PipelineVertexInputStateCreateInfo vertexInputInfo,
+                                  vk::RenderPass renderPass, Args... args)
+                                  :VulkanGraphicsPipelineBuilder(device,vs,fs,vertexInputInfo,renderPass)
+    {
+
+        (setStateInfo(std::move(args)), ...);
+    }
+
+    template<typename... Args>
+    VulkanGraphicsPipelineBuilder(vk::Device device,
+                                  VertexShader* vs,
+                                  FragmentShader* fs,
+                                  vk::PipelineVertexInputStateCreateInfo vertexInputInfo,
+                                  vk::RenderPass renderPass,
+                                  vk::PipelineLayout pipelineLayout,
+                                  Args... args)
+                                  : VulkanGraphicsPipelineBuilder(device,vs,fs,vertexInputInfo,renderPass,_pipelineLayout)
+    {
+        (setStateInfo(std::move(args)), ...);
+    }
+
+    /*
+     *  Make sure you have set all desired state before calling build
+     */
+    VulkanGraphicsPipeline build() const;
+
+    VK_GRAPHICS_PIPELINE_BUILDER_STATE_DEF_ACCESSOR(InputAssembly)
+    VK_GRAPHICS_PIPELINE_BUILDER_STATE_DEF_ACCESSOR(ColorBlend)
+    VK_GRAPHICS_PIPELINE_BUILDER_STATE_DEF_ACCESSOR(DepthStencil)
+    VK_GRAPHICS_PIPELINE_BUILDER_STATE_DEF_ACCESSOR(Rasterization)
+    VK_GRAPHICS_PIPELINE_BUILDER_STATE_DEF_ACCESSOR(Multisample)
+    VK_GRAPHICS_PIPELINE_BUILDER_STATE_DEF_ACCESSOR(Viewport)
+    VK_GRAPHICS_PIPELINE_BUILDER_STATE_DEF_ACCESSOR(Dynamic)
+
+private:
+    vk::Device _device;
+    VertexShader* _vs;
+    FragmentShader* _fs;
+    VulkanPipelineVertexInputStateInfo _vertexInputInfo;
+    vk::RenderPass _renderPass;
+    vk::PipelineLayout _pipelineLayout;
+    vk::PipelineColorBlendAttachmentState defaultAttachmentState{};
 };
 

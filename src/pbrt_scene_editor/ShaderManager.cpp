@@ -5,10 +5,10 @@
 
 #include <iostream>
 
-VertexShader *ShaderManager::createVertexShader(DeviceExtended *backendDev, const std::string &fileName,
+VertexShader *ShaderManager::createVertexShader(DeviceExtended *backendDev, const std::string &shaderName,
                                                 const ShaderManager::ShaderMacroList &macro_defs)
 {
-    auto spv_data = getOrCreateSPIRVVariant(fileName,macro_defs);
+    auto spv_data = getOrCreateSPIRVVariant(shaderName,macro_defs);
     auto spv_data_size_in_bytes = spv_data.size() * sizeof(decltype(spv_data)::value_type);
     //reflection
     // Generate reflection data for a shader
@@ -50,7 +50,7 @@ VertexShader *ShaderManager::createVertexShader(DeviceExtended *backendDev, cons
     shaderCreateInfo.setCodeSize(spv_data_size_in_bytes);
     auto shaderCreateRes = backendDev->createShaderModule(shaderCreateInfo);
 
-    VertexShader vertexShader{shaderCreateRes,inputs};
+    VertexShader vertexShader{queryShaderVariantUUID(shaderName,macro_defs),shaderCreateRes,inputs};
     cachedVertexShaders.push_back(vertexShader);
 
     return &cachedVertexShaders.back();
@@ -61,9 +61,9 @@ VertexShader *ShaderManager::createVertexShader(DeviceExtended *backendDev, cons
     return createVertexShader(backendDev,name,{});
 }
 
-FragmentShader *ShaderManager::createFragmentShader(DeviceExtended *backendDev, const std::string &fileName,
+FragmentShader *ShaderManager::createFragmentShader(DeviceExtended *backendDev, const std::string &shaderName,
                                                     const std::vector<ShaderMacro> &macro_defs) {
-    auto spv_data = getOrCreateSPIRVVariant(fileName,macro_defs);
+    auto spv_data = getOrCreateSPIRVVariant(shaderName,macro_defs);
     auto spv_data_size_in_bytes = spv_data.size() * sizeof(decltype(spv_data)::value_type);
     //todo reflection
     vk::ShaderModuleCreateInfo shaderCreateInfo{};
@@ -71,7 +71,7 @@ FragmentShader *ShaderManager::createFragmentShader(DeviceExtended *backendDev, 
     shaderCreateInfo.setCodeSize(spv_data_size_in_bytes);
     auto shaderCreateRes = backendDev->createShaderModule(shaderCreateInfo);
 
-    FragmentShader fragmentShader{shaderCreateRes};
+    FragmentShader fragmentShader{queryShaderVariantUUID(shaderName,macro_defs),shaderCreateRes};
     cachedFragmentShader.push_back(fragmentShader);
 
     return &cachedFragmentShader.back();
@@ -99,17 +99,18 @@ ShaderManager::getOrCreateSPIRVVariant(const std::string &fileName, const std::v
     auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(lwt.time_since_epoch()).count();
 
     std::string timestampSuffix = "@"+std::to_string(timestamp);
-    std::string variantSuffix = "@DEFAULT";
-    if(!macro_defs.empty())
-    {
-        variantSuffix = "@";
-        for(const auto &def : macro_defs)
-        {
-            variantSuffix+=(def.first+def.second);
-        }
-    }
+//    std::string variantSuffix = "@DEFAULT";
+//    if(!macro_defs.empty())
+//    {
+//        variantSuffix = "@";
+//        for(const auto &def : macro_defs)
+//        {
+//            variantSuffix+=(def.first+def.second);
+//        }
+//    }
+    auto shaderVariantUUID = queryShaderVariantUUID(fileName,macro_defs);
     // If time stamp match and variant match, we directly load the spv file.
-    auto expectedFileName = shader_compiled_abs_path_c_str  + variantSuffix + timestampSuffix + ".spv";
+    auto expectedFileName = (shader_compiled_abs_dir / shaderVariantUUID).make_preferred().string() + timestampSuffix + ".spv";
     try {
         return loadFileBinary<uint32_t>(expectedFileName);
     }catch (...){
@@ -122,7 +123,6 @@ ShaderManager::getOrCreateSPIRVVariant(const std::string &fileName, const std::v
     std::string command = "glslangValidator -V ";
     if(!macro_defs.empty())
     {
-        variantSuffix = ".";
         for(const auto &def : macro_defs)
         {
             command += " -D" + def.first + "=" + def.second + " ";

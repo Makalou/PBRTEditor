@@ -28,16 +28,19 @@ void SceneViewer::init(std::shared_ptr<DeviceExtended> device) {
                                                              vk::AttachmentLoadOp::eDontCare,vk::AttachmentStoreOp::eStore);
             frameGraph.registerRasterizedGPUPass(std::move(skyBoxPass));
         }
-//        {
-//            auto gBufferPass = std::make_unique<GBufferPass>();
+        {
+            auto gBufferPass = std::make_unique<GBufferPass>();
+            gBufferPass->scene = this->_renderScene;
 //            gBufferPass->addOutput<PassAttachmentDescription>("depth",vk::Format::eD32Sfloat,WINDOW_WIDTH,WINDOW_HEIGHT,
 //                                                              vk::AttachmentLoadOp::eClear,vk::AttachmentStoreOp::eStore);
 //            gBufferPass->addOutput<PassAttachmentDescription>("wPosition",vk::Format::eR16G16B16A16Sfloat,WINDOW_WIDTH,WINDOW_HEIGHT,
 //                                                              vk::AttachmentLoadOp::eClear,vk::AttachmentStoreOp::eStore);
+            gBufferPass->addOutput<PassAttachmentDescription>("wPosition",vk::Format::eR8G8B8A8Srgb,WINDOW_WIDTH,WINDOW_HEIGHT,
+                                                              vk::AttachmentLoadOp::eClear,vk::AttachmentStoreOp::eStore);
 //            gBufferPass->addOutput<PassAttachmentDescription>("wNormal",vk::Format::eR16G16B16A16Sfloat,WINDOW_WIDTH,WINDOW_HEIGHT,
 //                                                              vk::AttachmentLoadOp::eClear,vk::AttachmentStoreOp::eStore);
-//            frameGraph.registerRasterizedGPUPass(std::move(gBufferPass));
-//        }
+            frameGraph.registerRasterizedGPUPass(std::move(gBufferPass));
+        }
 //        {
 //            auto shadowPass = std::make_unique<ShadowPass>();
 //            shadowPass->addOutput<PassAttachmentDescription>("mainShadowMap",vk::Format::eD32Sfloat,WINDOW_WIDTH,WINDOW_HEIGHT,
@@ -48,8 +51,8 @@ void SceneViewer::init(std::shared_ptr<DeviceExtended> device) {
             auto deferredLightingPass = std::make_unique<DeferredLightingPass>();
             deferredLightingPass->addInput<PassAttachmentDescription>("SkyBoxPass::result",
                                                                       vk::AttachmentLoadOp::eLoad,vk::AttachmentStoreOp::eStore);
-//            deferredLightingPass->addInput<PassTextureDescription>("GBufferPass::wPosition");
-//            deferredLightingPass->addInput<PassTextureDescription>("GBufferPass::wNormal");
+            deferredLightingPass->addInput<PassTextureDescription>("GBufferPass::wPosition");
+            //deferredLightingPass->addInput<PassTextureDescription>("GBufferPass::wNormal");
 //            deferredLightingPass->addInput<PassTextureDescription>("ShadowPass::mainShadowMap");
             deferredLightingPass->addOutput<PassAttachmentDescription>("result",vk::AttachmentLoadOp::eLoad,vk::AttachmentStoreOp::eStore);
             frameGraph.registerRasterizedGPUPass(std::move(deferredLightingPass));
