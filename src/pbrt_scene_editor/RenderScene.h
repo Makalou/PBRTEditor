@@ -245,14 +245,14 @@ namespace renderScene {
         InstanceUUID _uuid;
     };
 
-    struct DrawDataBindless
-    {
-        uint materialIndex;
-        uint transformOffset;
-        uint vertexOffset;
-        uint unused0; // vec4 padding
-        // ... extra gameplay data goes here
-    };
+    //struct DrawDataBindless
+    //{
+    //    uint materialIndex;
+    //    uint transformOffset;
+    //    uint vertexOffset;
+    //    uint unused0; // vec4 padding
+    //    // ... extra gameplay data goes here
+    //};
 
     /*
      * When bindless rendering is enabled, it's even possible to batch instances with same material category
@@ -268,7 +268,7 @@ namespace renderScene {
     struct MeshInstanceRigidStaticBindlessPartial {
 
         std::vector<PerInstDataT> perInstanceData;
-        std::vector<uint> matInstanceIDs;
+        std::vector<uint32_t> matInstanceIDs;
 
         int32_t meshIdx{};
     };
@@ -285,7 +285,7 @@ namespace renderScene {
     struct MeshInstanceRigidDynamicBindlessPartial {
 
         std::vector<PerInstDataT> perInstanceData;
-        std::vector<uint> matInstanceIDs;
+        std::vector<uint32_t> matInstanceIDs;
 
         VMABuffer vertexBuffer{};
         VMABuffer indexBuffer{};

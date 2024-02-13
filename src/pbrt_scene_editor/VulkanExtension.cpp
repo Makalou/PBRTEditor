@@ -102,6 +102,7 @@ vk::CommandBuffer DeviceExtended::allocateOnceTransferCommand()
 
 DeviceExtended::DeviceExtended(vkb::Device device, vk::Instance instance): vkb::Device(device), vk::Device(device.device) {
     _instance = instance;
+    dld = vk::DispatchLoaderDynamic(_instance, vkGetInstanceProcAddr);
     VmaVulkanFunctions vulkanFunctions = {};
     vulkanFunctions.vkGetInstanceProcAddr = &vkGetInstanceProcAddr;
     vulkanFunctions.vkGetDeviceProcAddr = &vkGetDeviceProcAddr;
@@ -275,7 +276,6 @@ VulkanGraphicsPipelineBuilder::VulkanGraphicsPipelineBuilder(vk::Device device,
     _ViewportStateInfo.setScissorCount(1);
 
     // By default, use dynamic viewport for flexible
-    auto dynamicStates = {vk::DynamicState::eViewport,vk::DynamicState::eScissor};
     _DynamicStateInfo.setDynamicStates(dynamicStates);
 }
 
@@ -298,7 +298,7 @@ VulkanGraphicsPipeline VulkanGraphicsPipelineBuilder::build() const {
     createInfo.setPViewportState(&_ViewportStateInfo);
     createInfo.setPDynamicState(&_DynamicStateInfo);
 
-    auto newPipeline = _device.createGraphicsPipeline(nullptr,createInfo);
+    auto newPipeline = _device.createGraphicsPipeline(VK_NULL_HANDLE,createInfo);
     if(newPipeline.result != vk::Result::eSuccess)
     {
         throw std::runtime_error("Failed to create pipeline");

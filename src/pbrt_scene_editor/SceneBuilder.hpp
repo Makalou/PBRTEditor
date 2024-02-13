@@ -7,6 +7,7 @@
 
 #include "Inspector.hpp"
 #include <iostream>
+#include <vector>
 
 struct SceneGraphNode;
 

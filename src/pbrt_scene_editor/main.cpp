@@ -151,6 +151,7 @@ int main( int /*argc*/, char ** /*argv*/ )
         .require_api_version(1,2)
         .set_minimum_instance_version(1,2)
         .enable_extension(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)
+        .enable_extension(VK_EXT_DEBUG_UTILS_EXTENSION_NAME)
         //.request_validation_layers()
         //.use_default_debug_messenger()
         .build();

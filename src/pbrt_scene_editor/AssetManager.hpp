@@ -9,6 +9,7 @@
 #include "assimp/Importer.hpp"
 #include "ThreadPool.h"
 #include "stb_image.h"
+#include <cstdlib>
 
 struct TextureHostObject
 {
@@ -87,8 +88,11 @@ public:
             attributeLayout.VertexStride = current_size;
 
             static_assert(sizeof(unsigned char ) == 1);
-            interleavingAttributes.reset((unsigned char *)std::aligned_alloc(16,vertex_count * current_size));
-
+#if WIN32
+            interleavingAttributes.reset((unsigned char*)_aligned_malloc(vertex_count * current_size,16));
+#else
+            interleavingAttributes.reset((unsigned char*)std::aligned_alloc(16, vertex_count * current_size));
+#endif // WIN32
             for(int i = 0; i < vertex_count; i ++)
             {
                 auto * current_vertex_start = interleavingAttributes.get() + attributeLayout.VertexStride * i;

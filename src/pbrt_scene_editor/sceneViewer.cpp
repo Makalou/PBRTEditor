@@ -64,7 +64,7 @@ void SceneViewer::init(std::shared_ptr<DeviceExtended> device) {
             postProcessPass->addOutput<PassAttachmentDescription>("result",vk::AttachmentLoadOp::eClear,vk::AttachmentStoreOp::eStore);
             frameGraph.registerRasterizedGPUPass(std::move(postProcessPass));
         }
-        _gpuFrames.emplace_back(std::move(frameGraph));
+        _gpuFrames.push_back(std::move(frameGraph));
     }
 
     for(int i = 0 ; i < 3; i ++)

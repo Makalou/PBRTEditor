@@ -4,6 +4,7 @@
 #include "ShaderManager.h"
 
 #include <iostream>
+#include <filesystem>
 
 VertexShader *ShaderManager::createVertexShader(DeviceExtended *backendDev, const std::string &shaderName,
                                                 const ShaderManager::ShaderMacroList &macro_defs)
@@ -28,7 +29,7 @@ VertexShader *ShaderManager::createVertexShader(DeviceExtended *backendDev, cons
 
     for(int i = 0 ; i < var_count ; i ++)
     {
-        vk::VertexInputRate inputRate;
+        vk::VertexInputRate inputRate = vk::VertexInputRate::eVertex;
         if(strncmp(input_vars[i]->name, "inVertex", strlen("inVertex")) == 0)
         {
             inputRate = vk::VertexInputRate::eVertex;

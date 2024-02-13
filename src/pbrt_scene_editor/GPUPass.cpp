@@ -620,14 +620,22 @@ vk::CommandBuffer GPUFrame::recordMainQueueCommands() {
     vk::CommandBufferBeginInfo beginInfo{};
     beginInfo.setFlags(vk::CommandBufferUsageFlagBits::eSimultaneousUse);
     cmdPrimary.begin(beginInfo);
+    vk::DebugUtilsLabelEXT frameLabel{};
+    auto frameLabelName = std::string("Frame ").append(std::to_string(frameIdx));
+    frameLabel.setPLabelName(frameLabelName.c_str());
+    cmdPrimary.beginDebugUtilsLabelEXT(frameLabel,backendDevice->getDLD());
     cmdPrimary.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,_frameLevelPipelineLayout,0,_frameGlobalDescriptorSet,nullptr);
     for(int i = 0 ; i < _rasterPasses.size(); i ++)
     {
         _rasterPasses[i]->prepareIncremental(this);
+        vk::DebugUtilsLabelEXT passLabel{};
+        passLabel.setPLabelName(_rasterPasses[i]->_name.c_str());
+        cmdPrimary.beginDebugUtilsLabelEXT(passLabel,backendDevice->getDLD());
         _rasterPasses[i]->record(cmdPrimary,this);
+        cmdPrimary.endDebugUtilsLabelEXT(backendDevice->getDLD());
     }
     cmdPrimary.end();
-
+    cmdPrimary.endDebugUtilsLabelEXT(backendDevice->getDLD());
     return cmdPrimary;
 }
 

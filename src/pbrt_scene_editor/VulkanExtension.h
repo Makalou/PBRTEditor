@@ -7,6 +7,7 @@
 #include "VkBootstrap.h"
 #include "vk_mem_alloc.h"
 #include "VMAExtension.h"
+#include <optional>
 
 struct SwapchainExtended : vkb::Swapchain
 {
@@ -220,6 +221,11 @@ struct DeviceExtended : vkb::Device, vk::Device
         return formats;
     }
 
+    auto getDLD()
+    {
+        return dld;
+    }
+
     ~DeviceExtended(){
         vmaDestroyAllocator(_globalVMAAllocator);
     }
@@ -231,6 +237,7 @@ struct DeviceExtended : vkb::Device, vk::Device
 private:
     vk::CommandPool onceGraphicsCommandPool = VK_NULL_HANDLE;
     vk::CommandPool onceTransferCommandPool = VK_NULL_HANDLE;
+    vk::DispatchLoaderDynamic dld;
 };
 
 struct CommandPoolExtended : vk::CommandPool
@@ -698,5 +705,6 @@ private:
     vk::RenderPass _renderPass;
     vk::PipelineLayout _pipelineLayout;
     vk::PipelineColorBlendAttachmentState defaultAttachmentState{};
+    vk::DynamicState dynamicStates[2]{ vk::DynamicState::eViewport,vk::DynamicState::eScissor };
 };
 

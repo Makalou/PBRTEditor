@@ -310,9 +310,13 @@ struct GPURasterizedPass : GPUPass
     //We should guarantee that each pipelineLayouts must be compatible with passBaseLayout
     std::vector<std::pair<std::vector<vk::DescriptorSetLayout>, vk::PipelineLayout>> pipelineLayouts;
 
+    GPURasterizedPass() = default;
     explicit GPURasterizedPass(const std::string& name) : GPUPass(name){};
 
-    virtual ~GPURasterizedPass() = default;
+    virtual ~GPURasterizedPass()
+    {
+
+    }
 };
 
 struct TransferPass : GPUPass
@@ -335,6 +339,11 @@ struct GPUFrame
     };
 
     GPUFrame(int threadsNum, const std::shared_ptr<DeviceExtended>& backendDevice);
+
+    GPUFrame(const GPUFrame& other) = delete;
+    GPUFrame& operator=(const GPUFrame& other) = delete;
+    GPUFrame(GPUFrame&& other) = default;
+    GPUFrame& operator=(GPUFrame&& other) = default;
 
     int workThreadsNum;
     /* Note that allocated command buffer only means we don't need to reallocate them from pool.
