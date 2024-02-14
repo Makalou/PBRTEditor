@@ -82,110 +82,115 @@ std::future<TextureHostObject*>* AssetManager::getOrLoadImgAsync(const std::stri
 
 MeshHostObject parseAssimpMesh(aiMesh* mesh)
 {
-    unsigned int vertex_count = 0;
     MeshHostObject meshHostObj;
     meshHostObj.vertex_count = mesh->mNumVertices;
     //we assume each vertex include position
     assert(mesh->HasPositions());
-    auto * position = new float[vertex_count * 3];
-    for(int i = 0; i < vertex_count; i++)
+    try
     {
-        position[i*3] = mesh->mVertices[i].x;
-        position[i*3+1] = mesh->mVertices[i].y;
-        position[i*3+2] = mesh->mVertices[i].z;
-    }
-    meshHostObj.position.reset(position);
-    //normal, tangent and uv is optional
-    if(mesh->HasNormals())
-    {
-        auto * normal = new float[vertex_count * 3];
-        for(int i = 0; i < vertex_count; i++)
+        auto* position = new float[meshHostObj.vertex_count * 3];
+        for (int i = 0; i < meshHostObj.vertex_count; i++)
         {
-            normal[i*3] = mesh->mNormals[i].x;
-            normal[i*3+1] = mesh->mNormals[i].y;
-            normal[i*3+2] = mesh->mNormals[i].z;
+            position[i * 3] = mesh->mVertices[i].x;
+            position[i * 3 + 1] = mesh->mVertices[i].y;
+            position[i * 3 + 2] = mesh->mVertices[i].z;
         }
-        meshHostObj.normal.reset(normal);
-    }
-    if(mesh->HasTangentsAndBitangents())
-    {
-        auto * tangent = new float [vertex_count * 3];
-        auto * bitangent = new float [vertex_count * 3];
-
-        for(int i = 0; i < vertex_count; i++)
+        meshHostObj.position.reset(position);
+        //normal, tangent and uv is optional
+        if(mesh->HasNormals())
         {
-            tangent[i*3] = mesh->mTangents[i].x;
-            tangent[i*3+1] = mesh->mTangents[i].y;
-            tangent[i*3+2] = mesh->mTangents[i].z;
-        }
-        for(int i = 0; i < vertex_count; i++)
-        {
-            bitangent[i*3] = mesh->mBitangents[i].x;
-            bitangent[i*3+1] = mesh->mBitangents[i].y;
-            bitangent[i*3+2] = mesh->mBitangents[i].z;
-        }
-
-        meshHostObj.tangent.reset(tangent);
-        meshHostObj.bitangent.reset(bitangent);
-    }
-
-    //We assume each mesh has at most one UV coord, and is stored at idx 0
-    if(mesh->HasTextureCoords(0))
-    {
-        auto * uv = new float[vertex_count * 2];
-        for(int i = 0; i < vertex_count; i++)
-        {
-            uv[i*2] = mesh->mTextureCoords[0][i].x;
-            uv[i*2+1] = mesh->mTextureCoords[0][i].y;
-        }
-        meshHostObj.uv.reset(uv);
-    }
-
-    //we only handle triangle for now
-    if(mesh->mPrimitiveTypes!=aiPrimitiveType::aiPrimitiveType_TRIANGLE)
-    {
-        //drop all other types of primitives
-        unsigned int index_count = 0;
-        for(int i = 0;i < mesh->mNumFaces; i++)
-        {
-            auto face = mesh->mFaces[i];
-            if(face.mNumIndices==3)
+            auto * normal = new float[meshHostObj.vertex_count * 3];
+            for(int i = 0; i < meshHostObj.vertex_count; i++)
             {
-                index_count += 3;
+                normal[i*3] = mesh->mNormals[i].x;
+                normal[i*3+1] = mesh->mNormals[i].y;
+                normal[i*3+2] = mesh->mNormals[i].z;
             }
+            meshHostObj.normal.reset(normal);
+        }
+        if(mesh->HasTangentsAndBitangents())
+        {
+            auto * tangent = new float [meshHostObj.vertex_count * 3];
+            auto * bitangent = new float [meshHostObj.vertex_count * 3];
+
+            for(int i = 0; i < meshHostObj.vertex_count; i++)
+            {
+                tangent[i*3] = mesh->mTangents[i].x;
+                tangent[i*3+1] = mesh->mTangents[i].y;
+                tangent[i*3+2] = mesh->mTangents[i].z;
+            }
+            for(int i = 0; i < meshHostObj.vertex_count; i++)
+            {
+                bitangent[i*3] = mesh->mBitangents[i].x;
+                bitangent[i*3+1] = mesh->mBitangents[i].y;
+                bitangent[i*3+2] = mesh->mBitangents[i].z;
+            }
+
+            meshHostObj.tangent.reset(tangent);
+            meshHostObj.bitangent.reset(bitangent);
         }
 
-        int current_idx = 0;
-        meshHostObj.index_count = index_count;
-        auto* indices = new unsigned int[meshHostObj.index_count];
-        for(int i = 0;i < mesh->mNumFaces; i++)
+        //We assume each mesh has at most one UV coord, and is stored at idx 0
+        if(mesh->HasTextureCoords(0))
         {
-            auto face = mesh->mFaces[i];
-            if(face.mNumIndices==3)
+            auto * uv = new float[meshHostObj.vertex_count * 2];
+            for(int i = 0; i < meshHostObj.vertex_count; i++)
             {
-                for(int j = 0; j < 3; j++)
+                uv[i*2] = mesh->mTextureCoords[0][i].x;
+                uv[i*2+1] = mesh->mTextureCoords[0][i].y;
+            }
+            meshHostObj.uv.reset(uv);
+        }
+
+        //we only handle triangle for now
+        if(mesh->mPrimitiveTypes!=aiPrimitiveType::aiPrimitiveType_TRIANGLE)
+        {
+            //drop all other types of primitives
+            for(int i = 0;i < mesh->mNumFaces; i++)
+            {
+                auto face = mesh->mFaces[i];
+                if(face.mNumIndices==3)
                 {
-                    meshHostObj.indices.get()[current_idx++] = face.mIndices[j];
+                    meshHostObj.index_count += 3;
                 }
             }
-        }
-        meshHostObj.indices.reset(indices);
-        assert(current_idx == index_count);
-    }else{
-        meshHostObj.index_count = mesh->mNumFaces * 3;
-        auto* indices = new unsigned int[meshHostObj.index_count];
-        int current_idx = 0;
-        for(int i = 0;i < mesh->mNumFaces; i++)
-        {
-            auto face = mesh->mFaces[i];
-            assert(face.mNumIndices == 3);
-            for(int j = 0; j < 3; j++)
+
+            auto* indices = new unsigned int[meshHostObj.index_count];
+
+            int current_idx = 0;
+            for(int i = 0;i < mesh->mNumFaces; i++)
             {
-                indices[current_idx++] = face.mIndices[j];
+                auto face = mesh->mFaces[i];
+                if(face.mNumIndices==3)
+                {
+                    for(int j = 0; j < 3; j++)
+                    {
+                        indices[current_idx++] = face.mIndices[j];
+                    }
+                }
             }
+            meshHostObj.indices.reset(indices);
+            assert(current_idx == meshHostObj.index_count);
+        }else{
+            meshHostObj.index_count = mesh->mNumFaces * 3;
+            auto* indices = new unsigned int[meshHostObj.index_count];
+            int current_idx = 0;
+            for(int i = 0;i < mesh->mNumFaces; i++)
+            {
+                auto face = mesh->mFaces[i];
+                assert(face.mNumIndices == 3);
+                for(int j = 0; j < 3; j++)
+                {
+                    indices[current_idx++] = face.mIndices[j];
+                }
+            }
+            meshHostObj.indices.reset(indices);
+            assert(current_idx == meshHostObj.index_count);
         }
-        meshHostObj.indices.reset(indices);
-        assert(current_idx == meshHostObj.index_count);
+    }catch (std::bad_alloc& e)
+    {
+        std::cout << e.what() << std::endl;
+        std::abort();
     }
 
     return meshHostObj;

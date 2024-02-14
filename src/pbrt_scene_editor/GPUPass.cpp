@@ -594,7 +594,7 @@ vk::CommandBuffer GPUFrame::recordMainQueueCommands() {
 
     backendDevice->updateDescriptorSets(write,{});
 
-    for(auto allocator : perThreadMainCommandAllocators)
+    for(auto & allocator : perThreadMainCommandAllocators)
     {
         allocator.reset();
     }
@@ -614,7 +614,7 @@ vk::CommandBuffer GPUFrame::recordMainQueueCommands() {
      * 2. we cannot operate on single command buffer in parallel.
      */
     int threadId = 0;
-    auto cmdAllocator = perThreadMainCommandAllocators[threadId];
+    auto & cmdAllocator = perThreadMainCommandAllocators[threadId];
     auto cmdPrimary = cmdAllocator.getOrAllocateNextPrimary();
 
     vk::CommandBufferBeginInfo beginInfo{};

@@ -197,20 +197,21 @@ namespace renderScene {
             mesh->bind(cmd);
             //todo bind per instance data
             //cmd.bindVertexBuffers(perInstanceBindingIdx,instDataIdxBuffer)
-            cmd.draw(mesh->vertexCount,perInstanceData.size(),0,0);
+            cmd.drawIndexed(mesh->indexCount, perInstanceData.size(), 0, 0, 0);
         }
 
         void drawOne(vk::CommandBuffer cmd) const{
             mesh->bind(cmd);
             //todo bind per instance data
             //cmd.bindVertexBuffers(perInstanceBindingIdx,instDataIdxBuffer)
-            cmd.draw(mesh->vertexCount,1,0,0);
+            //cmd.drawIndexed(mesh->vertexCount,1,0,0);
+            cmd.drawIndexed(mesh->indexCount, 1, 0, 0, 0);
         }
 
         void drawCurrentVisible( vk::CommandBuffer cmd) const{
             mesh->bind(cmd);
             //todo bind per instance data
-            cmd.draw(mesh->vertexCount,visibleInstanceCount,0,0);
+            cmd.drawIndexed(mesh->indexCount, visibleInstanceCount, 0, 0, 0);
         }
 
         /*

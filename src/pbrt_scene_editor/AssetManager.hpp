@@ -89,32 +89,42 @@ public:
 
             static_assert(sizeof(unsigned char ) == 1);
 #if WIN32
-            interleavingAttributes.reset((unsigned char*)_aligned_malloc(vertex_count * current_size,16));
+            interleavingAttributes.reset((unsigned char*)_aligned_malloc(vertex_count * current_size, 16));
 #else
             interleavingAttributes.reset((unsigned char*)std::aligned_alloc(16, vertex_count * current_size));
 #endif // WIN32
+            auto* interleavingAttributes_raw = interleavingAttributes.get();
+            const float * position_raw = position.get();
+            //assert(position != nullptr);
+            const float* normal_raw = normal.get();
+            const float* tangent_raw = tangent.get();
+            const float* bitangent_raw = bitangent.get();
+            const float* uv_raw = uv.get();
+
             for(int i = 0; i < vertex_count; i ++)
             {
-                auto * current_vertex_start = interleavingAttributes.get() + attributeLayout.VertexStride * i;
-                memcpy(current_vertex_start, position.get() + i * 3 * sizeof(float), 3 * sizeof(float));
-                if(normal != nullptr)
+                auto * current_vertex_start = interleavingAttributes_raw + attributeLayout.VertexStride * i;
+                auto * position_start = position_raw + i * 3;
+                memcpy(current_vertex_start, position_start, 3 * sizeof(float));
+                if(normal_raw != nullptr)
                 {
-                    memcpy( current_vertex_start + attributeLayout.normalOffset,normal.get() + i * 3, 3 * sizeof(float));
+                    auto* normal_start = normal_raw + i * 3;
+                    memcpy( current_vertex_start + attributeLayout.normalOffset,normal_start, 3 * sizeof(float));
                 }
-
-                if(tangent != nullptr)
+                if(tangent_raw != nullptr)
                 {
-                    memcpy(current_vertex_start  + attributeLayout.tangentOffset,tangent.get() + i * 3, 3 * sizeof(float));
+                    auto* tangent_start = tangent_raw+ i * 3;
+                    memcpy(current_vertex_start  + attributeLayout.tangentOffset,tangent_start, 3 * sizeof(float));
                 }
-
-                if(bitangent != nullptr)
+                if(bitangent_raw != nullptr)
                 {
-                    memcpy(current_vertex_start + attributeLayout.biTangentOffset,bitangent.get() + i * 3, 3 * sizeof(float));
+                    auto* bitangent_start = bitangent_raw + i * 3;
+                    memcpy(current_vertex_start + attributeLayout.biTangentOffset,bitangent_start, 3 * sizeof(float));
                 }
-
-                if(uv != nullptr)
+                if(uv_raw != nullptr)
                 {
-                    memcpy(current_vertex_start  + attributeLayout.uvOffset,uv.get() + i * 2, 2 * sizeof(float));
+                    auto* uv_start = uv_raw + i * 2;
+                    memcpy(current_vertex_start + attributeLayout.uvOffset,uv_start, 2 * sizeof(float));
                 }
             }
         }
@@ -125,7 +135,12 @@ public:
 private:
     struct AlignDeleter {
         void operator()(unsigned char* p) const {
-            if(p!= nullptr) std::free(p);
+            if (p != nullptr)
+#if WIN32
+                _aligned_free(p);
+#else
+              std::free(p);
+#endif
         }
     };
     std::unique_ptr<unsigned char,AlignDeleter> interleavingAttributes = nullptr;
@@ -178,5 +193,5 @@ private:
     std::mutex meshCacheLock;
 
     std::vector<Assimp::Importer> perThreadImporter{std::thread::hardware_concurrency()};
-    ThreadPool workerPool{1};
+    ThreadPool workerPool{ std::thread::hardware_concurrency() };
 };

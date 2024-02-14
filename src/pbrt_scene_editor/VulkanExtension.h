@@ -8,6 +8,7 @@
 #include "vk_mem_alloc.h"
 #include "VMAExtension.h"
 #include <optional>
+#include <iostream>
 
 struct SwapchainExtended : vkb::Swapchain
 {
