@@ -122,6 +122,8 @@ void GPURasterizedPass::buildRenderPass(const DeviceExtended &device, GPUFrame *
     // todo or do we?
     renderPassCreateInfo.setDependencies({});
     renderPass = device.createRenderPass(renderPassCreateInfo);
+    auto passName = this->_name + "RenderPass";
+    device.setObjectDebugName(renderPass, passName.c_str());
 }
 
 /*
@@ -167,6 +169,8 @@ void GPURasterizedPass::buildFrameBuffer(const DeviceExtended& device, GPUFrame*
     framebufferCreateInfo.setLayers(1);
     framebufferCreateInfo.setAttachments(imageViews);
     frameBuffer = device.createFramebuffer(framebufferCreateInfo);
+    auto fbName = this->_name + "FrameBuffer";
+    device.setObjectDebugName(frameBuffer, fbName.c_str());
 }
 
 bool isResourceTypeCompatible(PassResourceType outputType, PassResourceType inputType)
@@ -289,10 +293,12 @@ GPUFrame::GPUFrame(int threadsNum, const std::shared_ptr<DeviceExtended> &backen
     vk::DescriptorSetLayoutCreateInfo layoutCreateInfo;
     layoutCreateInfo.setBindings(bindings);
     _frameGlobalDescriptorSetLayout = backendDevice->createDescriptorSetLayout(layoutCreateInfo);
+    backendDevice->setObjectDebugName(_frameGlobalDescriptorSetLayout,"FrameGlobalDesciptorSetLayout");
 
     vk::PipelineLayoutCreateInfo pipelineLayoutCreateInfo{};
     pipelineLayoutCreateInfo.setSetLayouts(_frameGlobalDescriptorSetLayout);
     _frameLevelPipelineLayout = backendDevice->createPipelineLayout(pipelineLayoutCreateInfo);
+    backendDevice->setObjectDebugName(_frameLevelPipelineLayout, "FrameLevelPipelineLayout");
 
     vk::DescriptorPoolCreateInfo descriptorPoolInfo{};
     descriptorPoolInfo.setFlags(vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet);
@@ -310,6 +316,8 @@ GPUFrame::GPUFrame(int threadsNum, const std::shared_ptr<DeviceExtended> &backen
     allocateInfo.setDescriptorPool(_frameGlobalDescriptorSetPool);
     allocateInfo.setDescriptorSetCount(1);
     _frameGlobalDescriptorSet = backendDevice->allocateDescriptorSets(allocateInfo)[0];
+    backendDevice->setObjectDebugName(_frameGlobalDescriptorSet, "FrameGlobalDescriptorSet");
+
     auto buf = backendDevice->allocateObservedBufferPull<frameGlobalData>(VkBufferUsageFlagBits::VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT).value();
     _frameGlobalDataBuffer = buf;
 
@@ -495,6 +503,7 @@ void GPUFrame::compileAOT() {
                         {
                             outputi->height = inputkk->height;
                         }
+                        outputi->initialLayout = inputkk->initialLayout;
                         backingImageViews.emplace(name,backingImageViews[inputkk->name]);
                         break;
                     }
@@ -714,5 +723,5 @@ GPUFrame::PassDataDescriptorSetBaseLayout GPUFrame::getPassDataDescriptorSetBase
         }
     }
 
-    return std::move(baseLayout);
+    return baseLayout;
 }

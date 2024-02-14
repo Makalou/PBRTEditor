@@ -39,13 +39,14 @@ RASTERIZEDPASS_DEF_BEGIN(SkyBoxPass)
     {
         auto vs = FullScreenQuadDrawer::getVertexShader(frame->backendDevice.get());
         auto fs = ShaderManager::getInstance().createFragmentShader(frame->backendDevice.get(),"proceduralSkyBox.frag");
-
         auto pipelineLayout = frame->backendDevice->createPipelineLayout2({frame->_frameGlobalDescriptorSetLayout});
+        frame->backendDevice->setObjectDebugName(pipelineLayout,"SkyBoxPassPipelineLayout");
 
         VulkanGraphicsPipelineBuilder builder(frame->backendDevice->device,vs,fs,
                                               FullScreenQuadDrawer::getVertexInputStateInfo(),renderPass,
                                               pipelineLayout);
         auto pipeline = builder.build();
+        frame->backendDevice->setObjectDebugName(pipeline.getPipeline(), "SkyBoxPassPipeline");
         this->graphicsPipelines.push_back(pipeline);
     }
 
@@ -255,11 +256,12 @@ RASTERIZEDPASS_DEF_BEGIN(DeferredLightingPass)
         auto fs = ShaderManager::getInstance().createFragmentShader(frame->backendDevice.get(),"deferred.frag");
 
         auto pipelineLayout = frame->backendDevice->createPipelineLayout2({frame->_frameGlobalDescriptorSetLayout});
-
+        frame->backendDevice->setObjectDebugName(pipelineLayout, "DeferredLightingPassPipelineLayout");
         VulkanGraphicsPipelineBuilder builder(frame->backendDevice->device,vs,fs,
                                               FullScreenQuadDrawer::getVertexInputStateInfo(),renderPass,
                                               pipelineLayout);
         auto pipeline = builder.build();
+        frame->backendDevice->setObjectDebugName(pipeline.getPipeline(), "DeferredLightingPassPipeline");
         graphicsPipelines.push_back(pipeline);
     }
 
@@ -284,6 +286,7 @@ RASTERIZEDPASS_DEF_BEGIN(PostProcessPass)
     {
         auto baseLayout = frame->getPassDataDescriptorSetBaseLayout(this);
         auto passDataDescriptorLayout = frame->backendDevice->createDescriptorSetLayout2(baseLayout.bindings);
+        frame->backendDevice->setObjectDebugName(passDataDescriptorLayout, "PostProcessPassDataDescriptorLayout");
 
         vk::DescriptorPoolCreateInfo descriptorPoolCreateInfo{};
         std::vector<vk::DescriptorPoolSize> poolSizes;
@@ -297,6 +300,7 @@ RASTERIZEDPASS_DEF_BEGIN(PostProcessPass)
 
         descriptorPool = frame->backendDevice->createDescriptorPool(descriptorPoolCreateInfo);
         passDataDescriptorSet = frame->backendDevice->allocateSingleDescriptorSet(descriptorPool,passDataDescriptorLayout);
+        frame->backendDevice->setObjectDebugName(passDataDescriptorSet, "PostProcessPassDataDescriptorSet");
 
         for(auto & write : baseLayout.writes)
         {
@@ -309,11 +313,13 @@ RASTERIZEDPASS_DEF_BEGIN(PostProcessPass)
         auto fs = ShaderManager::getInstance().createFragmentShader(frame->backendDevice.get(),"postProcess.frag");
 
         pipelineLayout = frame->backendDevice->createPipelineLayout2({frame->_frameGlobalDescriptorSetLayout,passDataDescriptorLayout});
+        frame->backendDevice->setObjectDebugName(pipelineLayout, "PostProcessPassPipelineLayout");
 
         VulkanGraphicsPipelineBuilder builder(frame->backendDevice->device,vs,fs,
                                               FullScreenQuadDrawer::getVertexInputStateInfo(),renderPass,
                                               pipelineLayout);
         auto pipeline = builder.build();
+        frame->backendDevice->setObjectDebugName(pipeline.getPipeline(), "PostProcessPassPipeline");
         graphicsPipelines.push_back(pipeline);
     }
 

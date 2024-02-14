@@ -157,14 +157,24 @@ struct DeviceExtended : vkb::Device, vk::Device
      * */
     void oneTimeUploadSync(void* data, int size,VkBuffer dst);
 
-    auto createDescriptorSetLayout2(std::vector<vk::DescriptorSetLayoutBinding>&& descripotSetBindings)
+    template<class ObjectT>
+    auto setObjectDebugName(ObjectT object,const char* name) const
+    {
+        vk::DebugUtilsObjectNameInfoEXT debugNameInfo{};
+        debugNameInfo.setObjectType(ObjectT::objectType);
+        debugNameInfo.setObjectHandle((uint64_t)static_cast<ObjectT::CType>(object));
+        debugNameInfo.setPObjectName(name);
+        setDebugUtilsObjectNameEXT(debugNameInfo, dld);
+    }
+
+    auto createDescriptorSetLayout2(std::vector<vk::DescriptorSetLayoutBinding>&& descripotSetBindings) const
     {
         vk::DescriptorSetLayoutCreateInfo createInfo{};
         createInfo.setBindings(descripotSetBindings);
         return createDescriptorSetLayout(createInfo);
     }
 
-    auto createDescriptorSetLayout2(const std::vector<vk::DescriptorSetLayoutBinding>& descripotSetBindings)
+    auto createDescriptorSetLayout2(const std::vector<vk::DescriptorSetLayoutBinding>& descripotSetBindings) const
     {
         vk::DescriptorSetLayoutCreateInfo createInfo{};
         createInfo.setBindings(descripotSetBindings);
@@ -649,14 +659,14 @@ struct VulkanGraphicsPipelineBuilder
                                   vk::PipelineLayout pipelineLayout)
                                   :VulkanGraphicsPipelineBuilder(device,vs,fs,vertexInputInfo,renderPass)
     {
-        if(_pipelineLayout == VK_NULL_HANDLE)
+        if(pipelineLayout == VK_NULL_HANDLE)
         {
             //create empty pipeline layout
             vk::PipelineLayoutCreateInfo emptyLayoutInfo{};
             emptyLayoutInfo.setSetLayoutCount(0);
             _pipelineLayout = device.createPipelineLayout(emptyLayoutInfo);
         }else{
-            pipelineLayout = _pipelineLayout;
+            _pipelineLayout = pipelineLayout;
         }
     }
 
