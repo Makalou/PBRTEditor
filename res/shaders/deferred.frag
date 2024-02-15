@@ -13,11 +13,18 @@ layout(set = 1, binding = 0) uniform sampler2D wPos;
 //layout(set = 1, binding = 1) uniform sampler2D wNormal;
 
 void main() {
-    vec2 anchor = FGData.mousePos.xy;
-    if(distance(gl_FragCoord.xy,anchor) < 10.0)
+    // vec2 anchor = FGData.mousePos.xy;
+    // if(distance(gl_FragCoord.xy,anchor) < 10.0)
+    // {
+    //     outColor = vec4(1.0,0.0,0.0,1.0);
+    // }else{
+    //     discard;
+    // }
+    vec3 worldPosition = texture(wPos,inUV).xyz;
+    if(length(worldPosition)==0.0)
     {
-        outColor = vec4(1.0,0.0,0.0,1.0);
-    }else{
         discard;
+    }else{
+        outColor = vec4(worldPosition,1.0);
     }
 }

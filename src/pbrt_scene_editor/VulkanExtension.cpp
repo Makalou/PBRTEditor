@@ -246,7 +246,7 @@ VulkanGraphicsPipelineBuilder::VulkanGraphicsPipelineBuilder(vk::Device device,
     _renderPass = renderPass;
 
     //set default state
-    _InputAssemblyStateInfo.setTopology(vk::PrimitiveTopology::eTriangleStrip);
+    _InputAssemblyStateInfo.setTopology(vk::PrimitiveTopology::eTriangleList);
     _InputAssemblyStateInfo.setPrimitiveRestartEnable(vk::False);
 
     _RasterizationStateInfo.setRasterizerDiscardEnable(vk::False);

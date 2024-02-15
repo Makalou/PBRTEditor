@@ -42,5 +42,9 @@ USE_FRAME_GLOBAL_DATA
 layout(set = 1, binding = 0) uniform BCAMERA_BLOCK_LAYOUT camera;
 
 void main() {
-    gl_Position = vec4(vec3(0.0), 1.0);
+    float x = cos(FGData.time.x)*inVertexPosition.x - sin(FGData.time.x)*inVertexPosition.z;
+    float z = cos(FGData.time.x)*inVertexPosition.x + sin(FGData.time.x)*inVertexPosition.z;
+    vec3 position = 0.2 * vec3(x,-inVertexPosition.y,z);
+    gl_Position = vec4(position, 1.0);
+    outVertexPosition = position;
 }

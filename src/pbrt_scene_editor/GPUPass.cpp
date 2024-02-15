@@ -634,6 +634,10 @@ vk::CommandBuffer GPUFrame::recordMainQueueCommands() {
     frameLabel.setPLabelName(frameLabelName.c_str());
     cmdPrimary.beginDebugUtilsLabelEXT(frameLabel,backendDevice->getDLD());
     cmdPrimary.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,_frameLevelPipelineLayout,0,_frameGlobalDescriptorSet,nullptr);
+
+    cmdPrimary.setViewport(0, backendDevice->_swapchain.getDefaultViewport());
+    cmdPrimary.setScissor(0,backendDevice->_swapchain.getDefaultScissor());
+
     for(int i = 0 ; i < _rasterPasses.size(); i ++)
     {
         _rasterPasses[i]->prepareIncremental(this);

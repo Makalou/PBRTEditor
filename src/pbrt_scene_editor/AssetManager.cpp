@@ -190,7 +190,7 @@ MeshHostObject parseAssimpMesh(aiMesh* mesh)
     }catch (std::bad_alloc& e)
     {
         std::cout << e.what() << std::endl;
-        std::abort();
+        throw std::runtime_error(e.what());
     }
 
     return meshHostObj;

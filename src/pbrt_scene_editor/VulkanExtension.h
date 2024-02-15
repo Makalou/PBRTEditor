@@ -27,6 +27,26 @@ struct SwapchainExtended : vkb::Swapchain
         return this->swapchain;
     }
 
+    vk::Viewport getDefaultViewport() const
+    {
+        vk::Viewport viewport{};
+        viewport.x = 0.0f;
+        viewport.y = 0.0f;
+        viewport.width = (float)this->extent.width;
+        viewport.height = (float)this->extent.height;
+        viewport.minDepth = 0.0f;
+        viewport.maxDepth = 1.0f;
+        return viewport;
+    }
+
+    vk::Rect2D getDefaultScissor() const
+    {
+        vk::Rect2D scissor{};
+        scissor.offset = vk::Offset2D{ 0, 0 };
+        scissor.extent = this->extent;
+        return scissor;
+    }
+
 private:
     std::vector<std::function<void(SwapchainExtended*)>> recreateCallbacks;
 };
@@ -690,7 +710,7 @@ struct VulkanGraphicsPipelineBuilder
                                   vk::RenderPass renderPass,
                                   vk::PipelineLayout pipelineLayout,
                                   Args... args)
-                                  : VulkanGraphicsPipelineBuilder(device,vs,fs,vertexInputInfo,renderPass,_pipelineLayout)
+                                  : VulkanGraphicsPipelineBuilder(device,vs,fs,vertexInputInfo,renderPass,pipelineLayout)
     {
         (setStateInfo(std::move(args)), ...);
     }

@@ -22,5 +22,5 @@ layout(location = 0) out vec4 outFragColor;
 #endif
 
 void main() {
-    outFragColor = vec4(1.0, 0.0, 0.0, 1.0);
+    outFragColor = vec4(inFragPosition, 1.0);
 }

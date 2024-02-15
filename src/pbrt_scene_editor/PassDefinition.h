@@ -76,6 +76,7 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
     vk::DescriptorSet passDataDescriptorSet;
     vk::DescriptorSetLayout passDataDescriptorLayout;
     vk::PipelineLayout passLevelPipelineLayout;
+    vk::PipelineRasterizationStateCreateInfo rasterInfo{};
     void prepareAOT(const GPUFrame* frame) override
     {
         std::vector<vk::DescriptorSetLayoutBinding> bindings;
@@ -112,6 +113,11 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
 //        write.setBufferInfo(camBufferInfo);
 //        frame->backendDevice->updateDescriptorSets(write,{});
         passLevelPipelineLayout = frame->backendDevice->createPipelineLayout2({frame->_frameGlobalDescriptorSetLayout,passDataDescriptorLayout});
+        rasterInfo.setCullMode(vk::CullModeFlagBits::eBack);
+        rasterInfo.setRasterizerDiscardEnable(vk::False);
+        rasterInfo.setFrontFace(vk::FrontFace::eCounterClockwise);
+        rasterInfo.setPolygonMode(vk::PolygonMode::eFill);
+        rasterInfo.setLineWidth(1.0);
     }
 
     using InstnaceUUIDMap = std::unordered_map<renderScene::InstanceUUID,int,renderScene::InstanceUUIDHash>;
@@ -174,7 +180,11 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
             auto* vs = ShaderManager::getInstance().createVertexShader(frame->backendDevice.get(),"simple.vert",macroList);
             auto* fs = ShaderManager::getInstance().createFragmentShader(frame->backendDevice.get(),"simple.frag",macroList);
             vk::PipelineDepthStencilStateCreateInfo depthStencilStateCreateInfo{};
-            VulkanGraphicsPipelineBuilder builder(frame->backendDevice->device,vs,fs,vertexInputState.getCreateInfo(),renderPass,passLevelPipelineLayout);
+            VulkanGraphicsPipelineBuilder builder(frame->backendDevice->device,vs,fs,
+                vertexInputState.getCreateInfo(),
+                renderPass,
+                passLevelPipelineLayout,
+                rasterInfo);
             auto pipeline = builder.build();
             graphicsPipelines.push_back(pipeline);
             idx = graphicsPipelines.size() - 1;
@@ -250,12 +260,42 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
 RASTERIZEDPASS_DEF_END(GBufferPass)
 
 RASTERIZEDPASS_DEF_BEGIN(DeferredLightingPass)
+    vk::DescriptorPool descriptorPool;
+    vk::DescriptorSetLayout passDataDescriptorSetLayout;
+    vk::DescriptorSet passDataDescriptorSet;
+    vk::PipelineLayout pipelineLayout;
     void prepareAOT(const GPUFrame* frame) override
     {
         auto vs = FullScreenQuadDrawer::getVertexShader(frame->backendDevice.get());
         auto fs = ShaderManager::getInstance().createFragmentShader(frame->backendDevice.get(),"deferred.frag");
 
-        auto pipelineLayout = frame->backendDevice->createPipelineLayout2({frame->_frameGlobalDescriptorSetLayout});
+        auto baseLayout = frame->getPassDataDescriptorSetBaseLayout(this);
+        passDataDescriptorSetLayout = frame->backendDevice->createDescriptorSetLayout2(baseLayout.bindings);
+        frame->backendDevice->setObjectDebugName(passDataDescriptorSetLayout, "DeferredLightingPassDataDescriptorLayout");
+
+        vk::DescriptorPoolCreateInfo descriptorPoolCreateInfo{};
+        std::vector<vk::DescriptorPoolSize> poolSizes;
+        poolSizes.reserve(baseLayout.bindings.size());
+        for (const auto& binding : baseLayout.bindings)
+        {
+            poolSizes.emplace_back(binding.descriptorType, binding.descriptorCount);
+        }
+        descriptorPoolCreateInfo.setPoolSizes(poolSizes);
+        descriptorPoolCreateInfo.setMaxSets(10);
+
+        descriptorPool = frame->backendDevice->createDescriptorPool(descriptorPoolCreateInfo);
+        passDataDescriptorSet = frame->backendDevice->allocateSingleDescriptorSet(descriptorPool, passDataDescriptorSetLayout);
+        frame->backendDevice->setObjectDebugName(passDataDescriptorSet, "DeferredLightingPassDataDescriptorSet");
+
+        for (auto& write : baseLayout.writes)
+        {
+            write.setDstSet(passDataDescriptorSet);
+        }
+
+        frame->backendDevice->updateDescriptorSets(baseLayout.writes, {});
+
+        pipelineLayout = frame->backendDevice->createPipelineLayout2({frame->_frameGlobalDescriptorSetLayout,
+            passDataDescriptorSetLayout});
         frame->backendDevice->setObjectDebugName(pipelineLayout, "DeferredLightingPassPipelineLayout");
         VulkanGraphicsPipelineBuilder builder(frame->backendDevice->device,vs,fs,
                                               FullScreenQuadDrawer::getVertexInputStateInfo(),renderPass,
@@ -268,10 +308,7 @@ RASTERIZEDPASS_DEF_BEGIN(DeferredLightingPass)
     void record(vk::CommandBuffer cmdBuf,const GPUFrame* frame) override
     {
         beginPass(cmdBuf);
-        //vk::Viewport viewport{};
-        //cmdBuf.setViewport(0,viewport);
-        //vk::Rect2D scissor{};
-        //cmdBuf.setScissor(0,scissor);
+        cmdBuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 1, passDataDescriptorSet, nullptr);
         cmdBuf.bindPipeline(vk::PipelineBindPoint::eGraphics,graphicsPipelines[0].getPipeline());
         FullScreenQuadDrawer::draw(cmdBuf);
         endPass(cmdBuf);
@@ -280,13 +317,14 @@ RASTERIZEDPASS_DEF_END(DefereredLightingPass)
 
 RASTERIZEDPASS_DEF_BEGIN(PostProcessPass)
     vk::DescriptorPool descriptorPool;
+    vk::DescriptorSetLayout passDataDescriptorSetLayout;
     vk::DescriptorSet passDataDescriptorSet;
     vk::PipelineLayout pipelineLayout;
     void prepareAOT(const GPUFrame* frame) override
     {
         auto baseLayout = frame->getPassDataDescriptorSetBaseLayout(this);
-        auto passDataDescriptorLayout = frame->backendDevice->createDescriptorSetLayout2(baseLayout.bindings);
-        frame->backendDevice->setObjectDebugName(passDataDescriptorLayout, "PostProcessPassDataDescriptorLayout");
+        passDataDescriptorSetLayout = frame->backendDevice->createDescriptorSetLayout2(baseLayout.bindings);
+        frame->backendDevice->setObjectDebugName(passDataDescriptorSetLayout, "PostProcessPassDataDescriptorLayout");
 
         vk::DescriptorPoolCreateInfo descriptorPoolCreateInfo{};
         std::vector<vk::DescriptorPoolSize> poolSizes;
@@ -299,7 +337,7 @@ RASTERIZEDPASS_DEF_BEGIN(PostProcessPass)
         descriptorPoolCreateInfo.setMaxSets(10);
 
         descriptorPool = frame->backendDevice->createDescriptorPool(descriptorPoolCreateInfo);
-        passDataDescriptorSet = frame->backendDevice->allocateSingleDescriptorSet(descriptorPool,passDataDescriptorLayout);
+        passDataDescriptorSet = frame->backendDevice->allocateSingleDescriptorSet(descriptorPool,passDataDescriptorSetLayout);
         frame->backendDevice->setObjectDebugName(passDataDescriptorSet, "PostProcessPassDataDescriptorSet");
 
         for(auto & write : baseLayout.writes)
@@ -312,7 +350,7 @@ RASTERIZEDPASS_DEF_BEGIN(PostProcessPass)
         auto vs = FullScreenQuadDrawer::getVertexShader(frame->backendDevice.get());
         auto fs = ShaderManager::getInstance().createFragmentShader(frame->backendDevice.get(),"postProcess.frag");
 
-        pipelineLayout = frame->backendDevice->createPipelineLayout2({frame->_frameGlobalDescriptorSetLayout,passDataDescriptorLayout});
+        pipelineLayout = frame->backendDevice->createPipelineLayout2({frame->_frameGlobalDescriptorSetLayout,passDataDescriptorSetLayout});
         frame->backendDevice->setObjectDebugName(pipelineLayout, "PostProcessPassPipelineLayout");
 
         VulkanGraphicsPipelineBuilder builder(frame->backendDevice->device,vs,fs,
@@ -326,10 +364,6 @@ RASTERIZEDPASS_DEF_BEGIN(PostProcessPass)
     void record(vk::CommandBuffer cmdBuf,const GPUFrame* frame) override
     {
         beginPass(cmdBuf);
-        //vk::Viewport viewport{};
-        //cmdBuf.setViewport(0,viewport);
-        //vk::Rect2D scissor{};
-        //cmdBuf.setScissor(0,scissor);
         cmdBuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,pipelineLayout,1,passDataDescriptorSet, nullptr);
         cmdBuf.bindPipeline(vk::PipelineBindPoint::eGraphics,graphicsPipelines[0].getPipeline());
         FullScreenQuadDrawer::draw(cmdBuf);
