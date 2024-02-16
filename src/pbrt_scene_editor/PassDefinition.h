@@ -101,18 +101,10 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
 
         descriptorPool = frame->backendDevice->createDescriptorPool(descriptorPoolCreateInfo);
         passDataDescriptorSet = frame->backendDevice->allocateSingleDescriptorSet(descriptorPool,passDataDescriptorLayout);
-        vk::WriteDescriptorSet write;
-        write.setDstSet(passDataDescriptorSet);
-        write.setDescriptorCount(1);
-        write.setDescriptorType(vk::DescriptorType::eUniformBuffer);
-        write.setDstBinding(0);
-//        vk::DescriptorBufferInfo camBufferInfo{};
-//        camBufferInfo.setBuffer(scene->mainView.camera.data[frame->frameIdx].getBuffer());
-//        camBufferInfo.setRange(vk::WholeSize);
-//        camBufferInfo.setOffset(0);
-//        write.setBufferInfo(camBufferInfo);
-//        frame->backendDevice->updateDescriptorSets(write,{});
+        frame->backendDevice->updateDescriptorSetUniformBuffer(passDataDescriptorSet,0,scene->mainView.camera.data.getBuffer());
+
         passLevelPipelineLayout = frame->backendDevice->createPipelineLayout2({frame->_frameGlobalDescriptorSetLayout,passDataDescriptorLayout});
+
         rasterInfo.setCullMode(vk::CullModeFlagBits::eBack);
         rasterInfo.setRasterizerDiscardEnable(vk::False);
         rasterInfo.setFrontFace(vk::FrontFace::eCounterClockwise);

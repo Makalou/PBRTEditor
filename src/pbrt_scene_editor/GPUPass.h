@@ -420,6 +420,16 @@ struct GPUFrame
         return backingImageViews.find(name)->second;
     }
 
+    int allocateSingleDescriptorSet(vk::DescriptorSetLayout layout) const
+    {
+
+    }
+
+    void getAllocatedDescriptorSet(int handle, const std::function<void(vk::DescriptorSet)>& callback) const
+    {
+
+    }
+
     PassAttachmentDescription* swapchainAttachment;
     std::vector<int> sortedIndices;
     std::vector<std::unique_ptr<GPURasterizedPass>> _rasterPasses;

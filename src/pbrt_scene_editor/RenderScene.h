@@ -11,6 +11,7 @@
 #include "VulkanExtension.h"
 #include "AssetManager.hpp"
 #include "window.h"
+#include <glm/gtc/matrix_transform.hpp>
 
 namespace renderScene {
 
@@ -368,7 +369,9 @@ namespace renderScene {
 
     struct MainCamera
     {
-        std::vector<VMAObservedBufferMapped<MainCameraData>> data;
+        double yaw;
+        double pitch;
+        VMAObservedBufferMapped<MainCameraData> data;
     };
 
     struct RenderScene;
@@ -516,9 +519,24 @@ namespace renderScene {
              *
              * In other word, all the manipulation of data must go through the subsystem, or manager.
              */
+            mainView.camera.data = backendDevice->allocateObservedBufferPull<MainCameraData>(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT).value();
 
-            Window::registerKeyCallback([this](int key, int scancode, int action, int mods)->void{
-                std::cout << key << std::endl;
+            mainView.camera.data->position.x = 1;
+            mainView.camera.data->position.y = 1;
+            mainView.camera.data->position.z = 1;
+
+            //mainView.camera.data->view = glm::lookAt(glm::vec3{mainView.camera.data->position},{0,0,0},{0,1,0});
+            mainView.camera.data->view = glm::identity<glm::mat4>();
+            mainView.camera.data->proj = glm::perspective(60,1440/810,0,1000);
+
+            Window::registerMouseDragCallback([this](int button, double deltaX, double deltaY){
+               if(button == GLFW_MOUSE_BUTTON_LEFT)
+               {
+                  float delta_yaw = 0.1f * deltaX;
+                  float delta_pitch = 0.1f * deltaY;
+                  mainView.camera.data->view = glm::rotate(mainView.camera.data->view, glm::radians(delta_yaw), glm::vec3(0.0f, 1.0f, 0.0f));
+                  mainView.camera.data->view = glm::rotate(mainView.camera.data->view, glm::radians(delta_pitch), glm::vec3(1.0f, 0.0f, 0.0f));
+               }
             });
         }
         std::shared_ptr<DeviceExtended> backendDevice;
