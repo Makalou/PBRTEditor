@@ -77,6 +77,7 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
     vk::DescriptorSetLayout passDataDescriptorLayout;
     vk::PipelineLayout passLevelPipelineLayout;
     vk::PipelineRasterizationStateCreateInfo rasterInfo{};
+    vk::PipelineDepthStencilStateCreateInfo depthStencilInfo{};
     void prepareAOT(const GPUFrame* frame) override
     {
         std::vector<vk::DescriptorSetLayoutBinding> bindings;
@@ -110,6 +111,14 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
         rasterInfo.setFrontFace(vk::FrontFace::eClockwise);
         rasterInfo.setPolygonMode(vk::PolygonMode::eFill);
         rasterInfo.setLineWidth(1.0);
+
+        depthStencilInfo.setDepthTestEnable(vk::True);
+        depthStencilInfo.setDepthWriteEnable(vk::True);
+        depthStencilInfo.setDepthCompareOp(vk::CompareOp::eLess);
+        depthStencilInfo.setDepthBoundsTestEnable(vk::False);
+        depthStencilInfo.setMinDepthBounds(0.0f);
+        depthStencilInfo.setMaxDepthBounds(1.0f);
+        depthStencilInfo.setStencilTestEnable(vk::False);
     }
 
     using InstnaceUUIDMap = std::unordered_map<renderScene::InstanceUUID,int,renderScene::InstanceUUIDHash>;
@@ -176,7 +185,7 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
                 vertexInputState.getCreateInfo(),
                 renderPass,
                 passLevelPipelineLayout,
-                rasterInfo);
+                rasterInfo,depthStencilInfo);
             auto pipeline = builder.build();
             graphicsPipelines.push_back(pipeline);
             idx = graphicsPipelines.size() - 1;

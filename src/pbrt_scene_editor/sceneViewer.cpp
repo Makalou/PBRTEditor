@@ -30,8 +30,8 @@ void SceneViewer::init(std::shared_ptr<DeviceExtended> device) {
         {
             auto gBufferPass = std::make_unique<GBufferPass>();
             gBufferPass->scene = this->_renderScene;
-//            gBufferPass->addOutput<PassAttachmentDescription>("depth",vk::Format::eD32Sfloat,WINDOW_WIDTH,WINDOW_HEIGHT,
-//                                                              vk::AttachmentLoadOp::eClear,vk::AttachmentStoreOp::eStore);
+            gBufferPass->addOutput<PassAttachmentDescription>("depth",vk::Format::eD32Sfloat,WINDOW_WIDTH,WINDOW_HEIGHT,
+                                                              vk::AttachmentLoadOp::eClear,vk::AttachmentStoreOp::eStore);
             //gBufferPass->addOutput<PassAttachmentDescription>("wPosition",vk::Format::eR16G16B16A16Sfloat,WINDOW_WIDTH,WINDOW_HEIGHT,
             //                                                  vk::AttachmentLoadOp::eClear,vk::AttachmentStoreOp::eStore);
             gBufferPass->addOutput<PassAttachmentDescription>("wPosition",vk::Format::eR8G8B8A8Srgb,WINDOW_WIDTH,WINDOW_HEIGHT,

@@ -47,6 +47,7 @@ void GPURasterizedPass::beginPass(vk::CommandBuffer cmdBuf) {
     beginInfo.setClearValueCount(1);
     auto clearValue = vk::ClearValue{};
     clearValue.setColor(vk::ClearColorValue{});
+    clearValue.depthStencil.depth = 1.0f;
     beginInfo.setClearValues(clearValue);
     cmdBuf.beginRenderPass(beginInfo,vk::SubpassContents::eInline);
 }
