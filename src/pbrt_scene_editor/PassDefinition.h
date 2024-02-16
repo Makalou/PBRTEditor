@@ -105,9 +105,9 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
 
         passLevelPipelineLayout = frame->backendDevice->createPipelineLayout2({frame->_frameGlobalDescriptorSetLayout,passDataDescriptorLayout});
 
-        rasterInfo.setCullMode(vk::CullModeFlagBits::eBack);
+        rasterInfo.setCullMode(vk::CullModeFlagBits::eNone);
         rasterInfo.setRasterizerDiscardEnable(vk::False);
-        rasterInfo.setFrontFace(vk::FrontFace::eCounterClockwise);
+        rasterInfo.setFrontFace(vk::FrontFace::eClockwise);
         rasterInfo.setPolygonMode(vk::PolygonMode::eFill);
         rasterInfo.setLineWidth(1.0);
     }

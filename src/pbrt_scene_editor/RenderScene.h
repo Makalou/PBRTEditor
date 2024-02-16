@@ -371,6 +371,7 @@ namespace renderScene {
     {
         double yaw;
         double pitch;
+        glm::vec3 front;
         VMAObservedBufferMapped<MainCameraData> data;
     };
 
@@ -410,22 +411,63 @@ namespace renderScene {
         {
             mainView.camera.data = backendDevice->allocateObservedBufferPull<MainCameraData>(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT).value();
 
-            mainView.camera.data->position.x = 1;
-            mainView.camera.data->position.y = 1;
-            mainView.camera.data->position.z = 1;
+            mainView.camera.data->position.x = 0;
+            mainView.camera.data->position.y = 0;
+            mainView.camera.data->position.z = 0;
 
-            //mainView.camera.data->view = glm::lookAt(glm::vec3{mainView.camera.data->position},{0,0,0},{0,1,0});
-            mainView.camera.data->view = glm::identity<glm::mat4>();
-            mainView.camera.data->proj = glm::perspective(60,1440/810,0,1000);
+            mainView.camera.pitch = 0.0f;
+            mainView.camera.yaw = 0.0f;
+
+            glm::vec3 direction;
+            direction.x = cos(glm::radians(mainView.camera.yaw)) * cos(glm::radians(mainView.camera.pitch));
+            direction.y = sin(glm::radians(mainView.camera.pitch));
+            direction.z = sin(glm::radians(mainView.camera.yaw)) * cos(glm::radians(mainView.camera.pitch));
+            mainView.camera.front = glm::normalize(direction);
+            glm::vec3 eye = mainView.camera.data->position;
+            mainView.camera.data->view = glm::lookAt(eye, eye + mainView.camera.front, { 0,1,0 });
+            mainView.camera.data->proj = glm::perspective(glm::radians(60.0f),1440.0f/810.0f,0.1f,1000.0f);
+            mainView.camera.data->proj[1][1] *= 1.0f;
 
             Window::registerMouseDragCallback([this](int button, double deltaX, double deltaY){
                 if(button == GLFW_MOUSE_BUTTON_LEFT)
                 {
-                    float delta_yaw = 0.1f * deltaX;
-                    float delta_pitch = 0.1f * deltaY;
-                    //mainView.camera.data->view = glm::rotate(mainView.camera.data->view, glm::radians(delta_yaw), glm::vec3(0.0f, 1.0f, 0.0f));
-                    //mainView.camera.data->view = glm::rotate(mainView.camera.data->view, glm::radians(delta_pitch), glm::vec3(1.0f, 0.0f, 0.0f));
+                    mainView.camera.yaw += 0.1f * deltaX;
+                    mainView.camera.pitch += 0.1f * deltaY;
+                    
+                    glm::vec3 direction;
+                    direction.x = cos(glm::radians(mainView.camera.yaw)) * cos(glm::radians(mainView.camera.pitch));
+                    direction.y = sin(glm::radians(mainView.camera.pitch));
+                    direction.z = sin(glm::radians(mainView.camera.yaw)) * cos(glm::radians(mainView.camera.pitch));
+
+                    mainView.camera.front = glm::normalize(direction);
+                    glm::vec3 eye = mainView.camera.data->position;
+                    mainView.camera.data->view = glm::lookAt(eye, eye + mainView.camera.front, { 0,1,0 });
                 }
+            });
+
+            Window::registerKeyCallback([this](int key, int scancode, int action, int mods) {
+                bool hold = (action == GLFW_REPEAT || action == GLFW_PRESS);
+                if (key == GLFW_KEY_W && hold)
+                {
+                    mainView.camera.data->position += 0.1f * glm::vec4(mainView.camera.front,0.0);
+                }
+                if (key == GLFW_KEY_S && hold)
+                {
+                    mainView.camera.data->position -= 0.1f * glm::vec4(mainView.camera.front, 0.0);
+                }
+                if (key == GLFW_KEY_A && hold)
+                {
+                    auto right = glm::normalize(glm::cross(mainView.camera.front, { 0,1,0 }));
+                    mainView.camera.data->position -= 0.1f * glm::vec4(right, 0.0);
+                }
+                if (key == GLFW_KEY_D && hold)
+                {
+                    auto right = glm::normalize(glm::cross(mainView.camera.front, { 0,1,0 }));
+                    mainView.camera.data->position += 0.1f * glm::vec4(right, 0.0);
+                }
+
+                glm::vec3 eye = mainView.camera.data->position;
+                mainView.camera.data->view = glm::lookAt(eye, eye + mainView.camera.front, { 0,1,0 });
             });
         }
 
