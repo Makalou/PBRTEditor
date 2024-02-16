@@ -16,8 +16,7 @@ void SceneViewer::constructFrame()
 
 void SceneViewer::init(std::shared_ptr<DeviceExtended> device) {
     backendDevice = std::move(device);
-    _renderScene = new renderScene::RenderScene;
-    _renderScene->backendDevice = backendDevice;
+    _renderScene = new renderScene::RenderScene(backendDevice);
 
     for(int i = 0 ; i < 3; i ++)
     {
