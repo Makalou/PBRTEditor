@@ -11,6 +11,7 @@ using keyCallbackT = std::function<void(int key, int scancode, int action, int m
 using scrollCallbackT = std::function<void(double xoffset, double yoffset)>;
 using mouseButtonCallbackT = std::function<void(int button, int action, int mods)>;
 using cursorPosCallbackT = std::function<void(double xPos, double yPos)>;
+using mouseDragCallbackT = std::function<void(int button, double xOffset, double yOffset)>;
 
 struct Window {
 public:
@@ -37,6 +38,9 @@ public:
     /*(xPos, yPos)*/
     static void registerCursorPosCallback(const cursorPosCallbackT& fn);
 
+    /*(button, xOffset, yOffset)*/
+    static void registerMouseDragCallback(const mouseDragCallbackT& fn);
+
 private:
 	GLFWwindow* window;
 	int width, height;
@@ -53,5 +57,6 @@ private:
 	static std::vector<scrollCallbackT> scrollCallbackList;
 	static std::vector<mouseButtonCallbackT> mouseButtonCallbackList;
     static std::vector<cursorPosCallbackT> cursorPosCallbackList;
+    static std::vector<mouseDragCallbackT> mouseDragCallbackList;
 
 };

@@ -59,6 +59,7 @@ std::vector<keyCallbackT> Window::keyCallbackList = {};
 std::vector<scrollCallbackT> Window::scrollCallbackList = {};
 std::vector<mouseButtonCallbackT> Window::mouseButtonCallbackList = {};
 std::vector<cursorPosCallbackT> Window::cursorPosCallbackList = {};
+std::vector<mouseDragCallbackT> Window::mouseDragCallbackList = {};
 
 void Window::registerFramebufferResizeCallback(const framebufferResizeCallbackT& fn)
 {
@@ -79,6 +80,10 @@ void Window::registerMouseButtonCallback(const mouseButtonCallbackT& fn)
 
 void Window::registerCursorPosCallback(const cursorPosCallbackT& fn) {
     cursorPosCallbackList.emplace_back(fn);
+}
+
+void Window::registerMouseDragCallback(const mouseDragCallbackT& fn) {
+    mouseDragCallbackList.emplace_back(fn);
 }
 
 void Window::framebufferResizeCallback(GLFWwindow* window, int width, int height)
@@ -109,9 +114,88 @@ void Window::mouseButtonCallback(GLFWwindow* window, int button, int action, int
 		callback(button,action,mods);
 	}
 }
+
 void Window::cursorPosCallback(GLFWwindow *window, double xPos, double yPos) {
     for(auto & callback : cursorPosCallbackList)
     {
         callback(xPos,yPos);
+    }
+
+    static bool is_mouse_button_left_pressing = false;
+
+    if(glfwGetMouseButton(window,GLFW_MOUSE_BUTTON_LEFT)==GLFW_PRESS)
+    {
+        static double last_x = 0.0;
+        static double last_y = 0.0;
+
+        if(is_mouse_button_left_pressing)
+        {
+            double xOffset = xPos - last_x;
+            double yOffset = yPos - last_y;
+
+            for(auto & callback : mouseDragCallbackList)
+            {
+                callback(GLFW_MOUSE_BUTTON_LEFT,xOffset,yOffset);
+            }
+        }else{
+            is_mouse_button_left_pressing = true;
+        }
+
+        last_x = xPos;
+        last_y = yPos;
+    }else{
+        is_mouse_button_left_pressing = false;
+    }
+
+    static bool is_mouse_button_right_pressing = false;
+
+    if(glfwGetMouseButton(window,GLFW_MOUSE_BUTTON_RIGHT)==GLFW_PRESS)
+    {
+        static double last_x = 0.0;
+        static double last_y = 0.0;
+
+        if(is_mouse_button_right_pressing)
+        {
+            double xOffset = xPos - last_x;
+            double yOffset = yPos - last_y;
+
+            for(auto & callback : mouseDragCallbackList)
+            {
+                callback(GLFW_MOUSE_BUTTON_RIGHT,xOffset,yOffset);
+            }
+        }else{
+            is_mouse_button_right_pressing = true;
+        }
+
+        last_x = xPos;
+        last_y = yPos;
+    }else{
+        is_mouse_button_right_pressing = false;
+    }
+
+    static bool is_mouse_button_middle_pressing = false;
+
+    if(glfwGetMouseButton(window,GLFW_MOUSE_BUTTON_MIDDLE)==GLFW_PRESS)
+    {
+        static double last_x = 0.0;
+        static double last_y = 0.0;
+
+        if(is_mouse_button_middle_pressing)
+        {
+            double xOffset = xPos - last_x;
+            double yOffset = yPos - last_y;
+
+            for(auto & callback : mouseDragCallbackList)
+            {
+                callback(GLFW_MOUSE_BUTTON_MIDDLE,xOffset,yOffset);
+            }
+        }else{
+            is_mouse_button_middle_pressing = true;
+        }
+
+        last_x = xPos;
+        last_y = yPos;
+    }else{
+        is_mouse_button_middle_pressing = false;
     }
 }
