@@ -41,7 +41,7 @@ namespace renderScene {
             bindingDesc.setInputRate(vk::VertexInputRate::eVertex);
             bindingDesc.setBinding(0);
             bindingDesc.setStride(vertexAttribute.stride);
-            return std::move(bindingDesc);
+            return bindingDesc;
         }
 
         auto initAttributeDescription(const VertexAttribute& attribute)
@@ -209,10 +209,24 @@ namespace renderScene {
             cmd.drawIndexed(mesh->indexCount, 1, 0, 0, 0);
         }
 
-        void drawCurrentVisible( vk::CommandBuffer cmd) const{
-            mesh->bind(cmd);
-            //todo bind per instance data
-            cmd.drawIndexed(mesh->indexCount, visibleInstanceCount, 0, 0, 0);
+        uint32_t drawCulled( vk::CommandBuffer cmd, const std::function<bool(MeshRigidHandle meshHandle, const PerInstDataT &)> & cull) const{
+            uint32_t visibleInstanceCount = 0;
+            for(int i = 0; i < perInstanceData.size(); i ++)
+            {
+                if(cull(mesh,perInstanceData[i]))
+                {
+                    visibleInstanceCount++;
+                }
+            }
+
+            if(visibleInstanceCount > 0)
+            {
+                mesh->bind(cmd);
+                //todo bind per instance data
+                cmd.drawIndexed(mesh->indexCount, visibleInstanceCount, 0, 0, 0);
+            }
+
+            return visibleInstanceCount;
         }
 
         /*
@@ -242,7 +256,6 @@ namespace renderScene {
         int perInstanceBindingIdx;
         MeshRigidHandle mesh;
         const VulkanPipelineVertexInputStateInfo pipelineVertexInputStateInfo{};
-        size_t visibleInstanceCount{};
         VMABuffer perInstDataBuffer{};
         InstanceUUID _uuid;
     };
@@ -369,9 +382,9 @@ namespace renderScene {
 
     struct MainCamera
     {
-        double yaw;
-        double pitch;
-        glm::vec3 front;
+        double yaw{};
+        double pitch{};
+        glm::vec3 front{};
         VMAObservedBufferMapped<MainCameraData> data;
     };
 
@@ -387,6 +400,12 @@ namespace renderScene {
     struct InstanceData
     {
         int meshID;
+    };
+
+    struct AABB
+    {
+        float minX; float minY; float minZ;
+        float maxX; float maxY; float maxZ;
     };
 
     using InstanceBatchRigidDynamicType = InstanceBatchRigidDynamic<PerInstanceData>;
@@ -405,9 +424,10 @@ namespace renderScene {
         std::vector<GoniometricLight> goniometricLights{};
         std::vector<ProjectionLight> projectionLights{};
 
+        std::vector<AABB> aabbs{};
         RenderView mainView;
 
-        RenderScene(const std::shared_ptr<DeviceExtended>& device) : backendDevice(device)
+        explicit RenderScene(const std::shared_ptr<DeviceExtended>& device) : backendDevice(device)
         {
             mainView.camera.data = backendDevice->allocateObservedBufferPull<MainCameraData>(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT).value();
 
@@ -538,6 +558,10 @@ namespace renderScene {
                             backendDevice->oneTimeUploadSync(interleaveAttribute.first,vertexBufferSize,meshRigid.vertexBuffer.buffer);
 
                             meshes.emplace_back(shape_uuid,meshRigid);
+                            AABB aabb{};
+                            aabb.minX = meshHost->aabb[0]; aabb.minY = meshHost->aabb[1]; aabb.minZ = meshHost->aabb[2];
+                            aabb.maxX = meshHost->aabb[3]; aabb.maxY = meshHost->aabb[4]; aabb.maxZ = meshHost->aabb[5];
+                            aabbs.emplace_back(aabb);
                             meshHandle.scene = this;
                             meshHandle.idx = meshes.size() - 1;
                         }
@@ -550,7 +574,6 @@ namespace renderScene {
                             {
                                 foundInstance = true;
                                 inst.perInstanceData.push_back({node->_finalTransform});
-                                inst.visibleInstanceCount++;
                                 break;
                             }
                         }
@@ -559,7 +582,6 @@ namespace renderScene {
                         {
                             InstanceBatchRigidDynamic<PerInstanceData> meshInstanceRigidDynamic(meshHandle);
                             meshInstanceRigidDynamic.perInstanceData.push_back({node->_finalTransform});
-                            meshInstanceRigidDynamic.visibleInstanceCount ++;
                             _dynamicRigidMeshBatch.push_back(meshInstanceRigidDynamic);
                         }
                     }

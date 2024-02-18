@@ -83,6 +83,8 @@ std::future<TextureHostObject*>* AssetManager::getOrLoadImgAsync(const std::stri
 MeshHostObject parseAssimpMesh(aiMesh* mesh)
 {
     MeshHostObject meshHostObj;
+    meshHostObj.aabb[0] = meshHostObj.aabb[1] = meshHostObj.aabb[2] = std::numeric_limits<float>::infinity();
+    meshHostObj.aabb[3] = meshHostObj.aabb[4] = meshHostObj.aabb[5] = -std::numeric_limits<float>::infinity();
     meshHostObj.vertex_count = mesh->mNumVertices;
     //we assume each vertex include position
     assert(mesh->HasPositions());
@@ -94,6 +96,12 @@ MeshHostObject parseAssimpMesh(aiMesh* mesh)
             position[i * 3] = mesh->mVertices[i].x;
             position[i * 3 + 1] = mesh->mVertices[i].y;
             position[i * 3 + 2] = mesh->mVertices[i].z;
+            meshHostObj.aabb[0] = std::min(meshHostObj.aabb[0],mesh->mVertices[i].x);
+            meshHostObj.aabb[1] = std::min(meshHostObj.aabb[1],mesh->mVertices[i].y);
+            meshHostObj.aabb[2] = std::min(meshHostObj.aabb[2],mesh->mVertices[i].z);
+            meshHostObj.aabb[3] = std::max(meshHostObj.aabb[3],mesh->mVertices[i].x);
+            meshHostObj.aabb[4] = std::max(meshHostObj.aabb[4],mesh->mVertices[i].y);
+            meshHostObj.aabb[5] = std::max(meshHostObj.aabb[5],mesh->mVertices[i].z);
         }
         meshHostObj.position.reset(position);
         //normal, tangent and uv is optional

@@ -243,6 +243,12 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
 
         if(scene!= nullptr)
         {
+            auto view = scene->mainView.camera.data->view;
+            auto proj = scene->mainView.camera.data->proj;
+            auto vp = proj * view;
+
+            int visibleCount = 0;
+
             for(int i = 0; i < scene->_dynamicRigidMeshBatch.size(); i++)
             {
                 auto & instanceRigidDynamic = scene->_dynamicRigidMeshBatch[i];
@@ -250,7 +256,33 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
                 // todo : Here is a big problem. The performance is unpredictable.
                 bindRenderState(cmdBuf,frame,instanceRigidDynamic);
                 //mesh instance know how to bind the geometry buffer, how to draw
-                instanceRigidDynamic.drawAll(cmdBuf);
+                //instanceRigidDynamic.drawAll(cmdBuf);
+                visibleCount += instanceRigidDynamic.drawCulled(cmdBuf,[&](auto meshHandle, const auto & perInstanceData) -> bool {
+                    auto aabb = scene->aabbs[meshHandle.idx];
+                    glm::vec3 corners[8]{};
+                    corners[0] = {aabb.minX, -aabb.minY, aabb.minZ};
+                    corners[1] = {aabb.maxX, -aabb.minY, aabb.minZ};
+                    corners[2] = {aabb.minX, -aabb.maxY, aabb.minZ};
+                    corners[3] = {aabb.minX, -aabb.minY, aabb.maxZ};
+                    corners[4] = {aabb.maxX, -aabb.maxY, aabb.minZ};
+                    corners[5] = {aabb.maxX, -aabb.minY, aabb.maxZ};
+                    corners[6] = {aabb.minX, -aabb.maxY, aabb.maxZ};
+                    corners[7] = {aabb.maxX, -aabb.maxY, aabb.maxZ};
+
+                    for(int i = 0; i < 8; i ++)
+                    {
+                        auto clip_space_corner = vp * glm::vec4(corners[i],1.0);
+                        auto x = clip_space_corner.x;
+                        auto y = clip_space_corner.y;
+                        auto z = clip_space_corner.z;
+                        auto w = clip_space_corner.w;
+
+                        if((x >= -w) && (x <= w) && (y>=-w) && (y<=w) && (z >= 0) && (z <= w))
+                            return true;
+                    }
+
+                    return false;
+                });
             }
         }
         endPass(cmdBuf);

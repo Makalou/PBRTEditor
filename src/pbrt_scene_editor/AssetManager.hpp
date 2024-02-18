@@ -30,6 +30,7 @@ struct MeshHostObject
     std::unique_ptr<unsigned int[]> indices = nullptr;
     unsigned int vertex_count = 0;
     std::unique_ptr<float[]> position = nullptr;
+    float aabb[6]{};
     //optional below
     std::unique_ptr<float[]> normal = nullptr;
     std::unique_ptr<float[]> tangent = nullptr;
