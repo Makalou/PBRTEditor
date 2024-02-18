@@ -9,24 +9,20 @@ void SwapchainExtended::registerRecreateCallback(std::function<void(SwapchainExt
     recreateCallbacks.push_back(callback);
 }
 
-void SwapchainExtended::destroy(const vkb::Device &device) {
-    vkDestroySwapchainKHR(device, this->swapchain,VK_NULL_HANDLE);
-}
-
 void SwapchainExtended::recreate(const vkb::Device& device)
 {
     vkDeviceWaitIdle(device);
 
-    destroy(device);//destroy old swapchain
-
     vkb::SwapchainBuilder builder{ device };
     auto swapChain = builder
-            .set_old_swapchain(VK_NULL_HANDLE)
+            .set_old_swapchain(this->swapchain)
             .set_desired_min_image_count(3)
             .build();
 
     if (!swapChain)
         throw std::runtime_error("Failed to create swapchain. Reason: " + swapChain.error().message());
+
+    vkDestroySwapchainKHR(device, this->swapchain, VK_NULL_HANDLE);//destroy old swapchain
 
     static_cast<vkb::Swapchain&>(*this) = swapChain.value();
 
@@ -34,6 +30,8 @@ void SwapchainExtended::recreate(const vkb::Device& device)
     {
         callback(this);
     }
+
+    shouldRecreate = false;
 }
 
 std::optional<VMABuffer> DeviceExtended::allocateBuffer(vk::DeviceSize size, VkBufferUsageFlags usage, VmaMemoryUsage vmaUsage) const {

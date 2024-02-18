@@ -19,8 +19,6 @@ struct SwapchainExtended : vkb::Swapchain
 
     void registerRecreateCallback(std::function<void(SwapchainExtended*)> callback);
     
-    void destroy(const vkb::Device& device);
-    
     void recreate(const vkb::Device& device);
 
     vk::SwapchainKHR getRawVKSwapChain() const {
@@ -46,6 +44,8 @@ struct SwapchainExtended : vkb::Swapchain
         scissor.extent = this->extent;
         return scissor;
     }
+
+    bool shouldRecreate = false;
 
 private:
     std::vector<std::function<void(SwapchainExtended*)>> recreateCallbacks;

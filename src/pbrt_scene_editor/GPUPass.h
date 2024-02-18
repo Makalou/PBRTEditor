@@ -82,6 +82,29 @@ struct PassResourceDescriptionBase
     virtual ~PassResourceDescriptionBase()= default;
 };
 
+namespace PassAttachmentExtent
+{
+    struct SwapchainRelative
+    {
+        SwapchainRelative() = default;
+
+        SwapchainRelative(float width_scale, float height_scale) : wScale(width_scale), hScale(height_scale){}
+
+        float wScale = 1.0f;
+        float hScale = 1.0f;
+    };
+
+    struct Absolute
+    {
+        Absolute(int width, int height) : w(width), h(height) {}
+
+        int w;
+        int h;
+    };
+}
+
+using PassAttachmentExtentType = std::variant<PassAttachmentExtent::SwapchainRelative,PassAttachmentExtent::Absolute>;
+
 /* Used to determine the render pass and framebuffer composition of a given node.
  * attachments can be defined both for inputs and outputs.
  * This is needed to continue working on a resource in multiple nodes.
@@ -96,8 +119,9 @@ struct PassResourceDescriptionBase
 struct PassAttachmentDescription : PassResourceDescriptionBase
 {
     vk::Format format = vk::Format::eUndefined;
-    int width = 0;
-    int height = 0;
+    //int width = 0;
+    //int height = 0;
+    PassAttachmentExtentType extent;
     vk::AttachmentLoadOp loadOp{};
     vk::AttachmentStoreOp storeOp{};
     //If the format has depth and/or stencil components,
@@ -112,8 +136,20 @@ struct PassAttachmentDescription : PassResourceDescriptionBase
     : PassResourceDescriptionBase(name)
     {
         this->format = format;
-        this->width = width;
-        this->height = height;
+        //this->width = width;
+        //this->height = height;
+        this->extent = PassAttachmentExtent::Absolute(width, height);
+        this->loadOp = loadOp;
+        this->storeOp = storeOp;
+    }
+
+    PassAttachmentDescription(const std::string& name, vk::Format format,PassAttachmentExtentType && size, vk::AttachmentLoadOp loadOp, vk::AttachmentStoreOp storeOp)
+        : PassResourceDescriptionBase(name)
+    {
+        this->format = format;
+        //this->width = width;
+        //this->height = height;
+        this->extent = size;
         this->loadOp = loadOp;
         this->storeOp = storeOp;
     }
@@ -123,11 +159,31 @@ struct PassAttachmentDescription : PassResourceDescriptionBase
     {
         this->loadOp = loadOp;
         this->storeOp = storeOp;
+        this->extent = PassAttachmentExtent::Absolute(0,0);
     }
 
     PassResourceType getType() const override
     {
         return Attachment;
+    }
+    
+    vk::Extent2D getExtent(const vkb::Swapchain& swapchain)
+    {
+        vk::Extent2D size;
+        std::visit([&](auto&& arg) {
+            using T = std::decay_t<decltype(arg)>;
+
+            if constexpr (std::is_same_v<T, PassAttachmentExtent::SwapchainRelative>) {
+                size.width = swapchain.extent.width * arg.wScale;
+                size.height = swapchain.extent.height * arg.hScale;
+            }
+            else if constexpr (std::is_same_v<T, PassAttachmentExtent::Absolute>) {
+                size.width = arg.w;
+                size.height = arg.h;
+            }
+        }, extent);
+
+        return size;
     }
 };
 
@@ -194,6 +250,7 @@ struct GPUPass
     //DeviceExtended* backend_device;
     std::vector<std::unique_ptr<PassResourceDescriptionBase>> inputs;
     std::vector<std::unique_ptr<PassResourceDescriptionBase>> outputs;
+    std::vector<std::unique_ptr<PassResourceDescriptionBase>> inouts;
     std::vector<GPUPassHandle> edges;
     bool enabled = true;
     /*
@@ -222,9 +279,15 @@ struct GPUPass
         outputs.push_back(std::move(resource));
     }
 
+    void addInOut(std::unique_ptr<PassResourceDescriptionBase> resource)
+    {
+
+    }
+
     template<typename T,class... Args>
     void addInput(Args&& ... args)
     {
+        //static_assert(!std::is_same_v<T, PassAttachmentDescription>);
         inputs.emplace_back(std::make_unique<T>(args...));
     }
 
@@ -232,6 +295,12 @@ struct GPUPass
     void addOutput(Args&& ... args)
     {
         outputs.emplace_back(std::make_unique<T>(args...));
+    }
+
+    template<typename T, class... Args>
+    void addInOut(const std::string& inputName, const std::string& outputName,Args&& ... args)
+    {
+        inouts.emplace_back(std::make_unique<T>(inputName + "->" + outputName,args...));
     }
 };
 
@@ -429,6 +498,8 @@ struct GPUFrame
     {
 
     }
+
+    void connectResources(PassResourceDescriptionBase* output, PassResourceDescriptionBase* input);
 
     PassAttachmentDescription* swapchainAttachment;
     std::vector<int> sortedIndices;
