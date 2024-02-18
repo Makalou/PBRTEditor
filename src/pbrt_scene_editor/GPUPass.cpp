@@ -725,8 +725,8 @@ vk::CommandBuffer GPUFrame::recordMainQueueCommands() {
         _rasterPasses[i]->record(cmdPrimary,this);
         cmdPrimary.endDebugUtilsLabelEXT(backendDevice->getDLD());
     }
-    cmdPrimary.end();
     cmdPrimary.endDebugUtilsLabelEXT(backendDevice->getDLD());
+    cmdPrimary.end();
     return cmdPrimary;
 }
 
