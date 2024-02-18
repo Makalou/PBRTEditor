@@ -196,37 +196,28 @@ MeshHostObject parseAssimpMesh(aiMesh* mesh)
     return meshHostObj;
 }
 
-//MeshHostObject optimize(MeshHostObject&& rawMesh)
-//{
-//    //Indexing
-//    auto * remap = new unsigned int [rawMesh.index_count];
-//    auto vertexData = rawMesh.getInterleavingAttributes();
-//    int vertexSize = vertexData.second.VertexStride;
-////    meshopt_generateVertexRemap(remap,rawMesh.indices.get(),rawMesh.index_count,(void*)vertexData.first,rawMesh.vertex_count,vertexSize);
-////
-////    auto * targetIndices = new unsigned int [rawMesh.index_count];
-////    void * targetVertices = std::aligned_alloc( 16 ,rawMesh.vertex_count * vertexData.second.VertexStride);
-////
-////    meshopt_remapIndexBuffer(targetIndices,rawMesh.indices.get(),rawMesh.index_count,&remap[0]);
-////    meshopt_remapVertexBuffer(targetVertices,(void*)vertexData.first,rawMesh.vertex_count,vertexSize,&remap[0]);
-//    //Simplification
-//    float threshold = 0.2f;
-//    size_t target_index_count = size_t(rawMesh.index_count * threshold);
-//    float target_error = 1e-1f;
-//
-//    std::vector<unsigned int> lod(rawMesh.index_count);
-//    float lod_error = 0.f;
-//    lod.resize(meshopt_simplifySloppy(&lod[0], rawMesh.indices.get(), rawMesh.index_count,
-//                                      rawMesh.position.get(), rawMesh.vertex_count, sizeof(float) * 3,
-//                                      target_index_count, target_error, &lod_error));
-//
-//    //Vertex cache optimization
-//    //Overdraw optimization
-//    //Vertex fetch optimization
-//    //Vertex quantization
-//    //Vertex/index buffer compression
-//
-//}
+MeshHostObject optimize(MeshHostObject&& rawMesh)
+{
+    //Simplification
+    float threshold = 0.1f;
+    auto target_index_count = static_cast<size_t>(rawMesh.index_count * threshold);
+    if(target_index_count > 3)
+    {
+        float target_error = 1e-3f;
+
+        std::vector<unsigned int> lod(rawMesh.index_count);
+        float lod_error;
+        lod.resize(meshopt_simplifySloppy(lod.data(), rawMesh.indices.get(), rawMesh.index_count,
+                                          rawMesh.position.get(), rawMesh.vertex_count, sizeof(float) * 3,
+                                          target_index_count, target_error, &lod_error));
+        rawMesh.index_count = lod.size();
+        rawMesh.indices.reset(new unsigned int[lod.size()]);
+        assert(!lod.empty());
+        std::copy(lod.begin(), lod.end(), rawMesh.indices.get());
+    }
+
+    return rawMesh;
+}
 
 MeshHostObject AssetManager::loadMeshPBRTPLY(const std::string &relative_path,int importerID) {
     auto fileName = fs::absolute(_currentWorkDir / relative_path).make_preferred().string();
@@ -239,7 +230,7 @@ MeshHostObject AssetManager::loadMeshPBRTPLY(const std::string &relative_path,in
         throw std::runtime_error(importer.GetErrorString());
     }
     assert(scene->mNumMeshes == 1);
-    auto meshHostObject = parseAssimpMesh(scene->mMeshes[0]);
+    auto meshHostObject = optimize(parseAssimpMesh(scene->mMeshes[0]));
     importer.FreeScene();
     return std::move(meshHostObject);
 }
