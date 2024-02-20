@@ -260,7 +260,7 @@ struct GPUPass
      * Ideally one should do as many ahead of time jobs as possible. Such as build all the shaders and pipelines
      * that would be used by the pass, prepare other immutable per pass resources.
      */
-    virtual void prepareAOT(const GPUFrame* frame) = 0;
+    virtual void prepareAOT(GPUFrame* frame) = 0;
 
     /*
      * For some passes, it's hard or impossible to decide which shaders or pipeline to use ahead of time.
@@ -399,20 +399,21 @@ struct GPURayTracingPass : GPUPass
     std::vector<vk::ShaderModule> shaders;
 };
 
-struct GPUFrame
-{
-    struct frameGlobalData
-    {
+struct GPUFrame {
+    struct frameGlobalData {
         glm::vec4 time;
         glm::vec4 cursorPos;
     };
 
-    GPUFrame(int threadsNum, const std::shared_ptr<DeviceExtended>& backendDevice);
+    GPUFrame(int threadsNum, const std::shared_ptr<DeviceExtended> &backendDevice);
 
-    GPUFrame(const GPUFrame& other) = delete;
-    GPUFrame& operator=(const GPUFrame& other) = delete;
-    GPUFrame(GPUFrame&& other) = default;
-    GPUFrame& operator=(GPUFrame&& other) = default;
+    GPUFrame(const GPUFrame &other) = delete;
+
+    GPUFrame &operator=(const GPUFrame &other) = delete;
+
+    GPUFrame(GPUFrame &&other) = default;
+
+    GPUFrame &operator=(GPUFrame &&other) = default;
 
     int workThreadsNum;
     /* Note that allocated command buffer only means we don't need to reallocate them from pool.
@@ -429,41 +430,37 @@ struct GPUFrame
 
     vk::CommandBuffer recordMainQueueCommands();
 
-    void registerRasterizedGPUPass(std::unique_ptr<GPURasterizedPass> && pass)
-    {
-        for(const auto & reg_pass : _rasterPasses)
-        {
-            if(pass->_name == reg_pass->_name)
-            {
+    void registerRasterizedGPUPass(std::unique_ptr<GPURasterizedPass> &&pass) {
+        for (const auto &reg_pass: _rasterPasses) {
+            if (pass->_name == reg_pass->_name) {
                 throw std::invalid_argument("Pass has been registered.");
             }
         }
         _rasterPasses.emplace_back(std::move(pass));
     }
 
-    struct PassDataDescriptorSetBaseLayout
-    {
+    struct PassDataDescriptorSetBaseLayout {
         PassDataDescriptorSetBaseLayout()
         = default;
 
         std::vector<vk::DescriptorSetLayoutBinding> bindings;
         // Initial write is incomplete. DstSet need to be set.
         std::vector<vk::WriteDescriptorSet> writes;
-        std::unique_ptr<vk::DescriptorImageInfo[]> imgInfos{};
-        std::unique_ptr<vk::DescriptorBufferInfo[]> bufInfos{};
+        std::shared_ptr<vk::DescriptorImageInfo[]> imgInfos{};
+        std::shared_ptr<vk::DescriptorBufferInfo[]> bufInfos{};
 
-        PassDataDescriptorSetBaseLayout(const PassDataDescriptorSetBaseLayout & other) = delete;
-        PassDataDescriptorSetBaseLayout& operator=(const PassDataDescriptorSetBaseLayout & other) = delete;
+        //PassDataDescriptorSetBaseLayout(const PassDataDescriptorSetBaseLayout &other) = delete;
 
-        PassDataDescriptorSetBaseLayout(PassDataDescriptorSetBaseLayout && other) noexcept
-        {
+        //PassDataDescriptorSetBaseLayout &operator=(const PassDataDescriptorSetBaseLayout &other) = delete;
+
+        /*PassDataDescriptorSetBaseLayout(PassDataDescriptorSetBaseLayout &&other) noexcept {
             bindings = std::move(other.bindings);
             writes = std::move(other.writes);
             imgInfos = std::move(other.imgInfos);
             bufInfos = std::move(other.bufInfos);
         }
-        PassDataDescriptorSetBaseLayout& operator=(PassDataDescriptorSetBaseLayout && other) noexcept
-        {
+
+        PassDataDescriptorSetBaseLayout &operator=(PassDataDescriptorSetBaseLayout &&other) noexcept {
             if (this != &other) {
                 bindings = std::move(other.bindings);
                 writes = std::move(other.writes);
@@ -471,7 +468,7 @@ struct GPUFrame
                 bufInfos = std::move(other.bufInfos);
             }
             return *this;
-        }
+        }*/
     };
 
     /*
@@ -479,27 +476,37 @@ struct GPUFrame
      * Note that writeDescriptorSets cannot be directly used : caller must
      * manually set the dstSet.
      * */
-    PassDataDescriptorSetBaseLayout getPassDataDescriptorSetBaseLayout(GPUPass* pass) const;
+    PassDataDescriptorSetBaseLayout getPassDataDescriptorSetBaseLayout(GPUPass *pass) const;
 
     //https://app.diagrams.net/#G1gIpgDwpK7Vyhzypl7A_RbQFETWhS1_1q
     void compileAOT();
 
-    vk::ImageView getBackingImageView(const std::string & name) const
-    {
+    vk::ImageView getBackingImageView(const std::string &name) const {
         return backingImageViews.find(name)->second;
     }
 
-    int allocateSingleDescriptorSet(vk::DescriptorSetLayout layout) const
-    {
+    int allocateSingleDescriptorSet(vk::DescriptorSetLayout layout) const {
 
     }
 
-    void getAllocatedDescriptorSet(int handle, const std::function<void(vk::DescriptorSet)>& callback) const
-    {
+    void getAllocatedDescriptorSet(int handle, const std::function<void(vk::DescriptorSet)> &callback) const {
 
     }
 
-    void connectResources(PassResourceDescriptionBase* output, PassResourceDescriptionBase* input);
+    void connectResources(PassResourceDescriptionBase *output, PassResourceDescriptionBase *input);
+
+    using DescriptorSetRecord = std::pair<std::string,vk::DescriptorSet>;
+    using DescriptorSetRecordList = std::vector<DescriptorSetRecord>;
+    using DescriptorSetLayoutRecord = std::pair<DescriptorSetLayoutExtended,DescriptorSetRecordList>;
+    using DescriptorSetCallback = std::function<void(const vk::DescriptorSet &)>;
+
+    vk::DescriptorSetLayout manageDescriptorSet(std::string && name, const std::vector<vk::DescriptorSetLayoutBinding> & bindings);
+
+    void getManagedDescriptorSet(std::string && setName, const std::function<void(vk::DescriptorSet)>& cb);
+
+    void prepareDescriptorSetsAOT();
+
+    vk::DescriptorSet getManagedDescriptorSet(std::string && name) const;
 
     PassAttachmentDescription* swapchainAttachment;
     std::vector<int> sortedIndices;
@@ -513,6 +520,11 @@ struct GPUFrame
     vk::DescriptorPool _frameGlobalDescriptorSetPool;
     VMAObservedBufferMapped<frameGlobalData> _frameGlobalDataBuffer;
     vk::PipelineLayout _frameLevelPipelineLayout;
+
+    std::vector<DescriptorSetLayoutRecord> managedDescriptorSetLayouts;
+    std::vector<vk::DescriptorPool> managedDescriptorPools;
+    std::unordered_map<std::string,std::vector<DescriptorSetCallback>> descriptorSetCallbackMap;
+
     float x = 0;
     float y = 0;
     int frameIdx{};

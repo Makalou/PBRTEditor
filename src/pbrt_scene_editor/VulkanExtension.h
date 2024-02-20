@@ -383,9 +383,9 @@ struct LinearCachedCommandAllocator {
     int _current_secondary_idx = 0;
 };
 
-struct VulkanDescriptorSetLayout
+struct DescriptorSetLayoutExtended
 {
-    VulkanDescriptorSetLayout(vk::Device device, const vk::DescriptorSetLayoutCreateInfo& info)
+    DescriptorSetLayoutExtended(vk::Device device, const vk::DescriptorSetLayoutCreateInfo& info)
     {
         bindingCount = info.bindingCount;
         bindings.reset(new vk::DescriptorSetLayoutBinding[bindingCount]);
@@ -396,38 +396,47 @@ struct VulkanDescriptorSetLayout
         }
 
         _layout = device.createDescriptorSetLayout(info);
+        _device = device;
     }
 
-    ~VulkanDescriptorSetLayout()
+    ~DescriptorSetLayoutExtended()
     {
         if(bindings.use_count() == 1)
         {
-            device.destroy(_layout);
+            //_device.destroy(_layout);
         }
     }
 
-    bool operator == (const VulkanDescriptorSetLayout& other) const
+    bool equalsTo(const vk::DescriptorSetLayoutBinding * pBindings, int count) const
     {
-        if(this->bindingCount!=other.bindingCount) return false;
-        //todo for now we assume the binding other matter
+        if(this->bindingCount != count) return false;
         for(int i = 0; i < bindingCount; i++)
         {
-            if(bindings[i].binding != other.bindings[i].binding) return false;
-            if(bindings[i].descriptorCount != other.bindings[i].descriptorCount) return false;
-            if(bindings[i].descriptorType != other.bindings[i].descriptorType) return false;
-            if(bindings[i].stageFlags != other.bindings[i].stageFlags) return false;
+            if(bindings[i].binding != pBindings[i].binding) return false;
+            if(bindings[i].descriptorCount != pBindings[i].descriptorCount) return false;
+            if(bindings[i].descriptorType != pBindings[i].descriptorType) return false;
+            if(bindings[i].stageFlags != pBindings[i].stageFlags) return false;
             //todo immutable samplers
         }
         return true;
     }
 
-    bool operator ==(const vk::DescriptorSetLayoutCreateInfo& info) const
+    bool operator ==(const std::vector<vk::DescriptorSetLayoutBinding> & binding_list) const
     {
-        //todo
-        return true;
+        return equalsTo(binding_list.data(),binding_list.size());
     }
 
-    vk::Device device;
+    bool operator == (const DescriptorSetLayoutExtended& other) const
+    {
+        return equalsTo(other.bindings.get(),other.bindingCount);
+    }
+
+    bool operator ==(const vk::DescriptorSetLayoutCreateInfo& info) const
+    {
+        return equalsTo(info.pBindings,info.bindingCount);
+    }
+
+    vk::Device _device;
     vk::DescriptorSetLayout _layout = VK_NULL_HANDLE;
     std::shared_ptr<vk::DescriptorSetLayoutBinding[]> bindings;
     int bindingCount = 0;
@@ -435,11 +444,11 @@ struct VulkanDescriptorSetLayout
 
 struct VulkanPipelineLayout
 {
-    VulkanPipelineLayout(std::vector<VulkanDescriptorSetLayout>&& setLayouts)
+    VulkanPipelineLayout(std::vector<DescriptorSetLayoutExtended>&& setLayouts)
     {
         setLayoutsCount = setLayouts.size();
-        device = setLayouts[0].device;
-        pSetLayouts.reset((VulkanDescriptorSetLayout*)new char[setLayoutsCount * sizeof(VulkanDescriptorSetLayout)]);
+        device = setLayouts[0]._device;
+        pSetLayouts.reset((DescriptorSetLayoutExtended*)new char[setLayoutsCount * sizeof(DescriptorSetLayoutExtended)]);
         for(int i = 0; i < setLayoutsCount; i++)
         {
             *(pSetLayouts.get() + i) = setLayouts[i];
@@ -466,7 +475,7 @@ struct VulkanPipelineLayout
         return true;
     }
 
-    bool operator == (std::vector<VulkanDescriptorSetLayout>&& setLayouts) const
+    bool operator == (std::vector<DescriptorSetLayoutExtended>&& setLayouts) const
     {
         if(setLayouts.size() != setLayoutsCount) return false;
         for(int i = 0; i < setLayoutsCount; i++)
@@ -478,7 +487,7 @@ struct VulkanPipelineLayout
 
     vk::Device device;
     vk::PipelineLayout _layout;
-    std::shared_ptr<VulkanDescriptorSetLayout> pSetLayouts;
+    std::shared_ptr<DescriptorSetLayoutExtended> pSetLayouts;
     int setLayoutsCount = 0;
 };
 

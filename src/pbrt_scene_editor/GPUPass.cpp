@@ -652,6 +652,8 @@ void GPUFrame::compileAOT() {
         pass->prepareAOT(this);
     }
 
+    prepareDescriptorSetsAOT();
+
     Window::registerCursorPosCallback([this](double xPos, double yPos){
         this->x = xPos;
         this->y = yPos;
@@ -757,12 +759,12 @@ GPUFrame::PassDataDescriptorSetBaseLayout GPUFrame::getPassDataDescriptorSetBase
 
     if(imgInfoCount > 0)
     {
-        std::unique_ptr<vk::DescriptorImageInfo[]> s(new vk::DescriptorImageInfo[imgInfoCount]);
+        std::shared_ptr<vk::DescriptorImageInfo[]> s(new vk::DescriptorImageInfo[imgInfoCount]);
         baseLayout.imgInfos.swap(s);
     }
     if(bufInfoCount > 0)
     {
-        std::unique_ptr<vk::DescriptorBufferInfo[]> s(new vk::DescriptorBufferInfo[bufInfoCount]);
+        std::shared_ptr<vk::DescriptorBufferInfo[]> s(new vk::DescriptorBufferInfo[bufInfoCount]);
         baseLayout.bufInfos.swap(s);
     }
 
@@ -806,4 +808,96 @@ GPUFrame::PassDataDescriptorSetBaseLayout GPUFrame::getPassDataDescriptorSetBase
     }
 
     return baseLayout;
+}
+
+vk::DescriptorSetLayout GPUFrame::manageDescriptorSet(std::string &&name, const std::vector<vk::DescriptorSetLayoutBinding> &bindings) {
+    //Check existing descriptorSet layout
+    for(int i = 0 ; i < managedDescriptorSetLayouts.size(); i++)
+    {
+        auto & layoutRecord = managedDescriptorSetLayouts[i];
+        if( layoutRecord.first == bindings)
+        {
+            layoutRecord.second.emplace_back(name,vk::DescriptorSet{});
+            descriptorSetCallbackMap.emplace(name,std::vector<DescriptorSetCallback>{});
+            return layoutRecord.first._layout;
+        }
+    }
+
+    // Need to allocate new descriptorSetLayout Object
+    vk::DescriptorSetLayoutCreateInfo layoutCreateInfo{};
+    layoutCreateInfo.setBindings(bindings);
+    DescriptorSetLayoutExtended newSetLayout(backendDevice->device,layoutCreateInfo);
+    managedDescriptorSetLayouts.emplace_back(newSetLayout,std::vector<DescriptorSetRecord>{});
+    managedDescriptorSetLayouts.back().second.emplace_back(name,vk::DescriptorSet{});
+    descriptorSetCallbackMap.emplace(name,std::vector<DescriptorSetCallback>{});
+    return newSetLayout._layout;
+}
+
+void GPUFrame::getManagedDescriptorSet(std::string &&setName, const std::function<void(vk::DescriptorSet)> &cb) {
+    auto it = descriptorSetCallbackMap.find(setName);
+    if(it == descriptorSetCallbackMap.end())
+    {
+        throw std::runtime_error("Cannot find managed descriptorSet " + setName);
+    }
+    it->second.emplace_back(cb);
+}
+
+void GPUFrame::prepareDescriptorSetsAOT() {
+    managedDescriptorPools.reserve(managedDescriptorSetLayouts.size());
+    std::vector<vk::DescriptorPoolSize> poolSizes{};
+
+    for(auto & layoutRecord : managedDescriptorSetLayouts) {
+        //Create per layout descriptorPool
+        vk::DescriptorPoolCreateInfo poolCreateInfo{};
+        poolSizes.resize(layoutRecord.first.bindingCount);
+        for (int i = 0; i < layoutRecord.first.bindingCount; i++) {
+            auto &binding = layoutRecord.first.bindings[i];
+            poolSizes[i].setType(binding.descriptorType);
+            poolSizes[i].setDescriptorCount(binding.descriptorCount * layoutRecord.second.size());
+        }
+        poolCreateInfo.setPPoolSizes(poolSizes.data());
+        poolCreateInfo.setPoolSizeCount(poolSizes.size());
+        poolCreateInfo.setMaxSets(10 * layoutRecord.second.size());
+        auto descriptorPool = backendDevice->createDescriptorPool(poolCreateInfo);
+        managedDescriptorPools.emplace_back(descriptorPool);
+        //allocate DescriptorSets
+        vk::DescriptorSetAllocateInfo allocateInfo{};
+        allocateInfo.setDescriptorPool(descriptorPool);
+        std::vector<vk::DescriptorSetLayout> layouts;
+        for(int i = 0; i < layoutRecord.second.size(); i++)
+        {
+            layouts.push_back(layoutRecord.first._layout);
+        }
+        allocateInfo.setSetLayouts(layouts);
+        allocateInfo.setDescriptorSetCount(layouts.size());
+        auto descriptorSets = backendDevice->allocateDescriptorSets(allocateInfo);
+        for(int i = 0; i < allocateInfo.descriptorSetCount;i++)
+        {
+            auto & setRecord = layoutRecord.second[i];
+            setRecord.second = descriptorSets[i];
+            backendDevice->setObjectDebugName(setRecord.second,setRecord.first.c_str());
+            auto it = descriptorSetCallbackMap.find(setRecord.first);
+            if(it != descriptorSetCallbackMap.end())
+            {
+                for(const auto & cb : it->second)
+                {
+                    cb(setRecord.second);
+                }
+            }
+        }
+    }
+}
+
+vk::DescriptorSet GPUFrame::getManagedDescriptorSet(std::string && name) const
+{
+    for(auto & layoutRecord : managedDescriptorSetLayouts)
+    {
+        for(auto & setRecord : layoutRecord.second)
+        {
+            if(setRecord.first == name)
+                return setRecord.second;
+        }
+    }
+
+    throw std::runtime_error("Failed to find managed descriptor set " + name);
 }

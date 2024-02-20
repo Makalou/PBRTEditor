@@ -35,7 +35,7 @@ namespace FullScreenQuadDrawer
 
 RASTERIZEDPASS_DEF_BEGIN(SkyBoxPass)
 
-    void prepareAOT(const GPUFrame* frame) override
+    void prepareAOT(GPUFrame* frame) override
     {
         auto vs = FullScreenQuadDrawer::getVertexShader(frame->backendDevice.get());
         auto fs = ShaderManager::getInstance().createFragmentShader(frame->backendDevice.get(),"proceduralSkyBox.frag");
@@ -60,7 +60,7 @@ RASTERIZEDPASS_DEF_BEGIN(SkyBoxPass)
 RASTERIZEDPASS_DEF_END(SkyBoxPass)
 
 RASTERIZEDPASS_DEF_BEGIN(ShadowPass)
-    void prepareAOT(const GPUFrame* frame) override
+    void prepareAOT(GPUFrame* frame) override
     {
 
     }
@@ -78,7 +78,7 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
     vk::PipelineLayout passLevelPipelineLayout;
     vk::PipelineRasterizationStateCreateInfo rasterInfo{};
     vk::PipelineDepthStencilStateCreateInfo depthStencilInfo{};
-    void prepareAOT(const GPUFrame* frame) override
+    void prepareAOT(GPUFrame* frame) override
     {
         std::vector<vk::DescriptorSetLayoutBinding> bindings;
 
@@ -109,7 +109,7 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
         rasterInfo.setCullMode(vk::CullModeFlagBits::eNone);
         rasterInfo.setRasterizerDiscardEnable(vk::False);
         rasterInfo.setFrontFace(vk::FrontFace::eClockwise);
-        rasterInfo.setPolygonMode(vk::PolygonMode::eFill);
+        rasterInfo.setPolygonMode(vk::PolygonMode::eLine);
         rasterInfo.setLineWidth(1.0);
 
         depthStencilInfo.setDepthTestEnable(vk::True);
@@ -293,39 +293,23 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
 RASTERIZEDPASS_DEF_END(GBufferPass)
 
 RASTERIZEDPASS_DEF_BEGIN(DeferredLightingPass)
-    vk::DescriptorPool descriptorPool;
     vk::DescriptorSetLayout passDataDescriptorSetLayout;
-    vk::DescriptorSet passDataDescriptorSet;
     vk::PipelineLayout pipelineLayout;
-    void prepareAOT(const GPUFrame* frame) override
+    void prepareAOT(GPUFrame* frame) override
     {
         auto vs = FullScreenQuadDrawer::getVertexShader(frame->backendDevice.get());
         auto fs = ShaderManager::getInstance().createFragmentShader(frame->backendDevice.get(),"deferred.frag");
-
         auto baseLayout = frame->getPassDataDescriptorSetBaseLayout(this);
-        passDataDescriptorSetLayout = frame->backendDevice->createDescriptorSetLayout2(baseLayout.bindings);
-        frame->backendDevice->setObjectDebugName(passDataDescriptorSetLayout, "DeferredLightingPassDataDescriptorLayout");
+        passDataDescriptorSetLayout = frame->manageDescriptorSet("DeferredLightingPassDataDescriptorSet",baseLayout.bindings);
+        frame->getManagedDescriptorSet("DeferredLightingPassDataDescriptorSet",[baseLayout,frame](const vk::DescriptorSet& passDataDescriptorSet) mutable{
 
-        vk::DescriptorPoolCreateInfo descriptorPoolCreateInfo{};
-        std::vector<vk::DescriptorPoolSize> poolSizes;
-        poolSizes.reserve(baseLayout.bindings.size());
-        for (const auto& binding : baseLayout.bindings)
-        {
-            poolSizes.emplace_back(binding.descriptorType, binding.descriptorCount);
-        }
-        descriptorPoolCreateInfo.setPoolSizes(poolSizes);
-        descriptorPoolCreateInfo.setMaxSets(10);
+            for (auto & write : baseLayout.writes)
+            {
+                write.setDstSet(passDataDescriptorSet);
+            }
 
-        descriptorPool = frame->backendDevice->createDescriptorPool(descriptorPoolCreateInfo);
-        passDataDescriptorSet = frame->backendDevice->allocateSingleDescriptorSet(descriptorPool, passDataDescriptorSetLayout);
-        frame->backendDevice->setObjectDebugName(passDataDescriptorSet, "DeferredLightingPassDataDescriptorSet");
-
-        for (auto& write : baseLayout.writes)
-        {
-            write.setDstSet(passDataDescriptorSet);
-        }
-
-        frame->backendDevice->updateDescriptorSets(baseLayout.writes, {});
+            frame->backendDevice->updateDescriptorSets(baseLayout.writes, {});
+        });
 
         pipelineLayout = frame->backendDevice->createPipelineLayout2({frame->_frameGlobalDescriptorSetLayout,
             passDataDescriptorSetLayout});
@@ -341,6 +325,7 @@ RASTERIZEDPASS_DEF_BEGIN(DeferredLightingPass)
     void record(vk::CommandBuffer cmdBuf,const GPUFrame* frame) override
     {
         beginPass(cmdBuf);
+        auto passDataDescriptorSet = frame->getManagedDescriptorSet("DeferredLightingPassDataDescriptorSet");
         cmdBuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 1, passDataDescriptorSet, nullptr);
         cmdBuf.bindPipeline(vk::PipelineBindPoint::eGraphics,graphicsPipelines[0].getPipeline());
         FullScreenQuadDrawer::draw(cmdBuf);
@@ -349,36 +334,21 @@ RASTERIZEDPASS_DEF_BEGIN(DeferredLightingPass)
 RASTERIZEDPASS_DEF_END(DefereredLightingPass)
 
 RASTERIZEDPASS_DEF_BEGIN(PostProcessPass)
-    vk::DescriptorPool descriptorPool;
-    vk::DescriptorSetLayout passDataDescriptorSetLayout;
-    vk::DescriptorSet passDataDescriptorSet;
     vk::PipelineLayout pipelineLayout;
-    void prepareAOT(const GPUFrame* frame) override
+    void prepareAOT(GPUFrame* frame) override
     {
         auto baseLayout = frame->getPassDataDescriptorSetBaseLayout(this);
-        passDataDescriptorSetLayout = frame->backendDevice->createDescriptorSetLayout2(baseLayout.bindings);
-        frame->backendDevice->setObjectDebugName(passDataDescriptorSetLayout, "PostProcessPassDataDescriptorLayout");
+        auto passDataDescriptorSetLayout = frame->manageDescriptorSet("PostProcessPassDataDescriptorSet",baseLayout.bindings);
 
-        vk::DescriptorPoolCreateInfo descriptorPoolCreateInfo{};
-        std::vector<vk::DescriptorPoolSize> poolSizes;
-        poolSizes.reserve(baseLayout.bindings.size());
-        for(const auto & binding : baseLayout.bindings)
-        {
-            poolSizes.emplace_back(binding.descriptorType,binding.descriptorCount);
-        }
-        descriptorPoolCreateInfo.setPoolSizes(poolSizes);
-        descriptorPoolCreateInfo.setMaxSets(10);
+        frame->getManagedDescriptorSet("PostProcessPassDataDescriptorSet",[baseLayout,frame](const vk::DescriptorSet& passDataDescriptorSet) mutable{
 
-        descriptorPool = frame->backendDevice->createDescriptorPool(descriptorPoolCreateInfo);
-        passDataDescriptorSet = frame->backendDevice->allocateSingleDescriptorSet(descriptorPool,passDataDescriptorSetLayout);
-        frame->backendDevice->setObjectDebugName(passDataDescriptorSet, "PostProcessPassDataDescriptorSet");
+            for (auto & write : baseLayout.writes)
+            {
+                write.setDstSet(passDataDescriptorSet);
+            }
 
-        for(auto & write : baseLayout.writes)
-        {
-            write.setDstSet(passDataDescriptorSet);
-        }
-
-        frame->backendDevice->updateDescriptorSets(baseLayout.writes,{});
+            frame->backendDevice->updateDescriptorSets(baseLayout.writes, {});
+        });
 
         auto vs = FullScreenQuadDrawer::getVertexShader(frame->backendDevice.get());
         auto fs = ShaderManager::getInstance().createFragmentShader(frame->backendDevice.get(),"postProcess.frag");
@@ -397,6 +367,7 @@ RASTERIZEDPASS_DEF_BEGIN(PostProcessPass)
     void record(vk::CommandBuffer cmdBuf,const GPUFrame* frame) override
     {
         beginPass(cmdBuf);
+        auto passDataDescriptorSet = frame->getManagedDescriptorSet("PostProcessPassDataDescriptorSet");
         cmdBuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,pipelineLayout,1,passDataDescriptorSet, nullptr);
         cmdBuf.bindPipeline(vk::PipelineBindPoint::eGraphics,graphicsPipelines[0].getPipeline());
         FullScreenQuadDrawer::draw(cmdBuf);

@@ -161,7 +161,6 @@ int main( int /*argc*/, char ** /*argv*/ )
         vkb::PhysicalDeviceSelector phyDevSelector{ inst.value()};
 
         auto required_device_extension = {VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
-                                          VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
                                           VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME};
 
         VkPhysicalDeviceBufferDeviceAddressFeaturesKHR deviceAddressFeaturesKhr{};
