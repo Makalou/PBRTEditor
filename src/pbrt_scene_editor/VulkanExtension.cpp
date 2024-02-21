@@ -189,39 +189,58 @@ std::optional<VMAImage> DeviceExtended::allocateVMAImageForAttachment(VkImageCre
 
 void DeviceExtended::oneTimeUploadSync(void* data, int size,VkBuffer dst)
 {
-    if(std::get<0>(stagingBuffer) == VK_NULL_HANDLE)
+    if (size == 0) return;
+
+    auto blockNeededNum = (size + stagingBlockSize - 1) / stagingBlockSize;
+
+    if (stagingBlocks.size()< blockNeededNum)
     {
-        VkBufferCreateInfo bufferCreateInfo = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
-        bufferCreateInfo.size = 32 * 1024 * 1024; // 32MB
-        bufferCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+        auto newBlocksNum = blockNeededNum - stagingBlocks.size();
+        for (int i = 0; i < newBlocksNum; i++)
+        {
+            VkBufferCreateInfo bufferCreateInfo = { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
+            bufferCreateInfo.size = stagingBlockSize;
+            bufferCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 
-        VmaAllocationCreateInfo allocCreateInfo = {};
-        allocCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
-        allocCreateInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+            VmaAllocationCreateInfo allocCreateInfo = {};
+            allocCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
+            allocCreateInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
 
-        auto result = vmaCreateBuffer(_globalVMAAllocator,&bufferCreateInfo,&allocCreateInfo,
-                        &std::get<0>(stagingBuffer),
-                        &std::get<1>(stagingBuffer),
-                        &std::get<2>(stagingBuffer));
-        assert(result == VK_SUCCESS);
-        VkMemoryPropertyFlags memPropFlags;
-        vmaGetAllocationMemoryProperties(_globalVMAAllocator,std::get<1>(stagingBuffer), &memPropFlags);
-        assert(memPropFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+            StagingBufferBlock newBlock;
+            auto result = vmaCreateBuffer(_globalVMAAllocator, &bufferCreateInfo, &allocCreateInfo,
+                &newBlock.buffer,
+                &newBlock.allocation,
+                &newBlock.allocationInfo);
+
+            assert(result == VK_SUCCESS);
+            VkMemoryPropertyFlags memPropFlags;
+            vmaGetAllocationMemoryProperties(_globalVMAAllocator, newBlock.allocation, &memPropFlags);
+            assert(memPropFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+            stagingBlocks.emplace_back(newBlock);
+        }
     }
 
-    memcpy(std::get<2>(stagingBuffer).pMappedData,data,size);
+    std::vector<std::function<void(void)>> waitCallbacks;
+    for (int i = 0; i < blockNeededNum; i++)
+    {
+        auto copySize = std::min(size - i * stagingBlockSize, stagingBlockSize);
+        memcpy(stagingBlocks[i].allocationInfo.pMappedData, (char*)data + i * stagingBlockSize, copySize);
+        auto transfer_cmd = this->allocateOnceTransferCommand();
+        vk::CommandBufferBeginInfo beginInfo{};
+        vk::BufferCopy copyRegion{};
+        copyRegion.size = copySize;
+        copyRegion.srcOffset = 0;
+        copyRegion.dstOffset = i * stagingBlockSize;
+        transfer_cmd.begin(beginInfo);
+        transfer_cmd.copyBuffer(stagingBlocks[i].buffer, dst, copyRegion);
+        transfer_cmd.end();
+        waitCallbacks.emplace_back(submitOnceTransferCommand(transfer_cmd));
+    }
 
-    auto transfer_cmd = this->allocateOnceTransferCommand();
-    vk::CommandBufferBeginInfo beginInfo{};
-    transfer_cmd.begin(beginInfo);
-    vk::BufferCopy copyRegion{};
-    copyRegion.size =size;
-    copyRegion.srcOffset = 0;
-    copyRegion.dstOffset = 0;
-    transfer_cmd.copyBuffer(std::get<0>(stagingBuffer),dst,copyRegion);
-    transfer_cmd.end();
-    auto wait_handle = submitOnceTransferCommand(transfer_cmd);
-    wait_handle();
+    for (auto& wait : waitCallbacks)
+    {
+        wait();
+    }
 }
 
 bool VulkanGraphicsPipeline::compatibleWithVertexShader(const std::string &shaderVariantUUID) {

@@ -287,7 +287,19 @@ struct DeviceExtended : vkb::Device, vk::Device
     vk::Instance _instance;
     SwapchainExtended _swapchain;
     VmaAllocator _globalVMAAllocator;
-    std::tuple<VkBuffer,VmaAllocation,VmaAllocationInfo> stagingBuffer{};
+
+    struct StagingBufferBlock
+    {
+        VkBuffer buffer;
+        VmaAllocation allocation;
+        VmaAllocationInfo allocationInfo;
+    };
+    uint32_t stagingBlockSize = 4 * 1024 * 1024; // 4MB
+    //std::tuple<VkBuffer,VmaAllocation,VmaAllocationInfo> stagingBuffer{};
+    //VMABuffer stagingBuffer{};
+    //VmaAllocationInfo stagingBufferAllocationInfo{};
+    std::vector<StagingBufferBlock> stagingBlocks;
+    
 private:
     vk::CommandPool onceGraphicsCommandPool = VK_NULL_HANDLE;
     vk::CommandPool onceTransferCommandPool = VK_NULL_HANDLE;
