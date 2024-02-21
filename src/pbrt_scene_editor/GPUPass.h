@@ -252,6 +252,7 @@ struct GPUPass
     std::vector<std::unique_ptr<PassResourceDescriptionBase>> outputs;
     std::vector<std::unique_ptr<PassResourceDescriptionBase>> inouts;
     std::vector<GPUPassHandle> edges;
+    vk::DescriptorSetLayout passInputDescriptorSetLayout;
     bool enabled = true;
     /*
      * For some passes, the shaders, pipelines to use can be determined Ahead of Time,
@@ -507,6 +508,8 @@ struct GPUFrame {
     void prepareDescriptorSetsAOT();
 
     vk::DescriptorSet getManagedDescriptorSet(std::string && name) const;
+
+    void managePassInputDescriptorSet(GPUPass * pass);
 
     PassAttachmentDescription* swapchainAttachment;
     std::vector<int> sortedIndices;

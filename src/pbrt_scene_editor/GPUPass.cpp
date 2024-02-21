@@ -646,6 +646,11 @@ void GPUFrame::compileAOT() {
         pass->buildFrameBuffer(*backendDevice,this);
     }
 
+    for(auto & pass : _rasterPasses)
+    {
+        managePassInputDescriptorSet(pass.get());
+    }
+
     // Pass ahead of time preparation
     for(auto & pass : _rasterPasses)
     {
@@ -808,6 +813,83 @@ GPUFrame::PassDataDescriptorSetBaseLayout GPUFrame::getPassDataDescriptorSetBase
     }
 
     return baseLayout;
+}
+
+void GPUFrame::managePassInputDescriptorSet(GPUPass *pass) {
+    if(pass->inputs.empty()) return;
+    std::vector<vk::DescriptorSetLayoutBinding> inputBindings;
+    inputBindings.reserve(pass->inputs.size());
+    int imgCount = 0;
+    int bufferCount = 0;
+    for(int i = 0; i < pass->inputs.size(); i++)
+    {
+        auto & input = pass->inputs[i];
+        assert(input->getType() == PassResourceType::Texture || input->getType() == PassResourceType::Buffer);
+        vk::DescriptorSetLayoutBinding binding;
+        binding.setStageFlags(vk::ShaderStageFlagBits::eAllGraphics);
+        binding.setBinding(i);
+        binding.setDescriptorCount(1);
+        switch (input->getType()) {
+            case PassResourceType::Texture :
+                binding.setDescriptorType(vk::DescriptorType::eCombinedImageSampler);
+                imgCount++;
+                break;
+            case PassResourceType::Buffer :
+                binding.setDescriptorType(vk::DescriptorType::eStorageBuffer);
+                bufferCount++;
+                break;
+            default:
+                break;
+        }
+        inputBindings.emplace_back(binding);
+    }
+
+    pass->passInputDescriptorSetLayout = manageDescriptorSet(pass->_name + "InputDescriptorSet",inputBindings);
+
+    getManagedDescriptorSet(pass->_name + "InputDescriptorSet",[this,pass,imgCount,bufferCount](const vk::DescriptorSet& set)
+    {
+        std::vector<vk::WriteDescriptorSet> writes;
+        std::vector<vk::DescriptorImageInfo> imgInfos;
+        std::vector<vk::DescriptorBufferInfo> bufferInfos;
+        writes.reserve(pass->inputs.size());
+        imgInfos.reserve(imgCount);
+        bufferInfos.reserve(bufferCount);
+
+        for(int i = 0; i < pass->inputs.size(); i++)
+        {
+            auto & input = pass->inputs[i];
+            assert(input->getType() == PassResourceType::Texture || input->getType() == PassResourceType::Buffer);
+            vk::WriteDescriptorSet write;
+            write.setDstSet(set);
+            write.setDstBinding(i);
+            write.setDescriptorCount(1);
+            switch (input->getType()) {
+                case PassResourceType::Texture :
+                {
+                    write.setDescriptorType(vk::DescriptorType::eCombinedImageSampler);
+                    vk::DescriptorImageInfo imgInfo{};
+                    imgInfo.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+                    imgInfo.setSampler(samplers[0]);
+                    imgInfo.setImageView(getBackingImageView(input->name));
+                    imgInfos.push_back(imgInfo);
+                    write.setPImageInfo(&imgInfos[imgInfos.size()-1]);
+                    break;
+                }
+                case PassResourceType::Buffer : {
+                    write.setDescriptorType(vk::DescriptorType::eStorageBuffer);
+                    vk::DescriptorBufferInfo bufInfo{};
+                    //todo
+                    bufferInfos.push_back(bufInfo);
+                    write.setPBufferInfo(&bufferInfos[bufferInfos.size()-1]);
+                    break;
+                }
+                default:
+                    break;
+            }
+            writes.emplace_back(write);
+        }
+        backendDevice->updateDescriptorSets(writes,{});
+    });
 }
 
 vk::DescriptorSetLayout GPUFrame::manageDescriptorSet(std::string &&name, const std::vector<vk::DescriptorSetLayoutBinding> &bindings) {
