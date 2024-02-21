@@ -37,7 +37,7 @@ layout(location = 4) out vec2 outVertexUV;
 #include "built_in/frameGlobalData.glsl"
 #include "built_in/camera.glsl"
 
-USE_FRAME_GLOBAL_DATA
+USE_FRAME_GLOBAL_DATA;
 
 layout(set = 1, binding = 0) uniform BCAMERA_BLOCK_LAYOUT camera;
 

@@ -7,7 +7,7 @@ layout(location = 0) out vec4 outColor;
 
 #include "built_in/frameGlobalData.glsl"
 
-USE_FRAME_GLOBAL_DATA
+USE_FRAME_GLOBAL_DATA;
 
 layout(set = 1, binding = 0) uniform sampler2D wPos;
 //layout(set = 1, binding = 1) uniform sampler2D wNormal;

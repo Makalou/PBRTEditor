@@ -34,12 +34,28 @@ namespace FullScreenQuadDrawer
 };
 
 RASTERIZEDPASS_DEF_BEGIN(SkyBoxPass)
-
+    vk::DescriptorSetLayout passDataDescriptorLayout;
+    vk::PipelineLayout pipelineLayout;
     void prepareAOT(GPUFrame* frame) override
     {
         auto vs = FullScreenQuadDrawer::getVertexShader(frame->backendDevice.get());
         auto fs = ShaderManager::getInstance().createFragmentShader(frame->backendDevice.get(),"proceduralSkyBox.frag");
-        auto pipelineLayout = frame->backendDevice->createPipelineLayout2({frame->_frameGlobalDescriptorSetLayout});
+
+        std::vector<vk::DescriptorSetLayoutBinding> bindings;
+        vk::DescriptorSetLayoutBinding camBinding;
+        camBinding.setBinding(0);
+        camBinding.setDescriptorType(vk::DescriptorType::eUniformBuffer);
+        camBinding.setDescriptorCount(1);
+        camBinding.setStageFlags(vk::ShaderStageFlagBits::eAllGraphics);
+        bindings.push_back(camBinding);
+
+        passDataDescriptorLayout = frame->manageDescriptorSet("SkyBoxPassDataDescriptorSet",bindings);
+
+        frame->getManagedDescriptorSet("SkyBoxPassDataDescriptorSet",[frame,this](const vk::DescriptorSet & passDataDescriptorSet) mutable {
+            frame->backendDevice->updateDescriptorSetUniformBuffer(passDataDescriptorSet,0,scene->mainView.camera.data.getBuffer());
+        });
+
+        pipelineLayout = frame->backendDevice->createPipelineLayout2({frame->_frameGlobalDescriptorSetLayout,passDataDescriptorLayout});
         frame->backendDevice->setObjectDebugName(pipelineLayout,"SkyBoxPassPipelineLayout");
 
         VulkanGraphicsPipelineBuilder builder(frame->backendDevice->device,vs,fs,
@@ -53,10 +69,14 @@ RASTERIZEDPASS_DEF_BEGIN(SkyBoxPass)
     void record(vk::CommandBuffer cmdBuf, const GPUFrame* frame) override
     {
         beginPass(cmdBuf);
+        cmdBuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,pipelineLayout,1,frame->getManagedDescriptorSet("SkyBoxPassDataDescriptorSet"),
+                                  nullptr);
         cmdBuf.bindPipeline(vk::PipelineBindPoint::eGraphics,graphicsPipelines[0].getPipeline());
         FullScreenQuadDrawer::draw(cmdBuf);
         endPass(cmdBuf);
     }
+
+    renderScene::RenderScene* scene{};
 RASTERIZEDPASS_DEF_END(SkyBoxPass)
 
 RASTERIZEDPASS_DEF_BEGIN(ShadowPass)
@@ -79,7 +99,6 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
     void prepareAOT(GPUFrame* frame) override
     {
         std::vector<vk::DescriptorSetLayoutBinding> bindings;
-
         vk::DescriptorSetLayoutBinding camBinding;
         camBinding.setBinding(0);
         camBinding.setDescriptorType(vk::DescriptorType::eUniformBuffer);
@@ -98,7 +117,7 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
         rasterInfo.setCullMode(vk::CullModeFlagBits::eNone);
         rasterInfo.setRasterizerDiscardEnable(vk::False);
         rasterInfo.setFrontFace(vk::FrontFace::eClockwise);
-        rasterInfo.setPolygonMode(vk::PolygonMode::eLine);
+        rasterInfo.setPolygonMode(vk::PolygonMode::eFill);
         rasterInfo.setLineWidth(1.0);
 
         depthStencilInfo.setDepthTestEnable(vk::True);

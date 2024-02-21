@@ -25,6 +25,7 @@ void SceneViewer::init(std::shared_ptr<DeviceExtended> device) {
             auto skyBoxPass = std::make_unique<SkyBoxPass>();
             skyBoxPass->addOutput<PassAttachmentDescription>("result",vk::Format::eR8G8B8A8Srgb,PassAttachmentExtent::SwapchainRelative(1.0,1.0),
                                                              vk::AttachmentLoadOp::eDontCare,vk::AttachmentStoreOp::eStore);
+            skyBoxPass->scene = this->_renderScene;
             frameGraph.registerRasterizedGPUPass(std::move(skyBoxPass));
         }
         {
