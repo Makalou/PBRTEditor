@@ -321,7 +321,7 @@ GPUFrame::GPUFrame(int threadsNum, const std::shared_ptr<DeviceExtended> &backen
 
     auto swapChainFormat = static_cast<vk::Format>(backendDevice->_swapchain.image_format);
     auto swapChainExtent = backendDevice->_swapchain.extent;
-    swapchainAttachment = new PassAttachmentDescription("SwapchainImage",swapChainFormat,swapChainExtent.width,swapChainExtent.height,
+    swapchainAttachment = new PassAttachmentDescription("SwapchainImage",swapChainFormat,PassAttachmentExtent::SwapchainRelative(1,1),
                                                         vk::AttachmentLoadOp::eDontCare,vk::AttachmentStoreOp::eDontCare);
 
     //todo multiple queues stuffs ...
@@ -719,17 +719,22 @@ void GPUFrame::update(GPUFrame::Event event) {
                         vk::WriteDescriptorSet write;
                         write.setDstSet(getManagedDescriptorSet(pass->_name + "InputDescriptorSet"));
                         write.setDescriptorType(vk::DescriptorType::eCombinedImageSampler);
+                        write.setDescriptorCount(1);
                         vk::DescriptorImageInfo imgInfo{};
                         imgInfo.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
                         imgInfo.setSampler(samplers[0]);
                         imgInfo.setImageView(getBackingImageView(input->name));
                         imgInfos.push_back(imgInfo);
-                        write.setPImageInfo(&imgInfos[imgInfos.size()-1]);
-                        writes.emplace_back(write);
+                        writes.push_back(write);
                     }
                 }
             }
         }
+        for (int i = 0; i < writes.size(); i++)
+        {
+            writes[i].setPImageInfo(&imgInfos[i]);
+        }
+
         backendDevice->updateDescriptorSets(writes,{});
     }
 }
