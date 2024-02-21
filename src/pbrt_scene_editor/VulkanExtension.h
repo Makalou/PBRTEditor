@@ -182,7 +182,7 @@ struct DeviceExtended : vkb::Device, vk::Device
     {
         vk::DebugUtilsObjectNameInfoEXT debugNameInfo{};
         debugNameInfo.setObjectType(ObjectT::objectType);
-        debugNameInfo.setObjectHandle((uint64_t)static_cast<ObjectT::CType>(object));
+        debugNameInfo.setObjectHandle((uint64_t)static_cast<typename ObjectT::CType>(object));
         debugNameInfo.setPObjectName(name);
         setDebugUtilsObjectNameEXT(debugNameInfo, dld);
     }

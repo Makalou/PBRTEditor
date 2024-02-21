@@ -380,7 +380,7 @@ struct GPURasterizedPass : GPUPass
     //We should guarantee that each pipelineLayouts must be compatible with passBaseLayout
     std::vector<std::pair<std::vector<vk::DescriptorSetLayout>, vk::PipelineLayout>> pipelineLayouts;
 
-    GPURasterizedPass() = default;
+    GPURasterizedPass() = delete;
     explicit GPURasterizedPass(const std::string& name) : GPUPass(name){};
 
     virtual ~GPURasterizedPass()
@@ -543,7 +543,7 @@ struct GPUFrame {
     }
 
     int allocateSingleDescriptorSet(vk::DescriptorSetLayout layout) const {
-
+        return 0;
     }
 
     void getAllocatedDescriptorSet(int handle, const std::function<void(vk::DescriptorSet)> &callback) const {
