@@ -145,7 +145,7 @@ void GPURasterizedPass::buildRenderPass(const DeviceExtended &device, GPUFrame *
 /*
  * May need recreate when swapChain invalid
  */
-void GPURasterizedPass::buildFrameBuffer(const DeviceExtended& device, GPUFrame* frame) {
+void GPURasterizedPass::buildFrameBuffer(GPUFrame* frame) {
     assert(renderPass!=VK_NULL_HANDLE);
     framebufferCreateInfo.setRenderPass(renderPass);
     //For now, we assume each attachment has same size
@@ -162,7 +162,7 @@ void GPURasterizedPass::buildFrameBuffer(const DeviceExtended& device, GPUFrame*
         if (output->getType() == Attachment)
         {
             auto passAttachment = dynamic_cast<PassAttachmentDescription*>(output.get());
-            auto passAttachmentExtent = passAttachment->getExtent(device._swapchain);
+            auto passAttachmentExtent = passAttachment->getExtent(frame->backendDevice->_swapchain);
             if (width == 0) {
                 width = passAttachmentExtent.width;
             }
@@ -190,7 +190,7 @@ void GPURasterizedPass::buildFrameBuffer(const DeviceExtended& device, GPUFrame*
         if (inout->getType() == Attachment)
         {
             auto passAttachment = dynamic_cast<PassAttachmentDescription*>(inout.get());
-            auto passAttachmentExtent = passAttachment->getExtent(device._swapchain);
+            auto passAttachmentExtent = passAttachment->getExtent(frame->backendDevice->_swapchain);
             if (width == 0) {
                 width = passAttachmentExtent.width;
             }
@@ -218,9 +218,9 @@ void GPURasterizedPass::buildFrameBuffer(const DeviceExtended& device, GPUFrame*
     framebufferCreateInfo.setHeight(height);
     framebufferCreateInfo.setLayers(1);
     framebufferCreateInfo.setAttachments(imageViews);
-    frameBuffer = device.createFramebuffer(framebufferCreateInfo);
+    frameBuffer = frame->backendDevice->createFramebuffer(framebufferCreateInfo);
     auto fbName = this->_name + "FrameBuffer";
-    device.setObjectDebugName(frameBuffer, fbName.c_str());
+    frame->backendDevice->setObjectDebugName(frameBuffer, fbName.c_str());
 }
 
 bool isResourceTypeCompatible(PassResourceType outputType, PassResourceType inputType)
@@ -559,9 +559,9 @@ void GPUFrame::compileAOT() {
 
     samplers.emplace_back(backendDevice->createSampler(defaultSamplerInfo));
 
-    for(int passIdx = 0; passIdx < sortedIndices.size(); passIdx++)
+    for(int idx = 0; idx < sortedIndices.size(); idx++)
     {
-        auto & pass = _rasterPasses[sortedIndices[passIdx]];
+        auto & pass = _rasterPasses[sortedIndices[idx]];
         for (auto& input : pass->inputs)
         {
             assert(input->outputHandle);
@@ -573,48 +573,11 @@ void GPUFrame::compileAOT() {
             {
                 // Need to create new image
                 auto attachmentDesc = dynamic_cast<PassAttachmentDescription*>(output.get());
-                VMAImage image;
-                /*todo frame graph should some how determine whether an attachment need to create with sample bit or not.
-                 * For color attachment, it seems that every attachment need to be sampled by further passes, except swapchainimage
-                 * For depth attachment, it might not be the case.*/
-                bool sampled_need = true;
-                auto attachmentExtent = attachmentDesc->getExtent(backendDevice->_swapchain);
-                if (isDepthStencilFormat(attachmentDesc->format))
-                {
-                    image = backendDevice->allocateVMAImageForDepthStencilAttachment(
-                        static_cast<VkFormat>(attachmentDesc->format), attachmentExtent.width, attachmentExtent.height, sampled_need).value();
-                }
-                else {
-                    image = backendDevice->allocateVMAImageForColorAttachment(
-                        static_cast<VkFormat>(attachmentDesc->format), attachmentExtent.width, attachmentExtent.height, sampled_need).value();
-                }
+                VMAImage image = createBackingImage(attachmentDesc);
                 auto name = pass->_name + "::" + output->name;
                 backingImages.emplace(name, image);
                 // create image view
-                vk::ImageViewCreateInfo imageViewInfo{};
-                imageViewInfo.image = image.image;
-                imageViewInfo.viewType = vk::ImageViewType::e2D;
-                imageViewInfo.format = attachmentDesc->format;
-                vk::ComponentMapping componentMapping{};
-                componentMapping.a = vk::ComponentSwizzle::eA;
-                componentMapping.r = vk::ComponentSwizzle::eR;
-                componentMapping.g = vk::ComponentSwizzle::eG;
-                componentMapping.b = vk::ComponentSwizzle::eB;
-                imageViewInfo.components = componentMapping;
-                vk::ImageSubresourceRange subresourceRange;
-                if (isDepthStencilFormat(attachmentDesc->format))
-                {
-                    subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth;
-                }
-                else {
-                    subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
-                }
-                subresourceRange.baseMipLevel = 0;
-                subresourceRange.levelCount = 1;
-                subresourceRange.baseArrayLayer = 0;
-                subresourceRange.layerCount = 1;
-                imageViewInfo.subresourceRange = subresourceRange;
-                auto imageView = backendDevice->createImageView(imageViewInfo);
+                auto imageView = createBackingImageView(attachmentDesc,image.image);
                 backingImageViews.emplace(name, imageView);
             }
         }
@@ -643,7 +606,7 @@ void GPUFrame::compileAOT() {
         // We need to build frame buffers for each gpu frame,
         // but we only need to build render pass once.
         pass->buildRenderPass(*backendDevice,this);
-        pass->buildFrameBuffer(*backendDevice,this);
+        pass->buildFrameBuffer(this);
     }
 
     for(auto & pass : _rasterPasses)
@@ -663,6 +626,112 @@ void GPUFrame::compileAOT() {
         this->x = xPos;
         this->y = yPos;
     });
+
+    backendDevice->_swapchain.registerRecreateCallback([this](auto){
+        this->update(Event::SWAPCHAIN_RESIZE);
+    });
+}
+
+void GPUFrame::update(GPUFrame::Event event) {
+    if(event == Event::SWAPCHAIN_RESIZE)
+    {
+        backingImageViews["SwapchainImage"] = backendDevice->_swapchain.get_image_views().value()[frameIdx];
+        std::vector<GPURasterizedPass *> needRebuilds;
+        for(int idx = 0; idx < sortedIndices.size(); idx ++)
+        {
+            auto passIdx = sortedIndices[idx];
+            auto & pass = _rasterPasses[passIdx];
+
+            for(auto& output : pass->outputs)
+            {
+                if(output->getType() == Attachment)
+                {
+                    auto attachmentDesc = dynamic_cast<PassAttachmentDescription*>(output.get());
+                    if (auto ptr = std::get_if<PassAttachmentExtent::SwapchainRelative>(&attachmentDesc->extent)) {
+                        needRebuilds.push_back(_rasterPasses[passIdx].get());
+                        VMAImage newImg = createBackingImage(attachmentDesc);
+                        auto name = pass->_name + "::" + output->name;
+                        auto oldImg = backingImages[name];
+                        backingImages[name] = newImg;
+                        backendDevice->deAllocateImage(oldImg.image,oldImg.allocation);
+                        auto newImgView = createBackingImageView(attachmentDesc, newImg.image);
+                        auto oldImgView = backingImageViews[name];
+                        backendDevice->destroy(oldImgView);
+                        backingImageViews[name] = newImgView;
+                    }
+                }
+            }
+
+            for(auto& inout : pass->inouts)
+            {
+                if(inout->outputHandle->getType() == Attachment)
+                {
+                    if(inout->outputHandle->name == "SwapchainImage")
+                    {
+                        needRebuilds.push_back(_rasterPasses[passIdx].get());
+                        auto inoutName = inout->name;
+                        size_t pos = inoutName.find("->");
+                        if (pos == std::string::npos)
+                            throw std::invalid_argument("Failed to parse inout name");
+                        auto outputName = inoutName.substr(pos + 2);
+                        auto name = pass->_name + "::" + outputName;
+                        backingImageViews[name] = backingImageViews["SwapchainImage"];
+                    }
+                    auto desc = dynamic_cast<PassAttachmentDescription*>(inout->outputHandle.pointer);
+                    if (std::holds_alternative<PassAttachmentExtent::SwapchainRelative>(desc->extent)) {
+                        needRebuilds.push_back(_rasterPasses[passIdx].get());
+                        auto inoutName = inout->name;
+                        size_t pos = inoutName.find("->");
+                        if (pos == std::string::npos)
+                            throw std::invalid_argument("Failed to parse inout name");
+                        auto inputName = inoutName.substr(0, pos);
+                        auto outputName = inoutName.substr(pos + 2);
+                        auto name = pass->_name + "::" + outputName;
+                        backingImageViews[name] = backingImageViews[inputName];
+                    }
+                }
+            }
+        }
+
+        std::sort(needRebuilds.begin(), needRebuilds.end());
+        // Remove duplicate elements
+        auto last = std::unique(needRebuilds.begin(), needRebuilds.end());
+        needRebuilds.erase(last, needRebuilds.end());
+
+        for(int i = 0; i < needRebuilds.size(); i++)
+        {
+            backendDevice->destroy(needRebuilds[i]->frameBuffer);
+            needRebuilds[i]->buildFrameBuffer(this);
+        }
+
+        std::vector<vk::DescriptorImageInfo> imgInfos;
+        std::vector<vk::WriteDescriptorSet> writes;
+        for(int idx = 0; idx < sortedIndices.size(); idx ++)
+        {
+            auto passIdx = sortedIndices[idx];
+            auto & pass = _rasterPasses[passIdx];
+            for(auto & input : pass->inputs)
+            {
+                if(input->getType() == Texture && input->outputHandle->getType() == Attachment)
+                {
+                    auto desc = dynamic_cast<PassAttachmentDescription*>(input->outputHandle.pointer);
+                    if (std::holds_alternative<PassAttachmentExtent::SwapchainRelative>(desc->extent)) {
+                        vk::WriteDescriptorSet write;
+                        write.setDstSet(getManagedDescriptorSet(pass->_name + "InputDescriptorSet"));
+                        write.setDescriptorType(vk::DescriptorType::eCombinedImageSampler);
+                        vk::DescriptorImageInfo imgInfo{};
+                        imgInfo.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+                        imgInfo.setSampler(samplers[0]);
+                        imgInfo.setImageView(getBackingImageView(input->name));
+                        imgInfos.push_back(imgInfo);
+                        write.setPImageInfo(&imgInfos[imgInfos.size()-1]);
+                        writes.emplace_back(write);
+                    }
+                }
+            }
+        }
+        backendDevice->updateDescriptorSets(writes,{});
+    }
 }
 
 vk::CommandBuffer GPUFrame::recordMainQueueCommands() {

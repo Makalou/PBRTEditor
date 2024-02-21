@@ -363,7 +363,7 @@ struct GPURasterizedPass : GPUPass
 
     void buildRenderPass(const DeviceExtended& device, GPUFrame* frame);
 
-    void buildFrameBuffer(const DeviceExtended& device, GPUFrame* frame);
+    void buildFrameBuffer(GPUFrame* frame);
 
     vk::RenderPass renderPass;
     vk::Framebuffer frameBuffer;
@@ -481,6 +481,62 @@ struct GPUFrame {
 
     //https://app.diagrams.net/#G1gIpgDwpK7Vyhzypl7A_RbQFETWhS1_1q
     void compileAOT();
+
+    enum class Event
+    {
+        SWAPCHAIN_RESIZE
+    };
+
+    void update(Event event);
+
+    auto createBackingImage(PassAttachmentDescription* attachmentDesc)
+    {
+        VMAImage image;
+        /*todo frame graph should some how determine whether an attachment need to create with sample bit or not.
+         * For color attachment, it seems that every attachment need to be sampled by further passes, except swapchainimage
+         * For depth attachment, it might not be the case.*/
+        bool sampled_need = true;
+        auto attachmentExtent = attachmentDesc->getExtent(backendDevice->_swapchain);
+        if (isDepthStencilFormat(attachmentDesc->format))
+        {
+            image = backendDevice->allocateVMAImageForDepthStencilAttachment(
+                    static_cast<VkFormat>(attachmentDesc->format), attachmentExtent.width, attachmentExtent.height, sampled_need).value();
+        }
+        else {
+            image = backendDevice->allocateVMAImageForColorAttachment(
+                    static_cast<VkFormat>(attachmentDesc->format), attachmentExtent.width, attachmentExtent.height, sampled_need).value();
+        }
+
+        return image;
+    }
+
+    auto createBackingImageView(PassAttachmentDescription* attachmentDesc, vk::Image image)
+    {
+        vk::ImageViewCreateInfo imageViewInfo{};
+        imageViewInfo.image = image;
+        imageViewInfo.viewType = vk::ImageViewType::e2D;
+        imageViewInfo.format = attachmentDesc->format;
+        vk::ComponentMapping componentMapping{};
+        componentMapping.a = vk::ComponentSwizzle::eA;
+        componentMapping.r = vk::ComponentSwizzle::eR;
+        componentMapping.g = vk::ComponentSwizzle::eG;
+        componentMapping.b = vk::ComponentSwizzle::eB;
+        imageViewInfo.components = componentMapping;
+        vk::ImageSubresourceRange subresourceRange;
+        if (isDepthStencilFormat(attachmentDesc->format))
+        {
+            subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth;
+        }
+        else {
+            subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+        }
+        subresourceRange.baseMipLevel = 0;
+        subresourceRange.levelCount = 1;
+        subresourceRange.baseArrayLayer = 0;
+        subresourceRange.layerCount = 1;
+        imageViewInfo.subresourceRange = subresourceRange;
+        return backendDevice->createImageView(imageViewInfo);
+    }
 
     vk::ImageView getBackingImageView(const std::string &name) const {
         return backingImageViews.find(name)->second;
