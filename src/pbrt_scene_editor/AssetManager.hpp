@@ -194,5 +194,5 @@ private:
     std::mutex meshCacheLock;
 
     std::vector<Assimp::Importer> perThreadImporter{std::thread::hardware_concurrency()};
-    ThreadPool workerPool{ 1 };
+    ThreadPool workerPool{ std::thread::hardware_concurrency() };
 };

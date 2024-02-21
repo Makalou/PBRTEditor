@@ -207,24 +207,24 @@ MeshHostObject parseAssimpMesh(aiMesh* mesh)
 MeshHostObject optimize(MeshHostObject&& rawMesh)
 {
     //Simplification
-    float threshold = 0.1f;
+    /*float threshold = 0.1f;
     auto target_index_count = static_cast<size_t>(rawMesh.index_count * threshold);
     if(target_index_count > 3)
     {
-        float target_error = 1e-3f;
+        float target_error = 1e-1f;
 
         std::vector<unsigned int> lod(rawMesh.index_count);
         float lod_error;
         lod.resize(meshopt_simplifySloppy(lod.data(), rawMesh.indices.get(), rawMesh.index_count,
                                           rawMesh.position.get(), rawMesh.vertex_count, sizeof(float) * 3,
                                           target_index_count, target_error, &lod_error));
+        assert(!lod.empty());
         rawMesh.index_count = lod.size();
         rawMesh.indices.reset(new unsigned int[lod.size()]);
-        assert(!lod.empty());
         std::copy(lod.begin(), lod.end(), rawMesh.indices.get());
-    }
+    }*/
 
-    return rawMesh;
+    return std::move(rawMesh);
 }
 
 MeshHostObject AssetManager::loadMeshPBRTPLY(const std::string &relative_path,int importerID) {
@@ -240,7 +240,9 @@ MeshHostObject AssetManager::loadMeshPBRTPLY(const std::string &relative_path,in
     assert(scene->mNumMeshes == 1);
     auto meshHostObject = optimize(parseAssimpMesh(scene->mMeshes[0]));
     importer.FreeScene();
-    return std::move(meshHostObject);
+    //logging
+    GlobalLogger::getInstance().info("Loaded Mesh " + relative_path);
+    return meshHostObject;
 }
 
 MeshHostObject* AssetManager::getOrLoadPBRTPLY(const std::string &relative_path) {
@@ -272,8 +274,6 @@ std::future<MeshHostObject *>* AssetManager::getOrLoadMeshAsync(const std::strin
                 return &it->second;
             }
         }
-        //logging
-        GlobalLogger::getInstance().info("Loading Mesh " + fileName);
         auto meshHostObj = loadMeshPBRTPLY(relative_path,id);
         // Cache loaded mesh.
         std::lock_guard<std::mutex> lg(meshCacheLock);

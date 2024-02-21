@@ -113,6 +113,7 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
         });
 
         passLevelPipelineLayout = frame->backendDevice->createPipelineLayout2({frame->_frameGlobalDescriptorSetLayout,passDataDescriptorLayout});
+        frame->backendDevice->setObjectDebugName(passLevelPipelineLayout, "GBufferPassLevelPipelineLayout");
 
         rasterInfo.setCullMode(vk::CullModeFlagBits::eNone);
         rasterInfo.setRasterizerDiscardEnable(vk::False);
@@ -241,7 +242,10 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
                                   nullptr);
         beginPass(cmdBuf);
 
-        if(scene!= nullptr)
+        currentPipelineIdx = -1;
+        currentInstanceDescriptorSetIdx = -1;
+
+        if(scene!= nullptr && !scene->_dynamicRigidMeshBatch.empty())
         {
             auto view = scene->mainView.camera.data->view;
             auto proj = scene->mainView.camera.data->proj;
@@ -256,8 +260,9 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
                 // todo : Here is a big problem. The performance is unpredictable.
                 bindRenderState(cmdBuf,frame,instanceRigidDynamic);
                 //mesh instance know how to bind the geometry buffer, how to draw
-                //instanceRigidDynamic.drawAll(cmdBuf);
-                visibleCount += instanceRigidDynamic.drawCulled(cmdBuf,[&](auto meshHandle, const auto & perInstanceData) -> bool {
+                instanceRigidDynamic.drawAll(cmdBuf);
+                //instanceRigidDynamic.drawOne(cmdBuf);
+               /* visibleCount += instanceRigidDynamic.drawCulled(cmdBuf,[&](auto meshHandle, const auto & perInstanceData) -> bool {
                     auto aabb = scene->aabbs[meshHandle.idx];
                     glm::vec3 corners[8]{};
                     corners[0] = {aabb.minX, -aabb.minY, aabb.minZ};
@@ -282,7 +287,7 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
                     }
 
                     return false;
-                });
+                });*/
             }
         }
         endPass(cmdBuf);
