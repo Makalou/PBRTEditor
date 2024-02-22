@@ -190,7 +190,7 @@ namespace renderScene
          * like renderScene::setTransform(instance identifier, newTransform).
          *
          * One reason is, if you directly manipulate the data, you lose the chance to let renderScene knows what happen
-         * which otherwise may allow some optimization like batch operation. Of course, with object pattern you can still
+         * which otherwise may allow some optimization like batch operation. Of course, with object oriented pattern you can still
          * do that, by call something like scene::addUploadRequest() inside the function. But the question is why you
          * bother to do that: if you ultimately want to notify the manager, would it be more intuitive and convenience
          * to directly do so?
