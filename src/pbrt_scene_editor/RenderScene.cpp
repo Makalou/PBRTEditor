@@ -197,10 +197,28 @@ namespace renderScene
          *
          * In other word, all the manipulation of data must go through the subsystem, or manager.
          */
-        
+        vk::DescriptorSetLayoutBinding binding1;
+        binding1.setBinding(0);
+        binding1.setStageFlags(vk::ShaderStageFlagBits::eAllGraphics);
+        binding1.setDescriptorType(vk::DescriptorType::eUniformBuffer);
+        binding1.setDescriptorCount(1);
+        perInstanceDataSetLayout = backendDevice->createDescriptorSetLayout2({});
+
+        vk::DescriptorPoolCreateInfo poolCreateInfo{};
+        vk::DescriptorPoolSize poolSize{};
+        poolSize.setType(vk::DescriptorType::eUniformBuffer);
+        poolSize.setDescriptorCount(_dynamicRigidMeshBatch.size());
+        poolCreateInfo.setPoolSizes(poolSize);
+        poolCreateInfo.setMaxSets(_dynamicRigidMeshBatch.size());
+        perInstanceDataDescriptorPool = backendDevice->createDescriptorPool(poolCreateInfo);
+
         for (auto& dynamicInstance : _dynamicRigidMeshBatch)
         {
             dynamicInstance.prepare(backendDevice.get());
+            auto descriptorSet = backendDevice->allocateSingleDescriptorSet(perInstanceDataDescriptorPool,perInstanceDataSetLayout);
+            dynamicInstance.perInstDataDescriptorLayout = perInstanceDataSetLayout;
+            dynamicInstance.perInstDataDescriptorSet = descriptorSet;
+            backendDevice->updateDescriptorSetUniformBuffer(descriptorSet,0,dynamicInstance.perInstDataBuffer.buffer);
         }
     }
 

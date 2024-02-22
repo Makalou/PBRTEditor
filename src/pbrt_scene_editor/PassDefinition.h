@@ -95,6 +95,7 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
     vk::PipelineLayout passLevelPipelineLayout;
     vk::PipelineRasterizationStateCreateInfo rasterInfo{};
     vk::PipelineDepthStencilStateCreateInfo depthStencilInfo{};
+    vk::DescriptorSetLayout passDataDescriptorLayout;
 
     void prepareAOT(GPUFrame* frame) override
     {
@@ -106,7 +107,7 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
         camBinding.setStageFlags(vk::ShaderStageFlagBits::eAllGraphics);
         bindings.push_back(camBinding);
 
-        auto passDataDescriptorLayout = frame->manageDescriptorSet("GBufferPassDataDescriptorSet",bindings);
+        passDataDescriptorLayout = frame->manageDescriptorSet("GBufferPassDataDescriptorSet",bindings);
 
         frame->getManagedDescriptorSet("GBufferPassDataDescriptorSet",[frame,this](const vk::DescriptorSet & passDataDescriptorSet) mutable {
             frame->backendDevice->updateDescriptorSetUniformBuffer(passDataDescriptorSet,0,scene->mainView.camera.data.getBuffer());
@@ -130,16 +131,30 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
         depthStencilInfo.setStencilTestEnable(vk::False);
     }
 
-    using InstnaceUUIDMap = std::unordered_map<renderScene::InstanceUUID,int,renderScene::InstanceUUIDHash>;
-    InstnaceUUIDMap pipelineMap;
-    InstnaceUUIDMap instanceDescriptorSetMap;
+    using InstanceUUIDMap = std::unordered_map<renderScene::InstanceUUID,int,renderScene::InstanceUUIDHash>;
+    InstanceUUIDMap pipelineLayoutMap;
+    InstanceUUIDMap pipelineMap;
+    InstanceUUIDMap instanceDescriptorSetMap;
     int currentPipelineIdx = -1;
     int currentInstanceDescriptorSetIdx = -1;
+    std::vector<vk::PipelineLayout> instancePipelineLayouts;
     std::vector<vk::DescriptorSet> instanceDescriptorSets;
 
     vk::DescriptorSetLayout getPerInstanceDescriptorSetLayout()
     {
         return {};
+    }
+
+    int getOrCreatePipelineLayout(const GPUFrame* frame,const renderScene::InstanceBatchRigidDynamicType & instanceRigidDynamic)
+    {
+        if(instancePipelineLayouts.empty())
+        {
+            auto pipelineLayout = frame->backendDevice->createPipelineLayout2({frame->_frameGlobalDescriptorSetLayout,
+                                                         passDataDescriptorLayout,
+                                                         instanceRigidDynamic.getSetLayout()});
+            instancePipelineLayouts.push_back(pipelineLayout);
+        }
+        return 0;
     }
 
     int getOrCreatePipeline(const GPUFrame* frame,const renderScene::InstanceBatchRigidDynamicType & instanceRigidDynamic)
@@ -169,11 +184,13 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
         auto fsUUID = ShaderManager::queryShaderVariantUUID("simple.frag",macroList);
 
         int idx = -1;
+        bool samePipelineLayout = true; //todo
         for(int i = 0; i< graphicsPipelines.size();i++)
         {
             if(graphicsPipelines[i].compatibleWith(vertexInputState) &&
                graphicsPipelines[i].compatibleWithVertexShader(vsUUID) &&
-               graphicsPipelines[i].compatibleWithFragmentShader(fsUUID))
+               graphicsPipelines[i].compatibleWithFragmentShader(fsUUID) &&
+               samePipelineLayout)
             {
                 pipelineMap.emplace(instanceRigidDynamic.getUUID(),i);
                 idx = i;
@@ -183,17 +200,13 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
         if(idx == -1)
         {
             // Need to create new pipeline
-//            vk::DescriptorSetLayout instanceDescriptorSetLayout;
-//            auto pipelineLayout = frame->backendDevice->createPipelineLayout2({frame->_frameGlobalDescriptorSetLayout,
-//                                                                               passDataDescriptorLayout,
-//                                                                               instanceDescriptorSetLayout});
             auto* vs = ShaderManager::getInstance().createVertexShader(frame->backendDevice.get(),"simple.vert",macroList);
             auto* fs = ShaderManager::getInstance().createFragmentShader(frame->backendDevice.get(),"simple.frag",macroList);
-            vk::PipelineDepthStencilStateCreateInfo depthStencilStateCreateInfo{};
+            int pipelineLayoutIdx = getOrCreatePipelineLayout(frame,instanceRigidDynamic);
             VulkanGraphicsPipelineBuilder builder(frame->backendDevice->device,vs,fs,
                 vertexInputState.getCreateInfo(),
                 renderPass,
-                passLevelPipelineLayout,
+                instancePipelineLayouts[pipelineLayoutIdx],
                 rasterInfo,depthStencilInfo);
             auto pipeline = builder.build();
             graphicsPipelines.push_back(pipeline);
@@ -204,7 +217,7 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
 
     int allocateDescriptorSet(const GPUFrame* frame, const renderScene::InstanceBatchRigidDynamicType& instanceRigidDynamic)
     {
-        
+        return 0;
     }
 
     void bindCurrentPipeline(vk::CommandBuffer cmdBuf, int pipelineIdx)
@@ -248,6 +261,10 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
             auto idx = allocateDescriptorSet(frame, instanceRigidDynamic);
             bindCurrentInstanceDescriptorSet(cmdBuf, idx);
         }*/
+        cmdBuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,graphicsPipelines[currentPipelineIdx].getPipelineLayout(),
+                                  2,
+                                  instanceRigidDynamic.getDescriptorSet(),
+                                  nullptr);
     }
 
     void record(vk::CommandBuffer cmdBuf,const GPUFrame* frame) override

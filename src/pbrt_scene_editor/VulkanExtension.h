@@ -458,7 +458,7 @@ struct LinearCachedDescriptorAllocator
 {
     vk::DescriptorSet allocateSingle()
     {
-      
+        return vk::DescriptorSet{};
     }
 
     vk::DescriptorSetLayout setLayout;

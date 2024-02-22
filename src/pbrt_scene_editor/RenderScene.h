@@ -232,9 +232,19 @@ namespace renderScene {
             return perInstDataBuffer.buffer;
         }
 
+        vk::DescriptorSetLayout getSetLayout() const
+        {
+            return perInstDataDescriptorLayout;
+        }
+
+        vk::DescriptorSet getDescriptorSet() const
+        {
+            return perInstDataDescriptorSet;
+        }
+
         void drawAll(vk::CommandBuffer cmd) const{
             mesh->bind(cmd);
-            //todo bind per instance data
+            //bind per instance data
             cmd.bindVertexBuffers(1, { instanceDataIdicesBuffer.buffer }, {0});
             //cmd.bindVertexBuffers(perInstanceBindingIdx,instDataIdxBuffer)
             cmd.drawIndexed(mesh->indexCount, perInstanceData.size(), 0, 0, 0);
@@ -296,6 +306,11 @@ namespace renderScene {
         MeshRigidHandle mesh;
         const VulkanPipelineVertexInputStateInfo pipelineVertexInputStateInfo{};
         VMABuffer perInstDataBuffer{};
+        vk::DescriptorSetLayout perInstDataDescriptorLayout;
+        vk::DescriptorSet perInstDataDescriptorSet;
+        // Why we use secondary indirect instance data indexing?
+        // Short answer : for better support on culling.
+        //https://app.diagrams.net/#G1ei8XsclhGNg_qMR_J7LBKmGRjSSXyShI#%7B%22pageId%22%3A%22sedBS7P0nTr2XQddadu8%22%7D
         VMABuffer instanceDataIdicesBuffer{};
         InstanceUUID _uuid;
     };
@@ -466,6 +481,20 @@ namespace renderScene {
 
         std::vector<AABB> aabbs{};
         RenderView mainView;
+
+        /*
+         * Is it a good idea to let render scene manage perInstanceData descriptorSet?
+         *
+         * Pros:
+         *  1. Renderscene has the global information of instance buffer(layout, count)
+         *  2. It's more intuitive, flexible, and simple
+         * Cons:
+         *  1. Renderscene doesn't have the complete knowledge of render context 'by design'. So
+         *     instance buffer must exclude the whole descriptor set.(It's actually make some sense since
+         *     per instance data has different frequency than other contexts).
+         */
+        vk::DescriptorSetLayout perInstanceDataSetLayout;
+        vk::DescriptorPool perInstanceDataDescriptorPool;
 
         explicit RenderScene(const std::shared_ptr<DeviceExtended>& device);
 

@@ -40,6 +40,12 @@ layout(location = 4) out vec2 outVertexUV;
 USE_FRAME_GLOBAL_DATA;
 
 layout(set = 1, binding = 0) uniform BCAMERA_BLOCK_LAYOUT camera;
+//layout(set = 2, binding = 0) uniform Material;
+//https://app.diagrams.net/#G1ei8XsclhGNg_qMR_J7LBKmGRjSSXyShI#%7B%22pageId%22%3A%22sedBS7P0nTr2XQddadu8%22%7D
+layout(set = 2, binding = 0) uniform PerInstanceData
+{
+    mat4 transform[];
+} instDataArray;
 
 void main() {
     vec3 position = vec3(inVertexPosition.x,-inVertexPosition.y,inVertexPosition.z);
