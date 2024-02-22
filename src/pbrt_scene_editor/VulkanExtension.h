@@ -454,6 +454,18 @@ struct DescriptorSetLayoutExtended
     int bindingCount = 0;
 };
 
+struct LinearCachedDescriptorAllocator
+{
+    vk::DescriptorSet allocateSingle()
+    {
+      
+    }
+
+    vk::DescriptorSetLayout setLayout;
+    std::vector<vk::DescriptorPool> pools;
+    DeviceExtended* backendDevice;
+};
+
 struct VulkanPipelineLayout
 {
     VulkanPipelineLayout(std::vector<DescriptorSetLayoutExtended>&& setLayouts)

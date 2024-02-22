@@ -202,6 +202,11 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
         return idx;
     }
 
+    int allocateDescriptorSet(const GPUFrame* frame, const renderScene::InstanceBatchRigidDynamicType& instanceRigidDynamic)
+    {
+        
+    }
+
     void bindCurrentPipeline(vk::CommandBuffer cmdBuf, int pipelineIdx)
     {
         if(pipelineIdx!=currentPipelineIdx)
@@ -234,6 +239,15 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
             auto idx = getOrCreatePipeline(frame,instanceRigidDynamic);
             bindCurrentPipeline(cmdBuf,idx);
         }
+        /*auto descriptorSetIdx = instanceDescriptorSetMap.find(instUUID);
+        if (descriptorSetIdx != instanceDescriptorSetMap.end())
+        {
+            bindCurrentInstanceDescriptorSet(cmdBuf, descriptorSetIdx->second);
+        }
+        else {
+            auto idx = allocateDescriptorSet(frame, instanceRigidDynamic);
+            bindCurrentInstanceDescriptorSet(cmdBuf, idx);
+        }*/
     }
 
     void record(vk::CommandBuffer cmdBuf,const GPUFrame* frame) override

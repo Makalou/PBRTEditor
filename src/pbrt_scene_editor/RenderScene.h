@@ -169,7 +169,7 @@ namespace renderScene {
             perInstanceBindingDesc.setInputRate(vk::VertexInputRate::eInstance);
             perInstanceBindingIdx = perVertexBindingDesc.binding + 1;
             perInstanceBindingDesc.setBinding(perInstanceBindingIdx);
-            perInstanceBindingDesc.setStride(sizeof(PerInstDataT));//todo wrong way to calculate stride
+            perInstanceBindingDesc.setStride(sizeof(uint32_t));//todo wrong way to calculate stride
 
             vk::VertexInputAttributeDescription perInstanceAttributeDescription{};
             perInstanceAttributeDescription.setBinding(perInstanceBindingDesc.binding);
@@ -194,9 +194,48 @@ namespace renderScene {
             _uuid.high = mesh->_uuid;
         }
 
+        void prepare(DeviceExtended * device)
+        {
+            auto instanceDataBufferSize = sizeof(PerInstDataT) * perInstanceData.size();
+            auto bufferRes = device->allocateBuffer(instanceDataBufferSize, 
+                (VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT), 
+                VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE);
+
+            if (!bufferRes.has_value())
+            {
+                throw std::runtime_error("Failed to allocate instance data buffer");
+            }
+
+            perInstDataBuffer = bufferRes.value();
+            device->oneTimeUploadSync(perInstanceData.data(), instanceDataBufferSize, perInstDataBuffer.buffer);
+
+            for (int i = 0; i < perInstanceData.size(); i++)
+            {
+                instanceDataIdices.push_back(i);
+            }
+
+            bufferRes = device->allocateBuffer(sizeof(uint32_t) * perInstanceData.size(),
+                (VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT),
+                VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE);
+
+            if (!bufferRes.has_value())
+            {
+                throw std::runtime_error("Failed to allocate instance data buffer");
+            }
+
+            instanceDataIdicesBuffer = bufferRes.value();
+            device->oneTimeUploadSync(instanceDataIdices.data(), sizeof(uint32_t) * perInstanceData.size(), instanceDataIdicesBuffer.buffer);
+        }
+
+        VkBuffer getInstanceDataBuffer() const
+        {
+            return perInstDataBuffer.buffer;
+        }
+
         void drawAll(vk::CommandBuffer cmd) const{
             mesh->bind(cmd);
             //todo bind per instance data
+            cmd.bindVertexBuffers(1, { instanceDataIdicesBuffer.buffer }, {0});
             //cmd.bindVertexBuffers(perInstanceBindingIdx,instDataIdxBuffer)
             cmd.drawIndexed(mesh->indexCount, perInstanceData.size(), 0, 0, 0);
         }
@@ -251,12 +290,13 @@ namespace renderScene {
         }
 
         std::vector<PerInstDataT> perInstanceData;
-        std::vector<uint32_t> instanceDataIdx;
+        std::vector<uint64_t> instanceDataIdices;
 
         int perInstanceBindingIdx;
         MeshRigidHandle mesh;
         const VulkanPipelineVertexInputStateInfo pipelineVertexInputStateInfo{};
         VMABuffer perInstDataBuffer{};
+        VMABuffer instanceDataIdicesBuffer{};
         InstanceUUID _uuid;
     };
 

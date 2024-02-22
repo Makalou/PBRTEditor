@@ -197,6 +197,11 @@ namespace renderScene
          *
          * In other word, all the manipulation of data must go through the subsystem, or manager.
          */
+        
+        for (auto& dynamicInstance : _dynamicRigidMeshBatch)
+        {
+            dynamicInstance.prepare(backendDevice.get());
+        }
     }
 
 }

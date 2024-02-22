@@ -17,7 +17,7 @@ layout(location = 4) in vec2 inVertexUV;
 #endif
 
 // what if fragment shader also want transformation ...
-layout(location = 5) in uint inInstWTransform;
+layout(location = 5) in uint inInstDataIdx;
 
 layout(location = 0) out vec3 outVertexPosition;
 
