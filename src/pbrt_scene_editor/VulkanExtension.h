@@ -233,9 +233,32 @@ struct DeviceExtended : vkb::Device, vk::Device
         this->updateDescriptorSets(write,{});
     }
 
+    void updateDescriptorSetStorageBuffer(vk::DescriptorSet dstSet, uint32_t dstBinding, vk::Buffer buffer,
+        vk::DeviceSize range, vk::DeviceSize offset)
+    {
+        vk::WriteDescriptorSet write;
+        write.setDstSet(dstSet);
+        write.setDescriptorType(vk::DescriptorType::eStorageBuffer);
+        write.setDescriptorCount(1);
+        write.setDstBinding(dstBinding);
+
+        vk::DescriptorBufferInfo bufInfo{};
+        bufInfo.setBuffer(buffer);
+        bufInfo.setRange(range);
+        bufInfo.setOffset(offset);
+
+        write.setBufferInfo(bufInfo);
+        this->updateDescriptorSets(write, {});
+    }
+
     void updateDescriptorSetUniformBuffer(vk::DescriptorSet dstSet,uint32_t dstBinding,vk::Buffer buffer)
     {
         updateDescriptorSetUniformBuffer(dstSet,0,buffer,vk::WholeSize,0);
+    }
+
+    void updateDescriptorSetStorageBuffer(vk::DescriptorSet dstSet, uint32_t dstBinding, vk::Buffer buffer)
+    {
+        updateDescriptorSetStorageBuffer(dstSet, 0, buffer, vk::WholeSize, 0);
     }
 
     auto createPipelineLayout2(std::vector<vk::DescriptorSetLayout>&& descriptorSetLayouts)

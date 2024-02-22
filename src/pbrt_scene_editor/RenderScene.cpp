@@ -200,13 +200,13 @@ namespace renderScene
         vk::DescriptorSetLayoutBinding binding1;
         binding1.setBinding(0);
         binding1.setStageFlags(vk::ShaderStageFlagBits::eAllGraphics);
-        binding1.setDescriptorType(vk::DescriptorType::eUniformBuffer);
+        binding1.setDescriptorType(vk::DescriptorType::eStorageBuffer);
         binding1.setDescriptorCount(1);
-        perInstanceDataSetLayout = backendDevice->createDescriptorSetLayout2({});
+        perInstanceDataSetLayout = backendDevice->createDescriptorSetLayout2({binding1});
 
         vk::DescriptorPoolCreateInfo poolCreateInfo{};
         vk::DescriptorPoolSize poolSize{};
-        poolSize.setType(vk::DescriptorType::eUniformBuffer);
+        poolSize.setType(vk::DescriptorType::eStorageBuffer);
         poolSize.setDescriptorCount(_dynamicRigidMeshBatch.size());
         poolCreateInfo.setPoolSizes(poolSize);
         poolCreateInfo.setMaxSets(_dynamicRigidMeshBatch.size());
@@ -218,7 +218,7 @@ namespace renderScene
             auto descriptorSet = backendDevice->allocateSingleDescriptorSet(perInstanceDataDescriptorPool,perInstanceDataSetLayout);
             dynamicInstance.perInstDataDescriptorLayout = perInstanceDataSetLayout;
             dynamicInstance.perInstDataDescriptorSet = descriptorSet;
-            backendDevice->updateDescriptorSetUniformBuffer(descriptorSet,0,dynamicInstance.perInstDataBuffer.buffer);
+            backendDevice->updateDescriptorSetStorageBuffer(descriptorSet,0,dynamicInstance.perInstDataBuffer.buffer);
         }
     }
 

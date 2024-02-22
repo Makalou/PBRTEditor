@@ -198,7 +198,7 @@ namespace renderScene {
         {
             auto instanceDataBufferSize = sizeof(PerInstDataT) * perInstanceData.size();
             auto bufferRes = device->allocateBuffer(instanceDataBufferSize, 
-                (VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT), 
+                (VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT), 
                 VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE);
 
             if (!bufferRes.has_value())
@@ -300,7 +300,7 @@ namespace renderScene {
         }
 
         std::vector<PerInstDataT> perInstanceData;
-        std::vector<uint64_t> instanceDataIdices;
+        std::vector<uint32_t> instanceDataIdices;
 
         int perInstanceBindingIdx;
         MeshRigidHandle mesh;
