@@ -204,7 +204,9 @@ namespace renderScene
                         handleNode(node2,node->_finalTransform);
                     }
                 }
-                stack.push_back(child);
+                else {
+                    stack.push_back(child);
+                }
             }
             handleNode(node,glm::identity<glm::mat4>());
         }
