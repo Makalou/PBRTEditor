@@ -78,6 +78,7 @@ struct SceneGraphNode : Inspectable
     bool is_empty;
     bool is_transform_detached;//transform not be affected by its parent
     bool is_selected;
+    bool is_instance;
 
     glm::mat4x4 _selfTransform;
     glm::mat4x4 _finalTransform;

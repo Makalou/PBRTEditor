@@ -27,6 +27,7 @@ void PBRTSceneBuilder::AttributeBegin() {
     auto* newAttributeNode = new SceneGraphNode;
     newAttributeNode->is_empty = true;
     newAttributeNode->parent = _currentVisitNode;
+    newAttributeNode->is_instance = _currentVisitNode->is_instance;
     newAttributeNode->_finalTransform = _currentVisitNode->_finalTransform;
     _currentVisitNode = newAttributeNode;
 }
@@ -127,6 +128,7 @@ void PBRTSceneBuilder::ObjectBegin(const std::string & instanceName){
     auto* newNode = new SceneGraphNode;
     newNode->is_empty = true;
     newNode->name = instanceName;
+    newNode->is_instance = true;
     newNode->parent = _currentVisitNode;
     _objInstances.push_back(newNode);
     _currentVisitNode = newNode;
@@ -143,26 +145,12 @@ void PBRTSceneBuilder::ObjectInstance(const std::string & instanceName){
         {
             if(obj->name == instanceName)
             {
+                /*
+                 * It's a little tricky here because when use instance, the transform actually
+                 * means the transform in "instance space".
+                 * */
                 _currentVisitNode->children.push_back(obj);
-//                auto* instanceCopy = new SceneGraphNode;
-//                instanceCopy->name = obj->name;
-//                instanceCopy->_selfTransform = obj->_selfTransform;
-//                instanceCopy->_finalTransform = _currentVisitNode->_finalTransform * obj->_finalTransform;
-//
-//                for(auto shape : obj->shapes)
-//                {
-//                    instanceCopy->shapes.push_back(shape);
-//                }
-//                for(auto light : obj->lights)
-//                {
-//                    instanceCopy->lights.push_back(light);
-//                }
-//                for(auto areaLight : obj->areaLights)
-//                {
-//                    instanceCopy->areaLights.push_back(areaLight);
-//                }
-//
-//                _currentVisitNode->children.push_back(instanceCopy);
+                return;
             }
 
         }
@@ -184,12 +172,13 @@ void PBRTSceneBuilder::Rotate(const float * v){
     if(_currentVisitNode!= nullptr)
     {
         _currentVisitNode->is_empty = false;
+        float v0 = v[0]; float v1 = v[1]; float v2 = v[2]; float v3 = v[3];
         _currentVisitNode->_finalTransform = glm::rotate(_currentVisitNode->_finalTransform,
-                                                         glm::radians(v[0]),
-                                                         {v[1],v[2],v[3]});
+                                                         glm::radians(v0),
+                                                         {v1,v2,v3});
         _currentVisitNode->_selfTransform = glm::rotate(_currentVisitNode->_selfTransform,
-                                                         glm::radians(v[0]),
-                                                         {v[1],v[2],v[3]});
+                                                         glm::radians(v0),
+                                                         {v1,v2,v3});
     }
 }
 
@@ -197,10 +186,11 @@ void PBRTSceneBuilder::Scale(const float* s){
     if(_currentVisitNode!= nullptr)
     {
         _currentVisitNode->is_empty = false;
+        float s0 = s[0]; float s1= s[1]; float s2= s[2];
         _currentVisitNode->_finalTransform = glm::scale(_currentVisitNode->_finalTransform,
-                                                        {s[0],s[1],s[2]});
+                                                        {s0,s1,s2});
         _currentVisitNode->_selfTransform= glm::scale(_currentVisitNode->_selfTransform,
-                                                        {s[0],s[1],s[2]});
+                                                        {s0,s1,s2});
     }
 
 }
@@ -218,8 +208,9 @@ void PBRTSceneBuilder::Translate(const float* t){
     if(_currentVisitNode!= nullptr)
     {
         _currentVisitNode->is_empty = false;
-        _currentVisitNode->_finalTransform = glm::translate(_currentVisitNode->_finalTransform, {t[0], t[1], t[2]});
-        _currentVisitNode->_selfTransform = glm::translate(_currentVisitNode->_selfTransform, {t[0], t[1], t[2]});
+        float t0 = t[0]; float t1 = t[1]; float t2 = t[2];
+        _currentVisitNode->_finalTransform = glm::translate(_currentVisitNode->_finalTransform, {t0, t1, t2});
+        _currentVisitNode->_selfTransform = glm::translate(_currentVisitNode->_selfTransform, {t0, t1, t2});
     }
 }
 
