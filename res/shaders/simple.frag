@@ -22,5 +22,9 @@ layout(location = 0) out vec4 outFragColor;
 #endif
 
 void main() {
-    outFragColor = vec4(inFragPosition, 1.0);
+    #if HAS_VERTEX_UV
+    outFragColor = vec4(inFragUV,1.0, 1.0);
+    #else
+    outFragColor = vec4(1.0,0.0,1.0, 1.0);
+    #endif
 }

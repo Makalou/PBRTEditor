@@ -139,6 +139,10 @@ MeshHostObject parseAssimpMesh(aiMesh* mesh)
         }
 
         //We assume each mesh has at most one UV coord, and is stored at idx 0
+        for(int i = 1; i < AI_MAX_NUMBER_OF_TEXTURECOORDS;i++)
+        {
+            assert(!mesh->HasTextureCoords(i));
+        }
         if(mesh->HasTextureCoords(0))
         {
             auto * uv = new float[meshHostObj.vertex_count * 2];

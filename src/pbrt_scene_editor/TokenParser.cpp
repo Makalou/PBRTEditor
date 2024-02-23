@@ -368,6 +368,7 @@ DIRECTIVE_HANDLER_DEF(Shape)
         for (const auto& para : shapeParamList)
         {
             if (para.first == "filename") {
+                assert(!std::get<std::string>(para.second).empty());
                 assetLoader.getOrLoadMeshAsync(std::get<std::string>(para.second));
                 break;
             }
