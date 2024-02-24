@@ -49,7 +49,7 @@ layout(std140,set = 2, binding = 0) readonly buffer PerInstanceData
 
 void main() {
     mat4 model = instData.transform[inInstDataIdx];
-    vec3 position = vec3(inVertexPosition.x,-inVertexPosition.y,inVertexPosition.z);
+    vec3 position = vec3(inVertexPosition.x,inVertexPosition.y,inVertexPosition.z);
     vec4 worldPosition = model * vec4(position, 1.0);
     gl_Position = camera.proj * camera.view * worldPosition;
     outVertexPosition = worldPosition.xyz;

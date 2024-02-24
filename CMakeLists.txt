@@ -47,6 +47,7 @@ set(BUILD_SHARED_LIBS OFF)
 
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/ext)
 
+include_directories(src/ext)
 include_directories(src/ext/glm)
 include_directories(src/ext/glfw/include)
 include_directories(src/ext/tinyobjloader)

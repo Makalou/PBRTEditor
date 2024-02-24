@@ -4,6 +4,7 @@
 #include "assimp/postprocess.h"
 #include <cassert>
 #include <meshoptimizer.h>
+#include "happly.h"
 
 void AssetManager::setWorkDir(const fs::path &path) {
     _currentWorkDir = path;
@@ -208,6 +209,97 @@ MeshHostObject parseAssimpMesh(aiMesh* mesh)
     return meshHostObj;
 }
 
+MeshHostObject parseHapply(happly::PLYData & ply)
+{
+    MeshHostObject meshHostObj;
+    meshHostObj.aabb[0] = meshHostObj.aabb[1] = meshHostObj.aabb[2] = std::numeric_limits<float>::infinity();
+    meshHostObj.aabb[3] = meshHostObj.aabb[4] = meshHostObj.aabb[5] = -std::numeric_limits<float>::infinity();
+
+    // Get mesh-style data from the object
+    assert(ply.hasElement("vertex") && ply.hasElement("face"));
+    auto & vertexElement = ply.getElement("vertex");
+    meshHostObj.vertex_count = vertexElement.count;
+    assert(vertexElement.hasProperty("x") && vertexElement.hasProperty("y") && vertexElement.hasProperty("z"));
+    try
+    {
+        auto pos_x = vertexElement.getProperty<float>("x");
+        auto pos_y = vertexElement.getProperty<float>("y");
+        auto pos_z = vertexElement.getProperty<float>("z");
+
+        auto* position = new float[meshHostObj.vertex_count * 3];
+
+        for (int i = 0; i < meshHostObj.vertex_count; i++)
+        {
+            position[i * 3] = pos_x[i];
+            position[i * 3 + 1] = pos_y[i];
+            position[i * 3 + 2] = pos_z[i];
+            meshHostObj.aabb[0] = std::min(meshHostObj.aabb[0],pos_x[i]);
+            meshHostObj.aabb[1] = std::min(meshHostObj.aabb[1],pos_y[i]);
+            meshHostObj.aabb[2] = std::min(meshHostObj.aabb[2],pos_z[i]);
+            meshHostObj.aabb[3] = std::max(meshHostObj.aabb[3],pos_x[i]);
+            meshHostObj.aabb[4] = std::max(meshHostObj.aabb[4],pos_y[i]);
+            meshHostObj.aabb[5] = std::max(meshHostObj.aabb[5],pos_z[i]);
+        }
+        meshHostObj.position.reset(position);
+        //normal, tangent and uv is optional
+        bool hasNormal = vertexElement.hasProperty("nx") && vertexElement.hasProperty("ny") && vertexElement.hasProperty("nz");
+        if(hasNormal)
+        {
+            auto normal_x = vertexElement.getProperty<float>("nx");
+            auto normal_y = vertexElement.getProperty<float>("ny");
+            auto normal_z = vertexElement.getProperty<float>("nz");
+
+            auto * normal = new float[meshHostObj.vertex_count * 3];
+
+            for(int i = 0; i < meshHostObj.vertex_count; i++)
+            {
+                normal[i * 3] = normal_x[i];
+                normal[i * 3 + 1] = normal_y[i];
+                normal[i * 3 + 2] = normal_z[i];
+            }
+            meshHostObj.normal.reset(normal);
+        }
+
+        bool hasTextureCoords = vertexElement.hasProperty("u") && vertexElement.hasProperty("v");
+        if(hasTextureCoords)
+        {
+            auto u = vertexElement.getProperty<float>("u");
+            auto v = vertexElement.getProperty<float>("v");
+
+            auto * uv = new float[meshHostObj.vertex_count * 2];
+
+            for(int i = 0; i < meshHostObj.vertex_count; i++)
+            {
+                uv[i * 2 + 0] = u[i];
+                uv[i * 2 + 1] = v[i];
+            }
+            meshHostObj.uv.reset(uv);
+        }
+
+        //we only handle triangle for now
+        auto faces = ply.getFaceIndices();
+        meshHostObj.index_count = faces.size() * 3;
+        auto* indices = new unsigned int[meshHostObj.index_count];
+
+        for(int i = 0; i < faces.size(); i ++)
+        {
+            auto & face = faces[i];
+            assert(face.size() == 3);
+            indices[i * 3 + 0] = face[0];
+            indices[i * 3 + 1] = face[1];
+            indices[i * 3 + 2] = face[2];
+        }
+
+        meshHostObj.indices.reset(indices);
+
+    }catch (std::bad_alloc& e)
+    {
+        std::cout << e.what() << std::endl;
+        throw std::runtime_error(e.what());
+    }
+
+    return meshHostObj;
+}
 MeshHostObject optimize(MeshHostObject&& rawMesh)
 {
     //Simplification
@@ -233,7 +325,7 @@ MeshHostObject optimize(MeshHostObject&& rawMesh)
 
 MeshHostObject AssetManager::loadMeshPBRTPLY(const std::string &relative_path,int importerID) {
     auto fileName = fs::absolute(_currentWorkDir / relative_path).make_preferred().string();
-    auto postProcessFlags = aiProcess_Triangulate;
+    /*auto postProcessFlags = aiProcess_ConvertToLeftHanded | aiProcess_Triangulate | aiProcess_SortByPType;
     auto & importer = perThreadImporter[importerID];
     const aiScene* scene = importer.ReadFile(fileName, postProcessFlags);
     if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) {
@@ -242,8 +334,10 @@ MeshHostObject AssetManager::loadMeshPBRTPLY(const std::string &relative_path,in
         throw std::runtime_error(importer.GetErrorString());
     }
     assert(scene->mNumMeshes == 1);
-    auto meshHostObject = optimize(parseAssimpMesh(scene->mMeshes[0]));
-    importer.FreeScene();
+    auto meshHostObject = optimize(parseAssimpMesh(scene->mMeshes[0]));*/
+    happly::PLYData ply(fileName);
+    auto meshHostObject = optimize(parseHapply(ply));
+    //importer.FreeScene();
     //logging
     GlobalLogger::getInstance().info("Loaded Mesh " + relative_path);
     return meshHostObject;

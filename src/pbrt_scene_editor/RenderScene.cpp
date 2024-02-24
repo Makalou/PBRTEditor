@@ -35,14 +35,15 @@ namespace renderScene
             mainView.camera.front = glm::normalize(direction);
             glm::vec3 eye = mainView.camera.data->position;
             mainView.camera.data->view = glm::lookAt(eye, eye + mainView.camera.front, { 0,1,0 });
-            mainView.camera.data->proj = glm::perspective(glm::radians(60.0f),1440.0f/810.0f,0.1f,1000.0f);
-            mainView.camera.data->proj[1][1] *= 1.0f;
+            float aspect = 1440.0f / 810.0f;
+            mainView.camera.data->proj = glm::perspective(glm::radians(60.0f),aspect,0.1f,1000.0f);
+            mainView.camera.data->proj[1][1] *= -1.0f;
 
             Window::registerMouseDragCallback([this](int button, double deltaX, double deltaY){
                 if(button == GLFW_MOUSE_BUTTON_LEFT)
                 {
                     mainView.camera.yaw += 0.1f * deltaX;
-                    mainView.camera.pitch += 0.1f * deltaY;
+                    mainView.camera.pitch -= 0.1f * deltaY;
 
                     glm::vec3 direction;
                     direction.x = cos(glm::radians(mainView.camera.yaw)) * cos(glm::radians(mainView.camera.pitch));
@@ -95,6 +96,7 @@ namespace renderScene
                     {
                         shape_uuid = dynamic_cast<PLYMeshShape *>(shape)->filename;
                     }else{
+                        break;
                         throw std::runtime_error("Only support ply mesh for now");
                     }
 

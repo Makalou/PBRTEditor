@@ -25,6 +25,6 @@ void main() {
     #if HAS_VERTEX_UV
     outFragColor = vec4(inFragUV,1.0, 1.0);
     #else
-    outFragColor = vec4(1.0,0.0,1.0, 1.0);
+    outFragColor = vec4(0.0,0.0,1.0, 1.0);
     #endif
 }
