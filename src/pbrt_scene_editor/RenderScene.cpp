@@ -96,7 +96,6 @@ namespace renderScene
                     {
                         shape_uuid = dynamic_cast<PLYMeshShape *>(shape)->filename;
                     }else{
-                        break;
                         throw std::runtime_error("Only support ply mesh for now");
                     }
 
