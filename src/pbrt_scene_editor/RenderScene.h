@@ -495,6 +495,8 @@ namespace renderScene {
          */
         vk::DescriptorSetLayout perInstanceDataSetLayout;
         vk::DescriptorPool perInstanceDataDescriptorPool;
+        vk::DescriptorSetLayout materialLayout;
+        vk::DescriptorPool materialDescriptorPool;
 
         explicit RenderScene(const std::shared_ptr<DeviceExtended>& device);
 

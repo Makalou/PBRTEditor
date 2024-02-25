@@ -14,16 +14,44 @@
 #include "imgui.h"
 #include "Inspector.hpp"
 
-struct point2{};
-struct vector2{};
-struct point3{};
-struct vector3{};
-struct normal3{};
-struct spectrum{};
-struct rgb{};
+struct point2{
+    float x;
+    float y;
+};
+struct vector2{
+    float x;
+    float y;
+};
+struct point3{
+    float x;
+    float y;
+    float z;
+};
+struct vector3{
+    float x;
+    float y;
+    float z;
+};
+struct normal3{
+    float x;
+    float y;
+    float z;
+};
+struct spectrum{
+    spectrum(){};
+    spectrum(float f){};
+};
+struct rgb{
+    float r;
+    float g;
+    float b;
+};
 struct blackbody{};
+struct texture{
+    std::string name;
+};
 
-using PBRTType = std::variant<int,float,point2,vector2,point3,vector3,normal3,spectrum,rgb,blackbody,bool,std::string>;
+using PBRTType = std::variant<int,float,point2,vector2,point3,vector3,normal3,spectrum,rgb,blackbody,bool,std::string,texture>;
 
 using PBRTParam = std::pair<std::string,PBRTType>;
 
@@ -510,55 +538,118 @@ DEF_SUBCLASS_END
 using AreaLightCreator = GenericCreator<AreaLight, DiffuseAreaLight>;
 
 DEF_BASECLASS_BEGIN(Material)
-
+    std::string name;
+    PARSE_SECTION_BEGIN_IN_BASE
+        PARSE_FOR(name);
+    PARSE_SECTION_END
 DEF_BASECLASS_END
 
 DEF_SUBCLASS_BEGIN(Material,CoatedDiffuse)
-    void parse(const std::vector<PBRTParam> & para_lists) override
-    {
+    std::variant<texture,float> displacement;
+    std::string normalmap; //Filename for an image to use to specify a normal map.
+    std::variant<texture,spectrum> albedo = 0.0f;
+    std::variant<texture,float> g = 0.0f;
+    int maxdepth = 10;
+    int nsamples = 1;
+    float thickness = 0.01;
+    std::variant<texture,float> roughness;
+    std::variant<texture,float>  uroughness;
+    std::variant<texture,float>  vroughness;
+    bool remaproughness = true;
+    std::variant<texture,spectrum> reflectance = 0.5f;
 
-    }
-
+    PARSE_SECTION_CONTINUE_IN_DERIVED
+        PARSE_FOR_VARIANT(displacement)
+        PARSE_FOR(normalmap)
+        PARSE_FOR_VARIANT(albedo)
+        PARSE_FOR_VARIANT(g)
+        PARSE_FOR(maxdepth)
+        PARSE_FOR(nsamples)
+        PARSE_FOR(thickness)
+        PARSE_FOR_VARIANT(roughness)
+        PARSE_FOR_VARIANT(uroughness)
+        PARSE_FOR_VARIANT(vroughness)
+        PARSE_FOR(remaproughness)
+        PARSE_FOR_VARIANT(reflectance)
+    PARSE_SECTION_END_IN_DERIVED
 DEF_SUBCLASS_END
 
 DEF_SUBCLASS_BEGIN(Material,CoatedConductor)
-    void parse(const std::vector<PBRTParam> & para_lists) override
-    {
-
-    }
-
+    std::variant<texture,float> displacement;
+    std::string normalmap;
+    std::string albedo;
+    std::string g;
+    int maxdepth = 10;
+    int nsamples = 1;
+    float thickness = 0.01;
+    spectrum conductor_eta;
+    spectrum conductor_k;
+    spectrum reflectance;
+    //std::variant<spectrum,float> reflectance;
+    PARSE_SECTION_CONTINUE_IN_DERIVED
+        PARSE_FOR_VARIANT(displacement)
+        PARSE_FOR(normalmap)
+        PARSE_FOR(albedo)
+        PARSE_FOR(g)
+        PARSE_FOR(maxdepth)
+        PARSE_FOR(nsamples)
+        PARSE_FOR(thickness)
+        PARSE_FOR(conductor_eta);
+        PARSE_FOR(conductor_k)
+        PARSE_FOR(reflectance)
+    PARSE_SECTION_END_IN_DERIVED
 DEF_SUBCLASS_END
 
 DEF_SUBCLASS_BEGIN(Material,Conductor)
-    void parse(const std::vector<PBRTParam> & para_lists) override
-    {
-
-    }
-
+    std::variant<texture,float> displacement;
+    std::string normalmap;
+    std::variant<spectrum,texture> eta;
+    std::variant<spectrum,texture> k;
+    std::variant<spectrum,texture> reflectance;
+    PARSE_SECTION_CONTINUE_IN_DERIVED
+        PARSE_FOR_VARIANT(displacement)
+        PARSE_FOR(normalmap)
+        PARSE_FOR_VARIANT(eta)
+        PARSE_FOR_VARIANT(k)
+        PARSE_FOR_VARIANT(reflectance)
+    PARSE_SECTION_END_IN_DERIVED
 DEF_SUBCLASS_END
 
 DEF_SUBCLASS_BEGIN(Material,Dielectric)
-    void parse(const std::vector<PBRTParam> & para_lists) override
-    {
-
-    }
-
+    std::variant<texture,float> displacement;
+    std::string normalmap;
+    std::variant<float,spectrum,texture> eta;
+    PARSE_SECTION_CONTINUE_IN_DERIVED
+        PARSE_FOR_VARIANT(displacement)
+        PARSE_FOR(normalmap)
+        PARSE_FOR_VARIANT(eta);
+    PARSE_SECTION_END_IN_DERIVED
 DEF_SUBCLASS_END
 
 DEF_SUBCLASS_BEGIN(Material,Diffuse)
-    void parse(const std::vector<PBRTParam> & para_lists) override
-    {
-
-    }
-
+    std::variant<texture,float> displacement;
+    std::string normalmap;
+    std::variant<spectrum,texture> reflectance = 0.5;
+    PARSE_SECTION_CONTINUE_IN_DERIVED
+        PARSE_FOR_VARIANT(displacement)
+        PARSE_FOR(normalmap)
+        PARSE_FOR_VARIANT(reflectance)
+    PARSE_SECTION_END_IN_DERIVED
 DEF_SUBCLASS_END
 
 DEF_SUBCLASS_BEGIN(Material,DiffuseTransmission)
-    void parse(const std::vector<PBRTParam> & para_lists) override
-    {
-
-    }
-
+    std::variant<texture,float> displacement;
+    std::string normalmap;
+    std::variant<spectrum,texture> reflectance = 0.25;
+    std::variant<spectrum,texture> transmittance = 0.25;
+    std::variant<float,texture> scale = 1.0f;
+    PARSE_SECTION_CONTINUE_IN_DERIVED
+        PARSE_FOR_VARIANT(displacement)
+        PARSE_FOR(normalmap)
+        PARSE_FOR_VARIANT(reflectance)
+        PARSE_FOR_VARIANT(transmittance)
+        PARSE_FOR_VARIANT(scale)
+    PARSE_SECTION_END_IN_DERIVED
 DEF_SUBCLASS_END
 
 DEF_SUBCLASS_BEGIN(Material,Hair)
@@ -578,18 +669,24 @@ DEF_SUBCLASS_BEGIN(Material,Interface)
 DEF_SUBCLASS_END
 
 DEF_SUBCLASS_BEGIN(Material,Measured)
-    void parse(const std::vector<PBRTParam> & para_lists) override
-    {
-
-    }
-
+    std::variant<texture,float> displacement;
+    std::string normalmap;
+    std::string filename;
+    PARSE_SECTION_CONTINUE_IN_DERIVED
+        PARSE_FOR_VARIANT(displacement)
+        PARSE_FOR(normalmap)
+        PARSE_FOR(filename)
+    PARSE_SECTION_END_IN_DERIVED
 DEF_SUBCLASS_END
 
 DEF_SUBCLASS_BEGIN(Material,Mix)
-    void parse(const std::vector<PBRTParam> & para_lists) override
-    {
-
-    }
+    std::string material1;
+    std::string material2;
+    std::variant<texture,float> amount = 0.5f;
+    PARSE_SECTION_CONTINUE_IN_DERIVED
+        PARSE_FOR(material1);
+        PARSE_FOR(material2);
+    PARSE_SECTION_END_IN_DERIVED
 DEF_SUBCLASS_END
 
 DEF_SUBCLASS_BEGIN(Material,Subsurface)
@@ -611,23 +708,40 @@ DEF_SUBCLASS_END
 using MaterialCreator = GenericCreator<Material, CoatedDiffuseMaterial, CoatedConductorMaterial, ConductorMaterial, DielectricMaterial, DiffuseMaterial, DiffuseTransmissionMaterial, HairMaterial, InterfaceMaterial, MeasuredMaterial, MixMaterial, SubsurfaceMaterial, ThindielectricMaterial>;;
 
 DEF_BASECLASS_BEGIN(Texture)
-
+    std::string name;
+    PARSE_SECTION_BEGIN_IN_BASE
+        PARSE_FOR(name)
+    PARSE_SECTION_END_IN_BASE
 DEF_BASECLASS_END
 
 DEF_SUBCLASS_BEGIN(Texture,Bilerp)
-    void parse(const std::vector<PBRTParam> & para_lists) override
-    {
-
-    }
-
+    std::string mapping = "uv";
+    float uscale = 1;
+    float vscale = 1;
+    float udelta = 0;
+    float vdelta = 0;
+    PARSE_SECTION_CONTINUE_IN_DERIVED
+        PARSE_FOR(mapping)
+        PARSE_FOR(uscale)
+        PARSE_FOR(vscale)
+        PARSE_FOR(udelta)
+        PARSE_FOR(vdelta)
+    PARSE_SECTION_END_IN_DERIVED
 DEF_SUBCLASS_END
 
 DEF_SUBCLASS_BEGIN(Texture,CheckerBoard)
-    void parse(const std::vector<PBRTParam> & para_lists) override
-    {
-
-    }
-
+    std::string mapping = "uv";
+    float uscale = 1;
+    float vscale = 1;
+    float udelta = 0;
+    float vdelta = 0;
+    PARSE_SECTION_CONTINUE_IN_DERIVED
+        PARSE_FOR(mapping)
+        PARSE_FOR(uscale)
+        PARSE_FOR(vscale)
+        PARSE_FOR(udelta)
+        PARSE_FOR(vdelta)
+    PARSE_SECTION_END_IN_DERIVED
 DEF_SUBCLASS_END
 
 DEF_SUBCLASS_BEGIN(Texture,Constant)
@@ -647,11 +761,18 @@ DEF_SUBCLASS_BEGIN(Texture,DirectionMix)
 DEF_SUBCLASS_END
 
 DEF_SUBCLASS_BEGIN(Texture,Dots)
-    void parse(const std::vector<PBRTParam> & para_lists) override
-    {
-
-    }
-
+    std::string mapping = "uv";
+    float uscale = 1;
+    float vscale = 1;
+    float udelta = 0;
+    float vdelta = 0;
+    PARSE_SECTION_CONTINUE_IN_DERIVED
+        PARSE_FOR(mapping)
+        PARSE_FOR(uscale)
+        PARSE_FOR(vscale)
+        PARSE_FOR(udelta)
+        PARSE_FOR(vdelta)
+    PARSE_SECTION_END_IN_DERIVED
 DEF_SUBCLASS_END
 
 DEF_SUBCLASS_BEGIN(Texture,FBM)
@@ -663,11 +784,32 @@ DEF_SUBCLASS_BEGIN(Texture,FBM)
 DEF_SUBCLASS_END
 
 DEF_SUBCLASS_BEGIN(Texture,ImageMap)
-    void parse(const std::vector<PBRTParam> & para_lists) override
-    {
-
-    }
-
+    std::string mapping = "uv";
+    float uscale = 1;
+    float vscale = 1;
+    float udelta = 0;
+    float vdelta = 0;
+    std::string filename;
+    std::string wrap = "repeat";
+    float maxanisotropy = 8;
+    std::string filter = "bilinear";
+    std::string encoding = "sRGB";
+    float scale = 1;
+    bool invert = false; //If ture, then given a texture value x, return 1-x instead.
+    PARSE_SECTION_CONTINUE_IN_DERIVED
+        PARSE_FOR(mapping)
+        PARSE_FOR(uscale)
+        PARSE_FOR(vscale)
+        PARSE_FOR(udelta)
+        PARSE_FOR(vdelta)
+        PARSE_FOR(filename)
+        PARSE_FOR(wrap)
+        PARSE_FOR(maxanisotropy)
+        PARSE_FOR(filter)
+        PARSE_FOR(encoding)
+        PARSE_FOR(scale)
+        PARSE_FOR(invert)
+    PARSE_SECTION_END_IN_DERIVED
 DEF_SUBCLASS_END
 
 DEF_SUBCLASS_BEGIN(Texture,Marble)

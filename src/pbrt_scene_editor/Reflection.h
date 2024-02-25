@@ -84,9 +84,9 @@
 
 #define PARSE_FOR(name) for(auto & param : para_lists){ \
                                 if(param.first == #name) { \
-                                    name = std::get<decltype(name)>(param.second); \
-                                    break;                          \
-                                    }                         \
+                                    if(std::holds_alternative<decltype(name)>(param.second)){\
+                                        name = std::get<decltype(name)>(param.second); \
+                                    } break;}                   \
                                 }
 
 #define PARSE_FOR_ARR(type,N,name)      int ele_count_for_##name = 0; \
@@ -98,6 +98,35 @@
                                                 {  break;                          }                          \
                                             }                         \
                                         }
+
+//https://stackoverflow.com/questions/61046705/casting-a-variant-to-super-set-variant-or-a-subset-variant
+template <class... Args>
+struct variant_cast_proxy
+{
+    std::variant<Args...> v;
+    template <class... ToArgs>
+    operator std::variant<ToArgs...>() const
+    {
+        return std::visit(
+                [](auto&& arg) -> std::variant<ToArgs...> {
+                    if constexpr (std::is_convertible_v<decltype(arg), std::variant<ToArgs...>>)
+                        return arg;
+                    else
+                        throw std::runtime_error("bad variant cast");
+                },v);
+    }
+};
+
+template <class... Args>
+auto variant_cast(const std::variant<Args...>& v) -> variant_cast_proxy<Args...>
+{
+    return { v };
+}
+
+#define PARSE_FOR_VARIANT(name) for(auto & param : para_lists){ \
+                                    if(param.first == #name) { \
+                                        name = variant_cast(param.second);\
+                                        break;} }
 
 static bool compareUpper(const std::string & str1,const std::string & str2)
 {

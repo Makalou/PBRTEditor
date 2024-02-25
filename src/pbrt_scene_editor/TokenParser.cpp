@@ -8,7 +8,11 @@
 #include "SceneBuilder.hpp"
 #include "AssetManager.hpp"
 
+#include <set>
+
 std::unordered_map<std::string_view,DirectiveHandler> TokenParser::handlers;
+
+std::set<std::string> referenced_materials;
 
 #define DIRECTIVE_HANDLER_DEF(token) static void TokenHandler##token(Token& t,\
                                                                 PBRTSceneBuilder& builder, \
@@ -83,6 +87,76 @@ PBRTType StringTo(const std::string& type_str,const char* str,char** end)
     }
 }
 
+PBRTType stringToSingle(const std::string& type_str,const char* str,char** end)
+{
+    if(type_str == "integer")
+    {
+        return (int)std::strtol(str,end,10);
+    }else if(type_str == "float")
+    {
+        return std::strtof(str,end);
+    }else if(type_str == "point2")
+    {
+        return point2{};
+    }else if(type_str == "vector2")
+    {
+        return vector2{};
+    }else if(type_str == "point3")
+    {
+        return point3{};
+    }else if(type_str == "vector3")
+    {
+        return vector3{};
+    }else if(type_str == "normal3")
+    {
+        return normal3{};
+    }else if(type_str == "spectrum")
+    {
+        return spectrum{};
+    }else if(type_str == "rgb")
+    {
+        rgb res{};
+        char * start = const_cast<char *>(str);
+        res.r = std::strtof(start,end);
+        start = *end + 1; // skip comma
+        res.g = std::strtof(start,end);
+        start = *end + 1;
+        res.b = std::strtof(start,end);
+        return res;
+    }else if(type_str == "blackbody")
+    {
+        return blackbody{};
+    }else if(type_str == "bool")
+    {
+        if(strncmp(str,"true",4) == 0){
+            return true;
+        }else if(strncmp(str,"false",5) == 0){
+            return false;
+        }
+    }else if(type_str == "texture")
+    {
+        assert(str[0] == '\"');
+        int i = 0;
+        for( ;str[1 + i] != '\"';i++)
+        {
+
+        }
+        return texture{std::string(str + 1,i)};
+    }
+    else if(type_str == "normal")
+    {
+        return "no implemented yet";
+    }else{
+        throw std::runtime_error("Nonsupported type");
+    }
+    return PBRTType();
+}
+
+/*std::vector<PBRTType> StringToList(const std::string type_str, const char* str,char** end)
+{
+
+}*/
+
 void extractParam(const std::pair<std::string,std::string> & str_pair,std::vector<PBRTParam> & res)
 {
     std::string name_str;
@@ -98,6 +172,10 @@ void extractParam(const std::pair<std::string,std::string> & str_pair,std::vecto
     }
 
     it++; // skip white space
+    assert(type_str == "integer" || type_str == "float" || type_str == "point2" || type_str == "vector2"
+            || type_str == "point3" || type_str == "vector3" || type_str == "normal3"
+            ||type_str == "spectrum" || type_str == "rgb" || type_str == "blackbody"
+            || type_str == "bool" || type_str == "string" || type_str == "texture" || type_str == "normal");
 
     for(;it<str_pair.first.end();it++)
     {
@@ -112,28 +190,20 @@ void extractParam(const std::pair<std::string,std::string> & str_pair,std::vecto
             res.emplace_back(name_str, dequote(str_pair.second));
         else{
             char* end_ptr;
-            res.emplace_back(name_str,StringTo(type_str, &str_ptr[0],&end_ptr));
+            res.emplace_back(name_str,stringToSingle(type_str, &str_ptr[0],&end_ptr));
         }
     }else{
-        std::string substr;
-        for(int i = 1; i < str_pair.second.length();i++)
-        {
-            if(str_ptr[i] ==']'){
-                break;
+        if(type_str == "string") {
+            int i = 0;
+            for (; i < str_pair.second.length(); i++) {
+                if (str_ptr[2 + i] == '\"')
+                    break;
             }
-            if(str_ptr[i] == ','){
-
-                if(type_str == "string")
-                    res.emplace_back(name_str, dequote(substr));
-                else{
-                    char* end_ptr;
-                    res.emplace_back(name_str, StringTo(type_str,substr.c_str(),&end_ptr));
-                }
-
-                substr.clear();
-                continue;
-            }
-            substr.push_back(str_ptr[i]);
+            res.emplace_back(name_str, std::string(str_ptr + 2, i));
+        }
+        else{
+            char* end_ptr;
+            res.emplace_back(name_str,stringToSingle(type_str, &str_ptr[1],&end_ptr));
         }
     }
 }
@@ -297,6 +367,27 @@ DIRECTIVE_HANDLER_DEF_END
 
 DIRECTIVE_HANDLER_DEF(MakeNamedMaterial)
     //todo basicParamListEntrypoint(&ParserTarget::MakeNamedMaterial, tok->loc);
+    auto name_tok = tokenQueue.waitAndDequeue();
+    auto name = dequote(name_tok.to_string());
+    auto para_list = TokenParser::extractParaLists(tokenQueue);
+    auto materialParamList = convertToPBRTParamLists(para_list);
+    for(int i = 0; i < materialParamList.size(); i ++)
+    {
+        if(materialParamList[i].first == "type")
+        {
+            auto type_str = std::get<std::string>(materialParamList[i].second);
+            auto material = MaterialCreator::make(type_str);
+            material->name = name;
+            //material->parse(materialParamList);
+            builder.AddNamedMaterial(material.release());
+            referenced_materials.emplace(type_str);
+           /* for(const auto & str : referenced_materials)
+            {
+                std::cout << str << ",";
+            }
+            std::cout << "\n";*/
+        }
+    }
 DIRECTIVE_HANDLER_DEF_END
 
 DIRECTIVE_HANDLER_DEF(MakeNamedMedium)
@@ -304,9 +395,19 @@ DIRECTIVE_HANDLER_DEF(MakeNamedMedium)
 DIRECTIVE_HANDLER_DEF_END
 
 DIRECTIVE_HANDLER_DEF(Material)
-    auto next = tokenQueue.waitAndDequeue();
+    auto class_tok = tokenQueue.waitAndDequeue();
+    auto class_str = dequote(class_tok.to_string());
     auto para_list = TokenParser::extractParaLists(tokenQueue);
-    convertToPBRTParamLists(para_list);
+    auto materialParamList = convertToPBRTParamLists(para_list);
+    auto material = MaterialCreator::make(class_str);
+    referenced_materials.emplace(class_str);
+    /*for(const auto & str : referenced_materials)
+    {
+        std::cout << str << ",";
+    }
+    std::cout << "\n";*/
+    material->parse(materialParamList);
+    builder.AddMaterial(material.release());
 DIRECTIVE_HANDLER_DEF_END
 
 DIRECTIVE_HANDLER_DEF(MediumInterface)
@@ -316,6 +417,9 @@ DIRECTIVE_HANDLER_DEF_END
 
 DIRECTIVE_HANDLER_DEF(NamedMaterial)
     //todo target->NamedMaterial(toString(n), tok->loc);
+    auto name_tok = tokenQueue.waitAndDequeue();
+    auto name = dequote(name_tok.to_string());
+    builder.NamedMaterial(name);
 DIRECTIVE_HANDLER_DEF_END
 
 DIRECTIVE_HANDLER_DEF(ObjectBegin)
@@ -449,17 +553,17 @@ DIRECTIVE_HANDLER_DEF(Texture)
     auto classTok = tokenQueue.waitAndDequeue();
     auto para_list = TokenParser::extractParaLists(tokenQueue);
     auto textureParamList = convertToPBRTParamLists(para_list);
-    auto class_str = classTok.to_string();
-    if(dequote(class_str) == "imagemap"){
-        for (const auto& para : textureParamList)
-        {
-            if (para.first == "filename") {
-                assetLoader.getOrLoadImgAsync(std::get<std::string>(para.second));
-                break;
-            }
-
-        }
+    auto class_str = dequote(classTok.to_string());
+    assert(class_str == "imagemap" || class_str == "scale");
+    auto texture = TextureCreator::make(class_str);
+    texture->name = dequote(nameTok.to_string());
+    texture->parse(textureParamList);
+    if(class_str == "imagemap"){
+        auto * tex = dynamic_cast<ImageMapTexture*>(texture.get());
+        assert(tex!= nullptr);
+        assetLoader.getOrLoadImgAsync(tex->filename);
     }
+    builder.AddTexture(texture.release());
 DIRECTIVE_HANDLER_DEF_END
 
 DIRECTIVE_HANDLER_DEF(WorldBegin)
@@ -468,6 +572,7 @@ DIRECTIVE_HANDLER_DEF_END
 
 DIRECTIVE_HANDLER_DEF(WorldEnd)
     //do nothing
+    builder.WorldEnd();
 DIRECTIVE_HANDLER_DEF_END
 
 TokenParser::TokenParser() {

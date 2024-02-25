@@ -236,7 +236,7 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
         {
             currentInstanceDescriptorSetIdx = descriptorSetIdx;
             auto descriptorSet = instanceDescriptorSets[currentInstanceDescriptorSetIdx];
-            cmdBuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,graphicsPipelines[currentPipelineIdx].getLayout(),2,
+            cmdBuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,graphicsPipelines[currentPipelineIdx].getLayout(),3,
                                       descriptorSet,nullptr);
         }
     }

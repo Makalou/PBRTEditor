@@ -120,8 +120,30 @@ void PBRTSceneBuilder::LookAt(const float*){
         _currentVisitNode->is_empty = false;
     }
 }
-void PBRTSceneBuilder::NamedMaterial(){
 
+void PBRTSceneBuilder::AddNamedMaterial(Material * material){
+    for(const auto & mat : namedMaterials)
+    {
+        if(mat->name == material->name)
+        {
+            throw std::runtime_error("Material " + material->name + " has been defined.");
+        }
+    }
+    namedMaterials.push_back(material);
+}
+
+void PBRTSceneBuilder::NamedMaterial(const std::string & name) {
+    if(_currentVisitNode!= nullptr)
+    {
+        for(const auto & mat : namedMaterials)
+        {
+            if(mat->name == name)
+            {
+                return;
+            }
+        }
+        throw std::runtime_error("Couldn't find material " + name);
+    }
 }
 
 void PBRTSceneBuilder::ObjectBegin(const std::string & instanceName){
@@ -233,6 +255,17 @@ void PBRTSceneBuilder::AddShape(Shape* shape) {
         _currentVisitNode->is_empty = false;
         //_currentVisitNode->name += " Shape";
         _currentVisitNode->shapes.push_back(shape);
+    }
+}
+
+void PBRTSceneBuilder::AddTexture(Texture * texture) {
+    namedTextures.push_back(texture);
+}
+
+void PBRTSceneBuilder::AddMaterial(Material * material) {
+    if(_currentVisitNode != nullptr)
+    {
+
     }
 }
 

@@ -96,6 +96,7 @@ namespace renderScene
                     {
                         shape_uuid = dynamic_cast<PLYMeshShape *>(shape)->filename;
                     }else{
+                        break;
                         throw std::runtime_error("Only support ply mesh for now");
                     }
 
@@ -232,7 +233,7 @@ namespace renderScene
          *
          * In other word, all the manipulation of data must go through the subsystem, or manager.
          */
-        vk::DescriptorSetLayoutBinding binding1;
+        vk::DescriptorSetLayoutBinding binding1{};
         binding1.setBinding(0);
         binding1.setStageFlags(vk::ShaderStageFlagBits::eAllGraphics);
         binding1.setDescriptorType(vk::DescriptorType::eStorageBuffer);
@@ -246,6 +247,21 @@ namespace renderScene
         poolCreateInfo.setPoolSizes(poolSize);
         poolCreateInfo.setMaxSets(_dynamicRigidMeshBatch.size());
         perInstanceDataDescriptorPool = backendDevice->createDescriptorPool(poolCreateInfo);
+
+        vk::DescriptorSetLayoutBinding materialAlbedoBinding{};
+        materialAlbedoBinding.setBinding(0);
+        binding1.setStageFlags(vk::ShaderStageFlagBits::eAllGraphics);
+        binding1.setDescriptorType(vk::DescriptorType::eCombinedImageSampler);
+        binding1.setDescriptorCount(1);
+        materialLayout = backendDevice->createDescriptorSetLayout2({materialAlbedoBinding});
+
+        vk::DescriptorPoolCreateInfo poolCreateInfo1{};
+        vk::DescriptorPoolSize poolSize1{};
+        poolSize1.setType(vk::DescriptorType::eStorageBuffer);
+        poolSize1.setDescriptorCount(_dynamicRigidMeshBatch.size());
+        poolCreateInfo1.setPoolSizes(poolSize1);
+        poolCreateInfo1.setMaxSets(_dynamicRigidMeshBatch.size());
+        materialDescriptorPool = backendDevice->createDescriptorPool(poolCreateInfo1);
 
         for (auto& dynamicInstance : _dynamicRigidMeshBatch)
         {

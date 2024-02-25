@@ -21,6 +21,8 @@ struct Camera;
 struct Shape;
 struct Light;
 struct AreaLight;
+struct Material;
+struct Texture;
 
 struct RenderScene;
 
@@ -37,7 +39,8 @@ struct PBRTSceneBuilder
     void ColorSpace();
     void Identity();
     void LookAt(const float*);
-    void NamedMaterial();
+    void AddNamedMaterial(Material *);
+    void NamedMaterial(const std::string &);
     void ObjectBegin(const std::string &); //assume nested objectBegin is not allowed
     void ObjectEnd();
     void ObjectInstance(const std::string &);
@@ -49,6 +52,8 @@ struct PBRTSceneBuilder
     void Translate(const float*);
     void TransformTimes();
     void AddShape(Shape*);
+    void AddTexture(Texture*);
+    void AddMaterial(Material*);
     void AddLightSource(Light*);
     void AddAreaLight(AreaLight*);
     void AddCamera(const Camera* );
@@ -59,6 +64,8 @@ struct PBRTSceneBuilder
     std::vector<SceneGraphNode*> _objInstances; //todo : note, when initiation node modify the data, a deep copy is preferred.
     GlobalRenderSetting _globalRenderSetting;
     std::unique_ptr<Camera> camera;
+    std::vector<Texture*> namedTextures;
+    std::vector<Material*> namedMaterials;
 };
 
 #endif //PBRTEDITOR_SCENEBUILDER_HPP
