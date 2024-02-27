@@ -115,25 +115,35 @@ TextureDeviceHandle AssetManager::getOrLoadImgDevice(const std::string &relative
          * What's more important, linear tiling images may have worse performance than their optimal tiling counterparts.
          * */
         textureDevice.imgInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-        if(textureHost->channels == 1)
-        {
-            if(encoding == "sRGB")
+        assert(textureHost->channels == 1 || textureHost->channels == 4);
+        do {
+            if (textureHost->channels == 4)
             {
-                textureDevice.imgInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
-            }else if(encoding == "linear")
-            {
-                textureDevice.imgInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+                if (encoding == "sRGB")
+                {
+                    textureDevice.imgInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
+                    break;
+                }
+                if (encoding == "linear")
+                {
+                    textureDevice.imgInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+                    break;
+                }
             }
-        }else if(textureHost->channels == 4)
-        {
-            if(encoding == "sRGB")
+            if (textureHost->channels == 1)
             {
-                textureDevice.imgInfo.format = VK_FORMAT_R8_SRGB;
-            }else if(encoding == "linear")
-            {
-                textureDevice.imgInfo.format = VK_FORMAT_R8_UNORM;
+                if (encoding == "sRGB")
+                {
+                    textureDevice.imgInfo.format = VK_FORMAT_R8_SRGB;
+                    break;
+                }
+                if (encoding == "linear")
+                {
+                    textureDevice.imgInfo.format = VK_FORMAT_R8_UNORM;
+                    break;
+                }
             }
-        }
+        } while (0);
         textureDevice.imgInfo.arrayLayers = 1;
         textureDevice.imgInfo.mipLevels = 1;
         textureDevice.imgInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -168,6 +178,8 @@ TextureDeviceHandle AssetManager::getOrLoadImgDevice(const std::string &relative
         textureDevice.imgViewInfo.setSubresourceRange(subresourceRange);
         textureDevice.imageView = backendDevice->createImageView(textureDevice.imgViewInfo);
         backendDevice->setObjectDebugName(textureDevice.imageView,relative_path.c_str());
+
+        vk::SamplerCreateInfo samplerInfo{};
 
         device_textures.emplace_back(relative_path,textureDevice);
         handle.idx = device_textures.size() - 1;
