@@ -210,6 +210,7 @@ namespace renderScene {
 
         int perInstanceBindingIdx;
         MeshRigidHandle mesh;
+        TextureDeviceHandle texture;
         const VulkanPipelineVertexInputStateInfo pipelineVertexInputStateInfo{};
         VMABuffer perInstDataBuffer{};
         vk::DescriptorSetLayout perInstDataDescriptorLayout;

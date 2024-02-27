@@ -345,6 +345,58 @@ void DeviceExtended::oneTimeUploadSync(void *data, uint32_t width, uint32_t heig
     wait();
 }
 
+void DeviceExtended::updateDescriptorSetUniformBuffer(vk::DescriptorSet dstSet, uint32_t dstBinding, vk::Buffer buffer,
+                                                      vk::DeviceSize range, vk::DeviceSize offset) {
+    vk::WriteDescriptorSet write;
+    write.setDstSet(dstSet);
+    write.setDescriptorType(vk::DescriptorType::eUniformBuffer);
+    write.setDescriptorCount(1);
+    write.setDstBinding(dstBinding);
+
+    vk::DescriptorBufferInfo bufInfo{};
+    bufInfo.setBuffer(buffer);
+    bufInfo.setRange(range);
+    bufInfo.setOffset(offset);
+
+    write.setBufferInfo(bufInfo);
+    this->updateDescriptorSets(write,{});
+}
+
+void DeviceExtended::updateDescriptorSetStorageBuffer(vk::DescriptorSet dstSet, uint32_t dstBinding, vk::Buffer buffer,
+                                      vk::DeviceSize range, vk::DeviceSize offset)
+{
+    vk::WriteDescriptorSet write;
+    write.setDstSet(dstSet);
+    write.setDescriptorType(vk::DescriptorType::eStorageBuffer);
+    write.setDescriptorCount(1);
+    write.setDstBinding(dstBinding);
+
+    vk::DescriptorBufferInfo bufInfo{};
+    bufInfo.setBuffer(buffer);
+    bufInfo.setRange(range);
+    bufInfo.setOffset(offset);
+
+    write.setBufferInfo(bufInfo);
+    this->updateDescriptorSets(write, {});
+}
+
+void DeviceExtended::updateDescriptorSetCombinedImageSampler(vk::DescriptorSet dstSet, uint32_t dstBinding,vk::ImageView imgView,vk::Sampler sampler)
+{
+    vk::WriteDescriptorSet write;
+    write.setDstSet(dstSet);
+    write.setDescriptorType(vk::DescriptorType::eCombinedImageSampler);
+    write.setDescriptorCount(1);
+    write.setDstBinding(dstBinding);
+
+    vk::DescriptorImageInfo imgInfo{};
+    imgInfo.setImageView(imgView);
+    imgInfo.setSampler(sampler);
+    imgInfo.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+
+    write.setImageInfo(imgInfo);
+    this->updateDescriptorSets(write, {});
+}
+
 bool VulkanGraphicsPipeline::compatibleWithVertexShader(const std::string &shaderVariantUUID) {
     return _vs->_uuid == shaderVariantUUID;
 }

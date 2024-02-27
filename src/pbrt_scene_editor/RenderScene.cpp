@@ -76,7 +76,7 @@ namespace renderScene
 
     void RenderScene::buildFrom(SceneGraph * sceneGraph, AssetManager &assetManager)
     {
-        auto handleNode = [this, &assetManager](SceneGraphNode* node,const glm::mat4& baseTransform )->void{
+        auto handleNode = [this, sceneGraph,&assetManager](SceneGraphNode* node,const glm::mat4& baseTransform )->void{
             if(!node->shapes.empty())
             {
                 for(int i = 0; i < node->shapes.size(); i++)
@@ -102,7 +102,7 @@ namespace renderScene
                         }
                     }
 
-                    if(meshHandle.idx == -1)
+                    if(!meshHandle)
                     {
                         meshHandle = assetManager.getOrLoadPLYMeshDevice(shape_uuid);
                         AABB aabb{};
@@ -112,15 +112,7 @@ namespace renderScene
                         aabbs.emplace_back(aabb);
                     }
 
-                    Material* mat;
-                    do{
-                        mat = node->materials[i];
-                        auto * coatedDiffuse = dynamic_cast<CoatedDiffuseMaterial*>(mat);
-                        if(coatedDiffuse != nullptr)
-                        {
-                            break;
-                        }
-                    } while (0);
+                    Material* mat = node->materials[i];;
 
                     // For now we assume the instance with same mesh also share same material.
                     bool foundInstance = false;
@@ -138,8 +130,30 @@ namespace renderScene
                     if(!foundInstance)
                     {
                         InstanceBatchRigidDynamic<PerInstanceData> meshInstanceRigidDynamic(meshHandle);
-                        meshInstanceRigidDynamic.materialName = mat->name;
                         meshInstanceRigidDynamic.perInstanceData.push_back({node->_finalTransform * baseTransform});
+                        meshInstanceRigidDynamic.materialName = mat->name;
+
+                        do{
+                            auto * coatedDiffuse = dynamic_cast<CoatedDiffuseMaterial*>(mat);
+                            if(coatedDiffuse != nullptr && std::holds_alternative<texture>(coatedDiffuse->reflectance))
+                            {
+                                auto reflectanceTex = std::get<texture>(coatedDiffuse->reflectance);
+                                for(auto tex : sceneGraph->namedTextures)
+                                {
+                                    if(tex->name == reflectanceTex.name && dynamic_cast<ImageMapTexture*>(tex)!= nullptr)
+                                    {
+                                        ImageMapTexture * imageMap = dynamic_cast<ImageMapTexture*>(tex);
+                                        meshInstanceRigidDynamic.texture = assetManager.getOrLoadImgDevice(imageMap->filename,
+                                                                                                           imageMap->encoding,
+                                                                                                           imageMap->wrap,
+                                                                                                           imageMap->maxanisotropy);
+                                        break;
+                                    }
+                                }
+                                break;
+                            }
+                        } while (0);
+
                         _dynamicRigidMeshBatch.push_back(meshInstanceRigidDynamic);
                     }
                 }
@@ -183,7 +197,7 @@ namespace renderScene
             if(dynamic_cast<ImageMapTexture*>(tex)!= nullptr)
             {
                 ImageMapTexture* image = dynamic_cast<ImageMapTexture*>(tex);
-                assetManager.getOrLoadImgDevice(image->filename,image->encoding);
+                TextureDeviceHandle texture = assetManager.getOrLoadImgDevice(image->filename,image->encoding,image->wrap,image->maxanisotropy);
             }
         }
         /*
@@ -207,30 +221,24 @@ namespace renderScene
         binding1.setStageFlags(vk::ShaderStageFlagBits::eAllGraphics);
         binding1.setDescriptorType(vk::DescriptorType::eStorageBuffer);
         binding1.setDescriptorCount(1);
-        perInstanceDataSetLayout = backendDevice->createDescriptorSetLayout2({binding1});
+
+        vk::DescriptorSetLayoutBinding materialAlbedoBinding{};
+        materialAlbedoBinding.setBinding(1);
+        materialAlbedoBinding.setStageFlags(vk::ShaderStageFlagBits::eAllGraphics);
+        materialAlbedoBinding.setDescriptorType(vk::DescriptorType::eCombinedImageSampler);
+        materialAlbedoBinding.setDescriptorCount(1);
+
+        perInstanceDataSetLayout = backendDevice->createDescriptorSetLayout2({binding1,materialAlbedoBinding});
 
         vk::DescriptorPoolCreateInfo poolCreateInfo{};
-        vk::DescriptorPoolSize poolSize{};
-        poolSize.setType(vk::DescriptorType::eStorageBuffer);
-        poolSize.setDescriptorCount(_dynamicRigidMeshBatch.size());
+        std::array<vk::DescriptorPoolSize,2> poolSize{};
+        poolSize[0].setType(vk::DescriptorType::eStorageBuffer);
+        poolSize[0].setDescriptorCount(_dynamicRigidMeshBatch.size());
+        poolSize[1].setType(vk::DescriptorType::eCombinedImageSampler);
+        poolSize[1].setDescriptorCount(_dynamicRigidMeshBatch.size());
         poolCreateInfo.setPoolSizes(poolSize);
         poolCreateInfo.setMaxSets(_dynamicRigidMeshBatch.size());
         perInstanceDataDescriptorPool = backendDevice->createDescriptorPool(poolCreateInfo);
-
-        vk::DescriptorSetLayoutBinding materialAlbedoBinding{};
-        materialAlbedoBinding.setBinding(0);
-        binding1.setStageFlags(vk::ShaderStageFlagBits::eAllGraphics);
-        binding1.setDescriptorType(vk::DescriptorType::eCombinedImageSampler);
-        binding1.setDescriptorCount(1);
-        materialLayout = backendDevice->createDescriptorSetLayout2({materialAlbedoBinding});
-
-        vk::DescriptorPoolCreateInfo poolCreateInfo1{};
-        vk::DescriptorPoolSize poolSize1{};
-        poolSize1.setType(vk::DescriptorType::eStorageBuffer);
-        poolSize1.setDescriptorCount(_dynamicRigidMeshBatch.size());
-        poolCreateInfo1.setPoolSizes(poolSize1);
-        poolCreateInfo1.setMaxSets(_dynamicRigidMeshBatch.size());
-        materialDescriptorPool = backendDevice->createDescriptorPool(poolCreateInfo1);
 
         for (auto& dynamicInstance : _dynamicRigidMeshBatch)
         {
@@ -239,6 +247,10 @@ namespace renderScene
             dynamicInstance.perInstDataDescriptorLayout = perInstanceDataSetLayout;
             dynamicInstance.perInstDataDescriptorSet = descriptorSet;
             backendDevice->updateDescriptorSetStorageBuffer(descriptorSet,0,dynamicInstance.perInstDataBuffer.buffer);
+            if(dynamicInstance.texture)
+            {
+                backendDevice->updateDescriptorSetCombinedImageSampler(descriptorSet,1,dynamicInstance.texture->imageView,dynamicInstance.texture->sampler);
+            }
         }
     }
 

@@ -17,7 +17,7 @@ layout(location = 4) in vec2 inFragUV;
 
 layout(location = 0) out vec4 outFragColor;
 
-//layout(set = 2, binding = 0) uniform sampler2D albedoTex;
+layout(set = 2, binding = 1) uniform sampler2D albedoMap;
 
 #if HAS_NORMALMAP
 
@@ -30,5 +30,10 @@ void main() {
 //    outFragColor = vec4(1.0,0.0,1.0, 1.0);
 //    #endif
     //outFragColor = vec4(vec3(0.5) * max(0.0,dot(inFragNormal,normalize(vec3(1.0,1.0,1.0)))), 1.0);
-    outFragColor = vec4(inFragNormal,1.0);
+    //outFragColor = vec4(inFragNormal,1.0);
+    #if HAS_VERTEX_UV
+    outFragColor = vec4(texture(albedoMap,inFragUV).rgb,1.0);
+    #else
+    outFragColor = vec4(1.0,0.0,1.0, 1.0);
+    #endif
 }

@@ -83,7 +83,10 @@ std::future<TextureHostObject*>* AssetManager::getOrLoadImgAsync(const std::stri
     return &imgLoadRequests.back().second;
 }
 
-TextureDeviceHandle AssetManager::getOrLoadImgDevice(const std::string &relative_path,const std::string & encoding) {
+TextureDeviceHandle AssetManager::getOrLoadImgDevice(const std::string &relative_path,
+                                                     const std::string & encoding,
+                                                     const std::string & warp,
+                                                     float maxAnisotropy) {
     TextureDeviceHandle handle;
     for(int i = 0; i < device_textures.size(); i++)
     {
@@ -180,7 +183,42 @@ TextureDeviceHandle AssetManager::getOrLoadImgDevice(const std::string &relative
         backendDevice->setObjectDebugName(textureDevice.imageView,relative_path.c_str());
 
         vk::SamplerCreateInfo samplerInfo{};
-
+        samplerInfo.setMipmapMode(vk::SamplerMipmapMode::eNearest);
+        samplerInfo.setMinFilter(vk::Filter::eLinear);
+        samplerInfo.setMagFilter(vk::Filter::eLinear);
+        samplerInfo.setBorderColor(vk::BorderColor::eFloatOpaqueBlack);
+        samplerInfo.setMinLod(0.0);
+        samplerInfo.setMaxLod(1.0);
+        samplerInfo.setMipLodBias(0.0);
+        samplerInfo.setCompareEnable(vk::False);
+        if(maxAnisotropy > 0.0)
+        {
+            samplerInfo.setAnisotropyEnable(vk::True);
+            samplerInfo.setMaxAnisotropy(maxAnisotropy);
+        }else{
+            samplerInfo.setAnisotropyEnable(vk::False);
+        }
+        do {
+            if(warp == "repeat")
+            {
+                samplerInfo.setAddressModeU(vk::SamplerAddressMode::eRepeat);
+                samplerInfo.setAddressModeV(vk::SamplerAddressMode::eRepeat);
+                samplerInfo.setAddressModeW(vk::SamplerAddressMode::eRepeat);
+            }
+            if(warp == "black")
+            {
+                samplerInfo.setAddressModeU(vk::SamplerAddressMode::eClampToBorder);
+                samplerInfo.setAddressModeV(vk::SamplerAddressMode::eClampToBorder);
+                samplerInfo.setAddressModeW(vk::SamplerAddressMode::eClampToBorder);
+            }
+            if(warp == "clamp")
+            {
+                samplerInfo.setAddressModeU(vk::SamplerAddressMode::eClampToEdge);
+                samplerInfo.setAddressModeV(vk::SamplerAddressMode::eClampToEdge);
+                samplerInfo.setAddressModeW(vk::SamplerAddressMode::eClampToEdge);
+            }
+        } while (0);
+        textureDevice.sampler = backendDevice->createSampler(samplerInfo);
         device_textures.emplace_back(relative_path,textureDevice);
         handle.idx = device_textures.size() - 1;
     }

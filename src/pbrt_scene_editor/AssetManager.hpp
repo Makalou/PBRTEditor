@@ -241,13 +241,19 @@ struct MeshRigidDevice{
 
 struct MeshRigidHandle
 {
-    AssetManager* manager = nullptr;
-    uint32_t idx = -1;
     MeshHostObject* hostObject;
 
     MeshRigidDevice* operator->() const;
 
     bool operator==(const MeshRigidHandle& other) const;
+
+    operator bool() const {
+        return (manager != nullptr) && (idx != -1);
+    }
+    friend AssetManager;
+private:
+    AssetManager* manager = nullptr;
+    uint32_t idx = -1;
 };
 
 struct TextureDeviceObject
@@ -261,12 +267,18 @@ struct TextureDeviceObject
 
 struct TextureDeviceHandle
 {
-    AssetManager* manager = nullptr;
-    uint32_t idx = -1;
-
     TextureDeviceObject* operator->() const;
 
     bool operator==(const TextureDeviceHandle& other) const;
+
+    operator bool() const {
+        return (manager != nullptr) && (idx != -1);
+    }
+
+    friend AssetManager;
+private:
+    AssetManager* manager = nullptr;
+    uint32_t idx = -1;
 };
 
 namespace fs = std::filesystem;
@@ -286,7 +298,10 @@ struct AssetManager
 
     std::future<TextureHostObject*>* getOrLoadImgAsync(const std::string & relative_path);
 
-    TextureDeviceHandle getOrLoadImgDevice(const std::string & relative_path,const std::string & encoding);
+    TextureDeviceHandle getOrLoadImgDevice(const std::string & relative_path,
+                                           const std::string & encoding,
+                                           const std::string & warp,
+                                           float maxAnisotropy);
 
     /*
     *  For PBRT PLY file we assume that each file only contain single mesh
