@@ -378,7 +378,15 @@ DIRECTIVE_HANDLER_DEF(MakeNamedMaterial)
             auto type_str = std::get<std::string>(materialParamList[i].second);
             auto material = MaterialCreator::make(type_str);
             material->name = name;
-            //material->parse(materialParamList);
+            material->parse(materialParamList);
+            for(const auto & param : materialParamList)
+            {
+                if(param.first == "normalmap" && std::holds_alternative<std::string>(param.second))
+                {
+                    auto normalMapFileName = std::get<std::string>(param.second);
+                    assetLoader.getOrLoadImgAsync(normalMapFileName);
+                }
+            }
             builder.AddNamedMaterial(material.release());
             referenced_materials.emplace(type_str);
            /* for(const auto & str : referenced_materials)
@@ -400,6 +408,14 @@ DIRECTIVE_HANDLER_DEF(Material)
     auto para_list = TokenParser::extractParaLists(tokenQueue);
     auto materialParamList = convertToPBRTParamLists(para_list);
     auto material = MaterialCreator::make(class_str);
+    for(const auto & param : materialParamList)
+    {
+        if(param.first == "normalmap" && std::holds_alternative<std::string>(param.second))
+        {
+            auto fileName = std::get<std::string>(param.second);
+            assetLoader.getOrLoadImgAsync(fileName);
+        }
+    }
     referenced_materials.emplace(class_str);
     /*for(const auto & str : referenced_materials)
     {
@@ -557,6 +573,8 @@ DIRECTIVE_HANDLER_DEF(Texture)
     assert(class_str == "imagemap" || class_str == "scale");
     auto texture = TextureCreator::make(class_str);
     texture->name = dequote(nameTok.to_string());
+    texture->type = dequote(typeTok.to_string());
+    assert(texture->type == "spectrum" || texture->type == "float");
     texture->parse(textureParamList);
     if(class_str == "imagemap"){
         auto * tex = dynamic_cast<ImageMapTexture*>(texture.get());

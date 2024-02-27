@@ -72,11 +72,10 @@ void SceneViewer::init(std::shared_ptr<DeviceExtended> device) {
 
 }
 
-void SceneViewer::setCurrentSceneGraph(SceneGraphNode *root,AssetManager& assetManager)
+void SceneViewer::setCurrentSceneGraph(SceneGraph *graph,AssetManager& assetManager)
 {
-    _currentSceneGraph = root;
     //construct render scene (ECS)
-    _renderScene->buildFrom(root,assetManager);
+    _renderScene->buildFrom(graph,assetManager);
 }
 
 vk::CommandBuffer SceneViewer::recordGraphicsCommand(unsigned int idx) {

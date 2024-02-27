@@ -15,101 +15,7 @@
 
 namespace renderScene {
 
-    struct MeshRigid {
-        VMABuffer vertexBuffer{};
-        VMABuffer indexBuffer{};
-        uint32_t vertexCount{};
-        uint32_t indexCount{};
-        uint32_t _uuid;
-
-        struct VertexAttribute
-        {
-            int stride = 0;
-            int normalOffset = -1;
-            int tangentOffset = -1;
-            int biTangentOffset = -1;
-            int uvOffset = -1;
-        };
-
-        const VertexAttribute vertexAttribute;
-        const vk::VertexInputBindingDescription bindingDescription{};
-        const std::vector<vk::VertexInputAttributeDescription> attributeDescriptions{};
-
-        auto initBindingDesc(const VertexAttribute& attribute) const
-        {
-            vk::VertexInputBindingDescription bindingDesc;
-            bindingDesc.setInputRate(vk::VertexInputRate::eVertex);
-            bindingDesc.setBinding(0);
-            bindingDesc.setStride(vertexAttribute.stride);
-            return bindingDesc;
-        }
-
-        auto initAttributeDescription(const VertexAttribute& attribute)
-        {
-            std::vector<vk::VertexInputAttributeDescription> attributeDesc;
-            // todo if we can modify the shader variant, then explicitly specific location may be unnecessary
-            attributeDesc.emplace_back(0,0,vk::Format::eR32G32B32Sfloat,0);
-            if(vertexAttribute.normalOffset != -1)
-            {
-                attributeDesc.emplace_back(1,0,vk::Format::eR32G32B32Sfloat,vertexAttribute.normalOffset);
-            }
-            if(vertexAttribute.tangentOffset != -1)
-            {
-                attributeDesc.emplace_back(2,0,vk::Format::eR32G32B32Sfloat,vertexAttribute.tangentOffset);
-            }
-            if(vertexAttribute.biTangentOffset != -1)
-            {
-                attributeDesc.emplace_back(3,0,vk::Format::eR32G32B32Sfloat,vertexAttribute.biTangentOffset);
-            }
-            if(vertexAttribute.uvOffset != -1)
-            {
-                attributeDesc.emplace_back(4,0,vk::Format::eR32G32Sfloat,vertexAttribute.uvOffset);
-            }
-
-            return std::move(attributeDesc);
-        }
-
-        explicit MeshRigid(const VertexAttribute& attribute,uint32_t uuid) : vertexAttribute(attribute),
-                                                                bindingDescription(initBindingDesc(attribute)),
-                                                                attributeDescriptions(initAttributeDescription(attribute)),
-                                                                _uuid(uuid){}
-
-        /*
-         * Only contains per vertex information.
-         */
-        auto getVertexInputBindingDesc() const
-        {
-            return bindingDescription;
-        }
-
-        /*
-         * Only contains per vertex information.
-         */
-        auto getVertexInputAttributeDesc() const
-        {
-            return attributeDescriptions;
-        }
-
-        /*
-         * Only bind per vertex data input
-         */
-        void bind(vk::CommandBuffer cmd) {
-            cmd.bindVertexBuffers(0, {vertexBuffer.buffer}, {0});
-            cmd.bindIndexBuffer(indexBuffer.buffer, 0, vk::IndexType::eUint32);
-        }
-    };
-
     struct RenderScene;
-
-    struct MeshRigidHandle
-    {
-        RenderScene* scene = nullptr;
-        uint32_t idx = -1;
-
-        MeshRigid* operator->() const;
-
-        bool operator==(const MeshRigidHandle& other) const;
-    };
 
     struct InstanceUUID
     {
@@ -144,7 +50,7 @@ namespace renderScene {
 
         std::vector<PerInstDataT> perInstanceData;
         std::vector<uint32_t> instanceDataIdx;
-        MeshRigid *mesh{};
+        MeshRigidDevice *mesh{};
         size_t drawInstanceCount{};
 
         VMABuffer perInstDataBuffer{};
@@ -313,6 +219,7 @@ namespace renderScene {
         //https://app.diagrams.net/#G1ei8XsclhGNg_qMR_J7LBKmGRjSSXyShI#%7B%22pageId%22%3A%22sedBS7P0nTr2XQddadu8%22%7D
         VMABuffer instanceDataIdicesBuffer{};
         InstanceUUID _uuid;
+        std::string materialName;
     };
 
     //struct DrawDataBindless
@@ -425,7 +332,7 @@ namespace renderScene {
     };
 
     struct AreaLight {
-        MeshRigid *mesh;
+        MeshRigidDevice *mesh;
     };
 
     struct MainCameraData{
@@ -465,7 +372,7 @@ namespace renderScene {
 
     using InstanceBatchRigidDynamicType = InstanceBatchRigidDynamic<PerInstanceData>;
     struct RenderScene {
-        std::vector<std::pair<std::string,MeshRigid>> meshes{}; //use file path as uuid
+        std::vector<std::pair<std::string,MeshRigidHandle>> meshes{}; //use file path as uuid
         std::vector<InstanceBatchRigidStatic<PerInstanceData>> _staticRigidMeshBatch{};
         std::vector<InstanceBatchRigidDynamicType> _dynamicRigidMeshBatch{};
         std::vector<MeshDeformable> _deformableMeshes{};
@@ -500,7 +407,7 @@ namespace renderScene {
 
         explicit RenderScene(const std::shared_ptr<DeviceExtended>& device);
 
-        void buildFrom(SceneGraphNode* root, AssetManager & assetManager);
+        void buildFrom(SceneGraph* sceneGraph, AssetManager & assetManager);
 
         std::shared_ptr<DeviceExtended> backendDevice;
 

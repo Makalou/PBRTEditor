@@ -125,14 +125,14 @@ void SceneGraphEditor::init()
     _sceneGraphRootNode = nullptr;
 }
 
-SceneGraphNode* SceneGraphEditor::parsePBRTSceneFile(const std::filesystem::path & path, AssetManager& assetManager)
+SceneGraph* SceneGraphEditor::parsePBRTSceneFile(const std::filesystem::path & path, AssetManager& assetManager)
 {
     PBRTSceneBuilder builder{};
     assetManager.setWorkDir(path.parent_path());
     auto res = _parser.parse(builder,path,assetManager);
     // do something to current scene
     _sceneGraphRootNode = builder._currentVisitNode;
-    return builder._currentVisitNode;
+    return builder.sceneGraph;
 }
 
 SceneGraphEditor::~SceneGraphEditor()

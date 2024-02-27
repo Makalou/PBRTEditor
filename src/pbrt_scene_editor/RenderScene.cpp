@@ -3,19 +3,10 @@
 //
 
 #include "RenderScene.h"
+#include "SceneBuilder.hpp"
 
 namespace renderScene
 {
-    MeshRigid *MeshRigidHandle::operator->() const {
-        return &scene->meshes[idx].second;
-    }
-
-    bool MeshRigidHandle::operator==(const renderScene::MeshRigidHandle &other) const {
-        if(scene != other.scene) return false;
-        if(idx != other.idx) return false;
-        return true;
-    }
-
     RenderScene::RenderScene(const std::shared_ptr<DeviceExtended>& device) : backendDevice(device)
     {
         {
@@ -83,13 +74,14 @@ namespace renderScene
         }
     }
 
-    void RenderScene::buildFrom(SceneGraphNode *root, AssetManager &assetManager)
+    void RenderScene::buildFrom(SceneGraph * sceneGraph, AssetManager &assetManager)
     {
         auto handleNode = [this, &assetManager](SceneGraphNode* node,const glm::mat4& baseTransform )->void{
             if(!node->shapes.empty())
             {
-                for(auto shape : node->shapes)
+                for(int i = 0; i < node->shapes.size(); i++)
                 {
+                    auto shape = node->shapes[i];
                     std::string shape_uuid;
                     PLYMeshShape * plyMeshPtr = dynamic_cast<PLYMeshShape *>(shape);
                     if(plyMeshPtr != nullptr)
@@ -102,73 +94,41 @@ namespace renderScene
 
                     MeshRigidHandle meshHandle;
 
-                    for(int i = 0; i < meshes.size(); i ++)
+                    for(const auto & mesh : meshes)
                     {
-                        if(meshes[i].first == shape_uuid)
+                        if(mesh.first == shape_uuid)
                         {
-                            meshHandle.scene = this;
-                            meshHandle.idx = i;
+                            meshHandle = mesh.second;
+                        }
+                    }
+
+                    if(meshHandle.idx == -1)
+                    {
+                        meshHandle = assetManager.getOrLoadPLYMeshDevice(shape_uuid);
+                        AABB aabb{};
+                        aabb.minX = meshHandle.hostObject->aabb[0]; aabb.minY = meshHandle.hostObject->aabb[1];
+                        aabb.minZ = meshHandle.hostObject->aabb[2]; aabb.maxX = meshHandle.hostObject->aabb[3];
+                        aabb.maxY = meshHandle.hostObject->aabb[4]; aabb.maxZ = meshHandle.hostObject->aabb[5];
+                        aabbs.emplace_back(aabb);
+                    }
+
+                    Material* mat;
+                    do{
+                        mat = node->materials[i];
+                        auto * coatedDiffuse = dynamic_cast<CoatedDiffuseMaterial*>(mat);
+                        if(coatedDiffuse != nullptr)
+                        {
                             break;
                         }
-                    }
+                    } while (0);
 
-                    if(meshHandle.scene == nullptr)
-                    {
-                        // Existing mesh not found
-                        MeshHostObject* meshHost = assetManager.getOrLoadPBRTPLY(shape_uuid);
-
-                        auto interleaveAttribute = meshHost->getInterleavingAttributes();
-
-                        unsigned int * indicies = meshHost->indices.get();
-                        auto indexBufferSize = meshHost->index_count * sizeof(indicies[0]);
-                        auto vertexBufferSize = meshHost->vertex_count * interleaveAttribute.second.VertexStride;
-                        auto interleavingBufferAttribute = interleaveAttribute.second;
-
-                        auto vertexBuffer = backendDevice->allocateBuffer(vertexBufferSize,(VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT),VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE);
-                        auto indexBuffer = backendDevice->allocateBuffer(indexBufferSize,(VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT),VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE);
-
-                        if(!vertexBuffer)
-                        {
-                            throw std::runtime_error("Failed to allocate vertex buffer");
-                        }
-
-                        if(!indexBuffer)
-                        {
-                            throw std::runtime_error("Failed to allocate index buffer");
-                        }
-
-                        MeshRigid::VertexAttribute vertexAttribute;
-                        vertexAttribute.stride = interleavingBufferAttribute.VertexStride;
-                        vertexAttribute.normalOffset = interleavingBufferAttribute.normalOffset;
-                        vertexAttribute.tangentOffset = interleavingBufferAttribute.tangentOffset;
-                        vertexAttribute.biTangentOffset = interleavingBufferAttribute.biTangentOffset;
-                        vertexAttribute.uvOffset = interleavingBufferAttribute.uvOffset;
-
-                        MeshRigid meshRigid{vertexAttribute,static_cast<uint32_t>(meshes.size())};
-
-                        meshRigid.vertexBuffer = vertexBuffer.value();
-                        meshRigid.indexBuffer = indexBuffer.value();
-                        meshRigid.vertexCount = meshHost->vertex_count;
-                        meshRigid.indexCount = meshHost->index_count;
-
-                        backendDevice->oneTimeUploadSync(meshHost->indices.get(),indexBufferSize,meshRigid.indexBuffer.buffer);
-                        backendDevice->oneTimeUploadSync(interleaveAttribute.first,vertexBufferSize,meshRigid.vertexBuffer.buffer);
-
-                        meshes.emplace_back(shape_uuid,meshRigid);
-                        AABB aabb{};
-                        aabb.minX = meshHost->aabb[0]; aabb.minY = meshHost->aabb[1]; aabb.minZ = meshHost->aabb[2];
-                        aabb.maxX = meshHost->aabb[3]; aabb.maxY = meshHost->aabb[4]; aabb.maxZ = meshHost->aabb[5];
-                        aabbs.emplace_back(aabb);
-                        meshHandle.scene = this;
-                        meshHandle.idx = meshes.size() - 1;
-                    }
-
+                    // For now we assume the instance with same mesh also share same material.
                     bool foundInstance = false;
-
                     for(auto & inst : _dynamicRigidMeshBatch)
                     {
                         if(inst.mesh == meshHandle)
                         {
+                            assert(mat->name == inst.materialName);
                             foundInstance = true;
                             inst.perInstanceData.push_back({node->_finalTransform * baseTransform});
                             break;
@@ -178,6 +138,7 @@ namespace renderScene
                     if(!foundInstance)
                     {
                         InstanceBatchRigidDynamic<PerInstanceData> meshInstanceRigidDynamic(meshHandle);
+                        meshInstanceRigidDynamic.materialName = mat->name;
                         meshInstanceRigidDynamic.perInstanceData.push_back({node->_finalTransform * baseTransform});
                         _dynamicRigidMeshBatch.push_back(meshInstanceRigidDynamic);
                     }
@@ -186,7 +147,7 @@ namespace renderScene
         };
 
         std::vector<SceneGraphNode *> stack;
-        stack.push_back(root);
+        stack.push_back(sceneGraph->root);
 
         while(!stack.empty())
         {
@@ -217,6 +178,14 @@ namespace renderScene
             handleNode(node,glm::identity<glm::mat4>());
         }
 
+        for(Texture * tex : sceneGraph->namedTextures)
+        {
+            if(dynamic_cast<ImageMapTexture*>(tex)!= nullptr)
+            {
+                ImageMapTexture* image = dynamic_cast<ImageMapTexture*>(tex);
+                assetManager.getOrLoadImgDevice(image->filename,image->encoding);
+            }
+        }
         /*
          * From a data-oriented view, all entities in renderScene is data, instead of object.
          * Which means, they shouldn't have the behavior of create, update the state of themselves.

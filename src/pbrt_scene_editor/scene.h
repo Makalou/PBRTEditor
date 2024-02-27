@@ -556,7 +556,7 @@ DEF_SUBCLASS_BEGIN(Material,CoatedDiffuse)
     std::variant<texture,float>  uroughness;
     std::variant<texture,float>  vroughness;
     bool remaproughness = true;
-    std::variant<texture,spectrum> reflectance = 0.5f;
+    std::variant<texture,spectrum,rgb> reflectance = 0.5f;
 
     PARSE_SECTION_CONTINUE_IN_DERIVED
         PARSE_FOR_VARIANT(displacement)
@@ -629,7 +629,7 @@ DEF_SUBCLASS_END
 DEF_SUBCLASS_BEGIN(Material,Diffuse)
     std::variant<texture,float> displacement;
     std::string normalmap;
-    std::variant<spectrum,texture> reflectance = 0.5;
+    std::variant<spectrum,texture,rgb> reflectance = 0.5;
     PARSE_SECTION_CONTINUE_IN_DERIVED
         PARSE_FOR_VARIANT(displacement)
         PARSE_FOR(normalmap)
@@ -708,6 +708,7 @@ DEF_SUBCLASS_END
 using MaterialCreator = GenericCreator<Material, CoatedDiffuseMaterial, CoatedConductorMaterial, ConductorMaterial, DielectricMaterial, DiffuseMaterial, DiffuseTransmissionMaterial, HairMaterial, InterfaceMaterial, MeasuredMaterial, MixMaterial, SubsurfaceMaterial, ThindielectricMaterial>;;
 
 DEF_BASECLASS_BEGIN(Texture)
+    std::string type;
     std::string name;
     PARSE_SECTION_BEGIN_IN_BASE
         PARSE_FOR(name)

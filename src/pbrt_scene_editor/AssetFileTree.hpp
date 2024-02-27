@@ -6,7 +6,7 @@
 struct AssetFileTree : EditorComponentGUI
 {
 	void constructFrame() override;
-	void init();
+	void init(DeviceExtended * device);
 	~AssetFileTree() override;
 
 	AssetManager assetManager;

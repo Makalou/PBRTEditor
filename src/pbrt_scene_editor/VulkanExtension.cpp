@@ -220,27 +220,129 @@ void DeviceExtended::oneTimeUploadSync(void* data, int size,VkBuffer dst)
         }
     }
 
-    std::vector<std::function<void(void)>> waitCallbacks;
+
+    auto transfer_cmd = this->allocateOnceTransferCommand();
+    vk::CommandBufferBeginInfo beginInfo{};
+    transfer_cmd.begin(beginInfo);
     for (int i = 0; i < blockNeededNum; i++)
     {
         auto copySize = std::min(size - i * stagingBlockSize, stagingBlockSize);
         memcpy(stagingBlocks[i].allocationInfo.pMappedData, (char*)data + i * stagingBlockSize, copySize);
-        auto transfer_cmd = this->allocateOnceTransferCommand();
-        vk::CommandBufferBeginInfo beginInfo{};
         vk::BufferCopy copyRegion{};
         copyRegion.size = copySize;
         copyRegion.srcOffset = 0;
         copyRegion.dstOffset = i * stagingBlockSize;
-        transfer_cmd.begin(beginInfo);
         transfer_cmd.copyBuffer(stagingBlocks[i].buffer, dst, copyRegion);
-        transfer_cmd.end();
-        waitCallbacks.emplace_back(submitOnceTransferCommand(transfer_cmd));
+    }
+    transfer_cmd.end();
+    auto wait = submitOnceTransferCommand(transfer_cmd);
+    wait();
+}
+
+void DeviceExtended::oneTimeUploadSync(void *data, uint32_t width, uint32_t height, uint32_t channel,VkImage dst, VkImageLayout layout) {
+    auto size = width * height * channel;
+    if (size == 0) return;
+
+    if(imageStagingBuffer.buffer == VK_NULL_HANDLE)
+    {
+        VkBufferCreateInfo bufferCreateInfo = { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
+        bufferCreateInfo.size = imageStagingBufferSize;
+        bufferCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+
+        VmaAllocationCreateInfo allocCreateInfo = {};
+        allocCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
+        allocCreateInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+
+        auto result = vmaCreateBuffer(_globalVMAAllocator, &bufferCreateInfo, &allocCreateInfo,
+                                      &imageStagingBuffer.buffer,
+                                      &imageStagingBuffer.allocation,
+                                      &imageStagingBuffer.allocationInfo);
+
+        assert(result == VK_SUCCESS);
+        VkMemoryPropertyFlags memPropFlags;
+        vmaGetAllocationMemoryProperties(_globalVMAAllocator, imageStagingBuffer.allocation, &memPropFlags);
+        assert(memPropFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
     }
 
-    for (auto& wait : waitCallbacks)
+    /*
+     * Different from copying between buffers, it's trickier to copy multiple buffer blocks into one image.
+     * So we just enlarge the buffer once it's no longer able to contain the whole data
+     */
+
+    if(size > imageStagingBufferSize)
     {
-        wait();
+        deAllocateBuffer(imageStagingBuffer.buffer,imageStagingBuffer.allocation);
+
+        VkBufferCreateInfo bufferCreateInfo = { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
+        bufferCreateInfo.size = size;
+        bufferCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+
+        VmaAllocationCreateInfo allocCreateInfo = {};
+        allocCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
+        allocCreateInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+
+        auto result = vmaCreateBuffer(_globalVMAAllocator, &bufferCreateInfo, &allocCreateInfo,
+                                      &imageStagingBuffer.buffer,
+                                      &imageStagingBuffer.allocation,
+                                      &imageStagingBuffer.allocationInfo);
+
+        assert(result == VK_SUCCESS);
+        VkMemoryPropertyFlags memPropFlags;
+        vmaGetAllocationMemoryProperties(_globalVMAAllocator, imageStagingBuffer.allocation, &memPropFlags);
+        assert(memPropFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+        imageStagingBufferSize = size;
     }
+
+    vk::ImageSubresourceRange subresourceRange;
+    subresourceRange.setAspectMask(vk::ImageAspectFlagBits::eColor);
+    subresourceRange.setBaseMipLevel(0);
+    subresourceRange.setLevelCount(1);
+    subresourceRange.setBaseArrayLayer(0);
+    subresourceRange.setLayerCount(1);
+
+    auto transfer_cmd = this->allocateOnceTransferCommand();
+    vk::CommandBufferBeginInfo beginInfo{};
+    transfer_cmd.begin(beginInfo);
+    vk::ImageMemoryBarrier barrier;
+    barrier.setSrcAccessMask(vk::AccessFlagBits::eNone);
+    barrier.setDstAccessMask(vk::AccessFlagBits::eTransferWrite);
+    barrier.setOldLayout(vk::ImageLayout::eUndefined);
+    barrier.setNewLayout(vk::ImageLayout::eTransferDstOptimal);
+    barrier.setSrcQueueFamilyIndex(vk::QueueFamilyIgnored);
+    barrier.setDstQueueFamilyIndex(vk::QueueFamilyIgnored);
+    barrier.setImage(dst);
+    barrier.setSubresourceRange(subresourceRange);
+    transfer_cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTopOfPipe,vk::PipelineStageFlagBits::eTransfer,{},0,{},barrier);
+
+    vk::ImageSubresourceLayers subresourceLayers;
+    subresourceLayers.setAspectMask(subresourceRange.aspectMask);
+    subresourceLayers.setMipLevel(0);
+    subresourceLayers.setLayerCount(1);
+    subresourceLayers.setBaseArrayLayer(0);
+    memcpy(imageStagingBuffer.allocationInfo.pMappedData, data, size);
+    vk::BufferImageCopy region{};
+    region.setImageSubresource(subresourceLayers);
+    region.setBufferImageHeight(0);
+    region.setBufferOffset(0);
+    region.setBufferRowLength(0);
+    region.setImageOffset({0,0,0});
+    region.setImageExtent({width,height,1});
+
+    transfer_cmd.copyBufferToImage(imageStagingBuffer.buffer,dst,vk::ImageLayout::eTransferDstOptimal,region);
+
+    vk::ImageMemoryBarrier barrier2;
+    barrier2.setSrcAccessMask(vk::AccessFlagBits::eTransferWrite);
+    barrier2.setDstAccessMask(vk::AccessFlagBits::eShaderRead);
+    barrier2.setOldLayout(vk::ImageLayout::eTransferDstOptimal);
+    barrier2.setNewLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+    barrier2.setSrcQueueFamilyIndex(vk::QueueFamilyIgnored);
+    barrier2.setDstQueueFamilyIndex(vk::QueueFamilyIgnored);
+    barrier2.setImage(dst);
+    barrier2.setSubresourceRange(subresourceRange);
+    transfer_cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,vk::PipelineStageFlagBits::eVertexShader,{},0,{},barrier2);
+    transfer_cmd.end();
+    auto wait = submitOnceTransferCommand(transfer_cmd);
+    wait();
 }
 
 bool VulkanGraphicsPipeline::compatibleWithVertexShader(const std::string &shaderVariantUUID) {

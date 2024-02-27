@@ -17,7 +17,7 @@ struct SceneViewer
 {
     void constructFrame();
 	void init(std::shared_ptr<DeviceExtended> device);
-    void setCurrentSceneGraph(SceneGraphNode* root,AssetManager& assetManager);
+    void setCurrentSceneGraph(SceneGraph* sceneGraph,AssetManager& assetManager);
     vk::CommandBuffer recordGraphicsCommand(unsigned int idx);
 	~SceneViewer();
 
@@ -29,7 +29,6 @@ struct SceneViewer
 
 private:
 	std::shared_ptr<DeviceExtended> backendDevice;
-    SceneGraphNode* _currentSceneGraph;
     RenderingMode _renderingMode;
     renderScene::RenderScene* _renderScene;
     std::vector<GPUFrame> _gpuFrames;

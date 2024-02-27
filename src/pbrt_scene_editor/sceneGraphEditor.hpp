@@ -72,6 +72,7 @@ struct SceneGraphNode : Inspectable
     SceneGraphNode* parent;
 
     std::vector<Shape*> shapes;
+    std::vector<Material*> materials;
     std::vector<Light*> lights;
     std::vector<AreaLight*> areaLights;
 
@@ -185,6 +186,16 @@ struct SceneGraphNode : Inspectable
     }
 };
 
+struct SceneGraph
+{
+    SceneGraphNode * root;
+    std::vector<Material*> namedMaterials;
+    std::vector<Texture*> namedTextures;
+    //todo : note, when initiation node modify the data, a deep copy is preferred.
+    std::vector<SceneGraphNode*> _objInstances;
+    std::unique_ptr<Camera> camera;
+};
+
 struct SceneGraphEditor : EditorComponentGUI
 {
 	
@@ -193,7 +204,7 @@ struct SceneGraphEditor : EditorComponentGUI
 	~SceneGraphEditor() override;
 
 	// path is the absolute path to the file
-	SceneGraphNode* parsePBRTSceneFile(const std::filesystem::path& path, AssetManager& assetLoader);
+	SceneGraph* parsePBRTSceneFile(const std::filesystem::path& path, AssetManager& assetLoader);
 	PBRTParser _parser;
 	std::shared_ptr<PBRTScene> _currentScene;
 	SceneGraphNode* _sceneGraphRootNode;

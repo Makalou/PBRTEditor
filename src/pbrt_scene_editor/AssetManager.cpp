@@ -17,13 +17,19 @@ void AssetManager::setWorkDir(const fs::path &path) {
 TextureHostObject AssetManager::loadImg(const std::string &relative_path) {
     auto fileName = fs::absolute(_currentWorkDir / relative_path).make_preferred().string();
     int x,y,channels;
-    auto img_mem = stbi_load(fileName.c_str(),&x,&y,&channels,0);
+    stbi_info(fileName.c_str(),&x,&y,&channels);
+    int desired_channels = (channels == 3 || channels == 2 )? 4 : channels;
+    auto img_mem = stbi_load(fileName.c_str(),&x,&y,&channels,desired_channels);
     if(img_mem != nullptr){
         TextureHostObject textureHostObj{};
-        textureHostObj.channels = channels;
+        textureHostObj.channels =desired_channels;
         textureHostObj.width = x;
         textureHostObj.height = y;
         textureHostObj.data.reset(img_mem);
+        //logging
+        auto size = x * y * desired_channels;
+        float img_mem_size_kb = float(size * sizeof(stbi_us))/1024.0f;
+        GlobalLogger::getInstance().info("Loaded Image " + relative_path + "\t + [ " +std::to_string(desired_channels) + "] + mem : " + std::to_string(img_mem_size_kb) + "KB");
         return textureHostObj;
     }
     throw std::runtime_error("Load Image " + relative_path);
@@ -62,10 +68,6 @@ std::future<TextureHostObject*>* AssetManager::getOrLoadImgAsync(const std::stri
         }
 
         auto textureHostObj = loadImg(relative_path);
-        //logging
-        auto size = textureHostObj.width * textureHostObj.height * textureHostObj.channels;
-        float img_mem_size_kb = float(size * sizeof(stbi_us))/1024.0f;
-        GlobalLogger::getInstance().info("Load Image " + relative_path + "\t mem : " + std::to_string(img_mem_size_kb) + "KB");
 
         // Cache loaded texture obj.
         std::lock_guard<std::mutex> lg(imgCacheLock);
@@ -79,6 +81,99 @@ std::future<TextureHostObject*>* AssetManager::getOrLoadImgAsync(const std::stri
 
     imgLoadRequests.emplace_back(relative_path,std::move(req));
     return &imgLoadRequests.back().second;
+}
+
+TextureDeviceHandle AssetManager::getOrLoadImgDevice(const std::string &relative_path,const std::string & encoding) {
+    TextureDeviceHandle handle;
+    for(int i = 0; i < device_textures.size(); i++)
+    {
+        if(device_textures[i].first == relative_path)
+        {
+            handle.manager = this;
+            handle.idx = i;
+            break;
+        }
+    }
+
+    if(handle.manager == nullptr)
+    {
+        auto * textureHost = getOrLoadImg(relative_path);
+
+        TextureDeviceObject textureDevice;
+        textureDevice.imgInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        textureDevice.imgInfo.extent.width = textureHost->width;
+        textureDevice.imgInfo.extent.height = textureHost->height;
+        textureDevice.imgInfo.extent.depth = 1;
+        textureDevice.imgInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        textureDevice.imgInfo.imageType = VK_IMAGE_TYPE_2D;
+        textureDevice.imgInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+        //https://www.intel.com/content/dam/develop/external/us/en/documents/apiwithoutwithoutsecretsintroductiontovulkanpart6-final-738455.pdf
+        /*
+         * there are severe	restrictions on	images with	linear tiling.
+         * For	example, the Vulkan	specification says that	only 2D	images must support	linear tiling.
+         * Hardware vendors	may	implement support for linear tiling	in other image types, but this is not obligatory.
+         * What's more important, linear tiling images may have worse performance than their optimal tiling counterparts.
+         * */
+        textureDevice.imgInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+        if(textureHost->channels == 1)
+        {
+            if(encoding == "sRGB")
+            {
+                textureDevice.imgInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
+            }else if(encoding == "linear")
+            {
+                textureDevice.imgInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+            }
+        }else if(textureHost->channels == 4)
+        {
+            if(encoding == "sRGB")
+            {
+                textureDevice.imgInfo.format = VK_FORMAT_R8_SRGB;
+            }else if(encoding == "linear")
+            {
+                textureDevice.imgInfo.format = VK_FORMAT_R8_UNORM;
+            }
+        }
+        textureDevice.imgInfo.arrayLayers = 1;
+        textureDevice.imgInfo.mipLevels = 1;
+        textureDevice.imgInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        textureDevice.imgInfo.sharingMode = VkSharingMode::VK_SHARING_MODE_EXCLUSIVE;
+        textureDevice.imgInfo.pQueueFamilyIndices = nullptr;
+        textureDevice.imgInfo.queueFamilyIndexCount = 0;
+
+        auto img = backendDevice->allocateVMAImage(textureDevice.imgInfo);
+        if(!img.has_value())
+            throw std::runtime_error("Failed to allocate VKImage for " + relative_path);
+
+        textureDevice.image = img.value();
+        backendDevice->setObjectDebugName(static_cast<vk::Image>(textureDevice.image.image),relative_path.c_str());
+
+        backendDevice->oneTimeUploadSync(textureHost->data.get(),textureHost->width,textureHost->height,textureHost->channels,textureDevice.image.image,VK_IMAGE_LAYOUT_UNDEFINED);
+
+        textureDevice.imgViewInfo.setViewType(vk::ImageViewType::e2D);
+        textureDevice.imgViewInfo.setImage(textureDevice.image.image);
+        textureDevice.imgViewInfo.setFormat(static_cast<vk::Format>(textureDevice.imgInfo.format));
+        vk::ComponentMapping mapping;
+        mapping.r = vk::ComponentSwizzle::eIdentity;
+        mapping.g = vk::ComponentSwizzle::eIdentity;
+        mapping.b = vk::ComponentSwizzle::eIdentity;
+        mapping.a = vk::ComponentSwizzle::eIdentity;
+        textureDevice.imgViewInfo.setComponents(mapping);
+        vk::ImageSubresourceRange subresourceRange{};
+        subresourceRange.setAspectMask(vk::ImageAspectFlagBits::eColor);
+        subresourceRange.setLevelCount(1);
+        subresourceRange.setBaseMipLevel(0);
+        subresourceRange.setLayerCount(1);
+        subresourceRange.setBaseArrayLayer(0);
+        textureDevice.imgViewInfo.setSubresourceRange(subresourceRange);
+        textureDevice.imageView = backendDevice->createImageView(textureDevice.imgViewInfo);
+        backendDevice->setObjectDebugName(textureDevice.imageView,relative_path.c_str());
+
+        device_textures.emplace_back(relative_path,textureDevice);
+        handle.idx = device_textures.size() - 1;
+    }
+
+    return handle;
 }
 
 MeshHostObject parseAssimpMesh(aiMesh* mesh)
@@ -344,48 +439,125 @@ MeshHostObject AssetManager::loadMeshPBRTPLY(const std::string &relative_path,in
 }
 
 MeshHostObject* AssetManager::getOrLoadPBRTPLY(const std::string &relative_path) {
-    for(auto & req : meshLoadRequests)
-    {
-        if(req.first == relative_path)
-        {
-            return req.second.get();
-        }
-    }
-    return getOrLoadMeshAsync(relative_path)->get();
+    return getOrLoadMeshAsync(relative_path).get();
 }
 
-std::future<MeshHostObject *>* AssetManager::getOrLoadMeshAsync(const std::string &relative_path) {
-    for(auto & req : meshLoadRequests)
-    {
-        if(req.first == relative_path)
-        {
-            return &req.second;
-        }
-    }
-
-    auto req = workerPool.enqueue([this,relative_path](int id)->MeshHostObject* {
+std::future<MeshHostObject*> AssetManager::getOrLoadMeshAsync(const std::string &relative_path) {
+    return workerPool.enqueue([this,relative_path](int id)->MeshHostObject* {
         auto fileName = fs::absolute(_currentWorkDir / relative_path).make_preferred().string();
+        std::mutex *  loadLock;
         {
-            std::lock_guard<std::mutex> lg(meshCacheLock);
+            std::lock_guard<std::mutex> lg(meshLoadLockMapLock);
+            auto it = meshLoadLockMap.find(fileName);
+            if( it != meshLoadLockMap.end())
+            {
+                loadLock = it->second.get();
+            }else{
+                loadLock = new std::mutex;
+                meshLoadLockMap.emplace(fileName,loadLock);
+            }
+        }
+        {
+            std::lock_guard<std::mutex> lg(*loadLock);
             auto it = loadedMeshCache.find(fileName);
             if ( it != loadedMeshCache.end()) {
                 return &it->second;
             }
+            auto meshHostObj = loadMeshPBRTPLY(relative_path,id);
+            loadedMeshCache.emplace(fileName,std::move(meshHostObj));
+            return &loadedMeshCache[fileName];
         }
-        auto meshHostObj = loadMeshPBRTPLY(relative_path,id);
-        // Cache loaded mesh.
-        std::lock_guard<std::mutex> lg(meshCacheLock);
-        auto it = loadedMeshCache.find(fileName);
-        if ( it != loadedMeshCache.end()) {
-            return &it->second;
-        }
-        loadedMeshCache.emplace(fileName,std::move(meshHostObj));
-        return &loadedMeshCache[fileName];
     });
-    meshLoadRequests.emplace_back(relative_path,std::move(req));
-    return &meshLoadRequests.back().second;
+}
+
+MeshRigidHandle AssetManager::getOrLoadPLYMeshDevice(const std::string &relative_path) {
+    MeshRigidHandle handle;
+    handle.hostObject = getOrLoadPBRTPLY(relative_path);
+
+    for(int i = 0; i < device_meshes.size(); i ++)
+    {
+        if(device_meshes[i].first == relative_path)
+        {
+            handle.manager = this;
+            handle.idx = i;
+            break;
+        }
+    }
+
+    if(handle.manager == nullptr)
+    {
+        // Existing mesh not found
+        auto interleaveAttribute = handle.hostObject->getInterleavingAttributes();
+
+        unsigned int * indicies = handle.hostObject->indices.get();
+        auto indexBufferSize = handle.hostObject->index_count * sizeof(indicies[0]);
+        auto vertexBufferSize = handle.hostObject->vertex_count * interleaveAttribute.second.VertexStride;
+        auto interleavingBufferAttribute = interleaveAttribute.second;
+
+        auto vertexBuffer = backendDevice->allocateBuffer(vertexBufferSize,(VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT),VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE);
+        auto indexBuffer = backendDevice->allocateBuffer(indexBufferSize,(VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT),VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE);
+
+        auto vertexBufferDebugName = relative_path + "VertexBuffer";
+        auto indexBufferDebugName = relative_path + "IndexBuffer";
+
+        backendDevice->setObjectDebugName(static_cast<vk::Buffer>(vertexBuffer->buffer),vertexBufferDebugName.c_str());
+        backendDevice->setObjectDebugName(static_cast<vk::Buffer>(indexBuffer->buffer),indexBufferDebugName.c_str());
+
+        if(!vertexBuffer)
+        {
+            throw std::runtime_error("Failed to allocate vertex buffer");
+        }
+
+        if(!indexBuffer)
+        {
+            throw std::runtime_error("Failed to allocate index buffer");
+        }
+
+        MeshRigidDevice::VertexAttribute vertexAttribute;
+        vertexAttribute.stride = interleavingBufferAttribute.VertexStride;
+        vertexAttribute.normalOffset = interleavingBufferAttribute.normalOffset;
+        vertexAttribute.tangentOffset = interleavingBufferAttribute.tangentOffset;
+        vertexAttribute.biTangentOffset = interleavingBufferAttribute.biTangentOffset;
+        vertexAttribute.uvOffset = interleavingBufferAttribute.uvOffset;
+
+        MeshRigidDevice meshRigid{vertexAttribute,static_cast<uint32_t>(device_meshes.size())};
+
+        meshRigid.vertexBuffer = vertexBuffer.value();
+        meshRigid.indexBuffer = indexBuffer.value();
+        meshRigid.vertexCount = handle.hostObject->vertex_count;
+        meshRigid.indexCount = handle.hostObject->index_count;
+
+        backendDevice->oneTimeUploadSync(handle.hostObject->indices.get(),indexBufferSize,meshRigid.indexBuffer.buffer);
+        backendDevice->oneTimeUploadSync(interleaveAttribute.first,vertexBufferSize,meshRigid.vertexBuffer.buffer);
+
+        device_meshes.emplace_back(relative_path,meshRigid);
+
+        handle.manager= this;
+        handle.idx = device_meshes.size() - 1;
+    }
+
+    return handle;
 }
 
 void AssetManager::unloadAllImg() {
 
 }
+
+MeshRigidDevice *MeshRigidHandle::operator->() const {
+    return &manager->device_meshes[idx].second;
+}
+
+bool MeshRigidHandle::operator==(const MeshRigidHandle &other) const {
+    if(manager != other.manager) return false;
+    if(idx != other.idx) return false;
+    return true;
+}
+
+TextureDeviceObject *TextureDeviceHandle::operator->() const {
+    return &manager->device_textures[idx].second;
+}
+
+bool TextureDeviceHandle::operator==(const TextureDeviceHandle &other) const {
+    return false;
+}
+

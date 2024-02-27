@@ -12,9 +12,9 @@ void AssetFileTree::constructFrame()
 	
 }
 
-void AssetFileTree::init()
+void AssetFileTree::init(DeviceExtended * device)
 {
-
+    assetManager.setBackendDevice(device);
 }
 
 AssetFileTree::~AssetFileTree()

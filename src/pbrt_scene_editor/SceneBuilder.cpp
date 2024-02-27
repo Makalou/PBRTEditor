@@ -9,6 +9,10 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <unordered_map>
 
+PBRTSceneBuilder::PBRTSceneBuilder() {
+    sceneGraph = new SceneGraph;
+}
+
 struct HashCounter
 {
     unsigned int& operator[](const std::string & counter_name) {
@@ -69,6 +73,7 @@ void PBRTSceneBuilder::WorldBegin() {
     Identity();
     assert(_currentVisitNode == nullptr);
     _currentVisitNode = worldRootNode;
+    sceneGraph->root = _currentVisitNode;
 }
 
 void PBRTSceneBuilder::WorldEnd() {
@@ -122,23 +127,24 @@ void PBRTSceneBuilder::LookAt(const float*){
 }
 
 void PBRTSceneBuilder::AddNamedMaterial(Material * material){
-    for(const auto & mat : namedMaterials)
+    for(const auto & mat : sceneGraph->namedMaterials)
     {
         if(mat->name == material->name)
         {
             throw std::runtime_error("Material " + material->name + " has been defined.");
         }
     }
-    namedMaterials.push_back(material);
+    sceneGraph->namedMaterials.push_back(material);
 }
 
 void PBRTSceneBuilder::NamedMaterial(const std::string & name) {
     if(_currentVisitNode!= nullptr)
     {
-        for(const auto & mat : namedMaterials)
+        for(const auto & mat : sceneGraph->namedMaterials)
         {
             if(mat->name == name)
             {
+                _currentVisitNode->materials.push_back(mat);
                 return;
             }
         }
@@ -152,7 +158,7 @@ void PBRTSceneBuilder::ObjectBegin(const std::string & instanceName){
     newNode->name = instanceName;
     newNode->is_instance = true;
     newNode->parent = _currentVisitNode;
-    _objInstances.push_back(newNode);
+    sceneGraph->_objInstances.push_back(newNode);
     _currentVisitNode = newNode;
 }
 
@@ -163,7 +169,7 @@ void PBRTSceneBuilder::ObjectEnd() {
 void PBRTSceneBuilder::ObjectInstance(const std::string & instanceName){
     if(_currentVisitNode!= nullptr)
     {
-        for(const auto obj : _objInstances)
+        for(const auto obj : sceneGraph->_objInstances)
         {
             if(obj->name == instanceName)
             {
@@ -174,7 +180,6 @@ void PBRTSceneBuilder::ObjectInstance(const std::string & instanceName){
                 _currentVisitNode->children.push_back(obj);
                 return;
             }
-
         }
     }
 }
@@ -259,13 +264,22 @@ void PBRTSceneBuilder::AddShape(Shape* shape) {
 }
 
 void PBRTSceneBuilder::AddTexture(Texture * texture) {
-    namedTextures.push_back(texture);
+    sceneGraph->namedTextures.push_back(texture);
+}
+
+Texture* PBRTSceneBuilder::GetTexture(const std::string &name) {
+    for(auto * tex : sceneGraph->namedTextures)
+    {
+        if(tex->name == name)
+            return tex;
+    }
+    return nullptr;
 }
 
 void PBRTSceneBuilder::AddMaterial(Material * material) {
     if(_currentVisitNode != nullptr)
     {
-
+        _currentVisitNode->materials.push_back(material);
     }
 }
 

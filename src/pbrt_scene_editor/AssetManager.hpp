@@ -9,7 +9,10 @@
 #include "assimp/Importer.hpp"
 #include "ThreadPool.h"
 #include "stb_image.h"
+#include "VulkanExtension.h"
 #include <cstdlib>
+
+struct AssetManager;
 
 struct TextureHostObject
 {
@@ -148,6 +151,124 @@ private:
     AttributeLayout attributeLayout;
 };
 
+/*
+ * Why should we manage mesh device data in AssetManager instead of renderScene?
+ * Because not only render scene want the data. For example, inspector may also need it.
+ * */
+struct MeshRigidDevice{
+    VMABuffer vertexBuffer{};
+    VMABuffer indexBuffer{};
+    uint32_t vertexCount{};
+    uint32_t indexCount{};
+    uint32_t _uuid;
+
+    struct VertexAttribute
+    {
+        int stride = 0;
+        int normalOffset = -1;
+        int tangentOffset = -1;
+        int biTangentOffset = -1;
+        int uvOffset = -1;
+    };
+
+    const VertexAttribute vertexAttribute;
+    const vk::VertexInputBindingDescription bindingDescription{};
+    const std::vector<vk::VertexInputAttributeDescription> attributeDescriptions{};
+
+    auto initBindingDesc(const VertexAttribute& attribute) const
+    {
+        vk::VertexInputBindingDescription bindingDesc;
+        bindingDesc.setInputRate(vk::VertexInputRate::eVertex);
+        bindingDesc.setBinding(0);
+        bindingDesc.setStride(vertexAttribute.stride);
+        return bindingDesc;
+    }
+
+    auto initAttributeDescription(const VertexAttribute& attribute)
+    {
+        std::vector<vk::VertexInputAttributeDescription> attributeDesc;
+        // todo if we can modify the shader variant, then explicitly specific location may be unnecessary
+        attributeDesc.emplace_back(0,0,vk::Format::eR32G32B32Sfloat,0);
+        if(vertexAttribute.normalOffset != -1)
+        {
+            attributeDesc.emplace_back(1,0,vk::Format::eR32G32B32Sfloat,vertexAttribute.normalOffset);
+        }
+        if(vertexAttribute.tangentOffset != -1)
+        {
+            attributeDesc.emplace_back(2,0,vk::Format::eR32G32B32Sfloat,vertexAttribute.tangentOffset);
+        }
+        if(vertexAttribute.biTangentOffset != -1)
+        {
+            attributeDesc.emplace_back(3,0,vk::Format::eR32G32B32Sfloat,vertexAttribute.biTangentOffset);
+        }
+        if(vertexAttribute.uvOffset != -1)
+        {
+            attributeDesc.emplace_back(4,0,vk::Format::eR32G32Sfloat,vertexAttribute.uvOffset);
+        }
+
+        return std::move(attributeDesc);
+    }
+
+    explicit MeshRigidDevice(const VertexAttribute& attribute,uint32_t uuid) : vertexAttribute(attribute),
+                                                                               bindingDescription(initBindingDesc(attribute)),
+                                                                               attributeDescriptions(initAttributeDescription(attribute)),
+                                                                               _uuid(uuid){}
+
+    /*
+     * Only contains per vertex information.
+     */
+    auto getVertexInputBindingDesc() const
+    {
+        return bindingDescription;
+    }
+
+    /*
+     * Only contains per vertex information.
+     */
+    auto getVertexInputAttributeDesc() const
+    {
+        return attributeDescriptions;
+    }
+
+    /*
+     * Only bind per vertex data input
+     */
+    void bind(vk::CommandBuffer cmd) {
+        cmd.bindVertexBuffers(0, {vertexBuffer.buffer}, {0});
+        cmd.bindIndexBuffer(indexBuffer.buffer, 0, vk::IndexType::eUint32);
+    }
+};
+
+struct MeshRigidHandle
+{
+    AssetManager* manager = nullptr;
+    uint32_t idx = -1;
+    MeshHostObject* hostObject;
+
+    MeshRigidDevice* operator->() const;
+
+    bool operator==(const MeshRigidHandle& other) const;
+};
+
+struct TextureDeviceObject
+{
+    VMAImage image;
+    vk::ImageView imageView;
+    vk::Sampler sampler;
+    VkImageCreateInfo imgInfo{};
+    vk::ImageViewCreateInfo imgViewInfo{};
+};
+
+struct TextureDeviceHandle
+{
+    AssetManager* manager = nullptr;
+    uint32_t idx = -1;
+
+    TextureDeviceObject* operator->() const;
+
+    bool operator==(const TextureDeviceHandle& other) const;
+};
+
 namespace fs = std::filesystem;
 
 template<typename T>
@@ -165,14 +286,23 @@ struct AssetManager
 
     std::future<TextureHostObject*>* getOrLoadImgAsync(const std::string & relative_path);
 
+    TextureDeviceHandle getOrLoadImgDevice(const std::string & relative_path,const std::string & encoding);
+
     /*
     *  For PBRT PLY file we assume that each file only contain single mesh
     */
     MeshHostObject* getOrLoadPBRTPLY(const std::string & relative_path);
 
-    std::future<MeshHostObject*>* getOrLoadMeshAsync(const std::string & relative_path);
+    std::future<MeshHostObject*> getOrLoadMeshAsync(const std::string & relative_path);
+
+    MeshRigidHandle getOrLoadPLYMeshDevice(const std::string & relative_path);
 
     void setWorkDir(const fs::path & path);
+    void setBackendDevice(DeviceExtended * device)
+    {
+        backendDevice = device;
+        auto supportedColorFormat = backendDevice->getSupportedColorFormat();
+    }
     void unloadAllImg();
 
 private:
@@ -187,12 +317,23 @@ private:
     AssetCacheT<MeshHostObject> loadedMeshCache;
 
     std::vector<std::pair<std::string,std::future<TextureHostObject*>>> imgLoadRequests;
-    std::vector<std::pair<std::string,std::future<MeshHostObject*>>> meshLoadRequests;
+    std::vector<std::pair<std::string,std::unique_ptr<std::future<MeshHostObject*>>>> meshLoadRequests;
 
     std::atomic<float> _totalImgSizeKB;
     std::mutex imgCacheLock;
     std::mutex meshCacheLock;
 
+    std::unordered_map<std::string,std::unique_ptr<std::mutex>> meshLoadLockMap;
+    std::mutex meshLoadLockMapLock;
+
     std::vector<Assimp::Importer> perThreadImporter{1};
     ThreadPool workerPool{ 1 };
+
+    std::vector<std::pair<std::string,MeshRigidDevice>> device_meshes;
+    std::vector<std::pair<std::string,TextureDeviceObject>> device_textures;
+
+    friend MeshRigidHandle;
+    friend TextureDeviceHandle;
+
+    DeviceExtended* backendDevice;
 };

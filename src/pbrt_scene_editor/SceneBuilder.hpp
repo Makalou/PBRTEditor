@@ -10,6 +10,7 @@
 #include <vector>
 
 struct SceneGraphNode;
+struct SceneGraph;
 
 struct GlobalRenderSetting : Inspectable
 {
@@ -28,6 +29,8 @@ struct RenderScene;
 
 struct PBRTSceneBuilder
 {
+    PBRTSceneBuilder();
+
     void AttributeBegin();
     void AttributeEnd();
     void ActiveTransformAll();
@@ -53,6 +56,7 @@ struct PBRTSceneBuilder
     void TransformTimes();
     void AddShape(Shape*);
     void AddTexture(Texture*);
+    Texture* GetTexture(const std::string& name);
     void AddMaterial(Material*);
     void AddLightSource(Light*);
     void AddAreaLight(AreaLight*);
@@ -60,12 +64,9 @@ struct PBRTSceneBuilder
     void WorldBegin();
     void WorldEnd();
 
-    SceneGraphNode* _currentVisitNode;
-    std::vector<SceneGraphNode*> _objInstances; //todo : note, when initiation node modify the data, a deep copy is preferred.
+    SceneGraphNode* _currentVisitNode = nullptr;
+    SceneGraph* sceneGraph;
     GlobalRenderSetting _globalRenderSetting;
-    std::unique_ptr<Camera> camera;
-    std::vector<Texture*> namedTextures;
-    std::vector<Material*> namedMaterials;
 };
 
 #endif //PBRTEDITOR_SCENEBUILDER_HPP

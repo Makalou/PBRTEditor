@@ -62,7 +62,7 @@ void EditorGUI::init(GLFWwindow* window, std::shared_ptr<DeviceExtended> device)
 	auto wait_and_free = backendDevice->submitOnceGraphicsCommand(singleUseCommand);
 	wait_and_free();
 
-	_assetFileTree->init();
+	_assetFileTree->init(device.get());
 	_sceneGraphEditor->init();
 	_sceneGraphEditor->setOpen();
     _loggerWindow->init();

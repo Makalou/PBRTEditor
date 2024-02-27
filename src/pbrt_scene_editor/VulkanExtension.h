@@ -177,6 +177,8 @@ struct DeviceExtended : vkb::Device, vk::Device
      * */
     void oneTimeUploadSync(void* data, int size,VkBuffer dst);
 
+    void oneTimeUploadSync(void* data, uint32_t width, uint32_t height, uint32_t channel, VkImage dst, VkImageLayout layout);
+
     template<class ObjectT>
     auto setObjectDebugName(ObjectT object,const char* name) const
     {
@@ -298,6 +300,98 @@ struct DeviceExtended : vkb::Device, vk::Device
         return formats;
     }
 
+    auto getSupportedColorFormat() const
+    {
+        VkImageTiling tiling = VK_IMAGE_TILING_OPTIMAL;
+        VkFormatFeatureFlags features = VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT;
+
+        VkFormat candidates[] = {
+                VK_FORMAT_R8G8B8A8_UNORM,
+                VK_FORMAT_R8G8B8A8_SRGB,
+                VK_FORMAT_R8G8B8_UNORM,
+                VK_FORMAT_R8G8B8_SRGB,
+                VK_FORMAT_R8_UNORM,
+                VK_FORMAT_R8_SRGB,
+        };
+
+        std::vector<VkFormat> formats;
+
+        for(auto & format : candidates)
+        {
+            VkFormatProperties props;
+            vkGetPhysicalDeviceFormatProperties(this->physical_device,format, &props);
+            if (tiling == VK_IMAGE_TILING_OPTIMAL && (props.optimalTilingFeatures & features) == features) {
+                formats.push_back(format);
+            }
+        }
+
+        return formats;
+    }
+
+    VkFormat chooseTextureFormatFor(int expected_channel, int & supported_channel, const std::string& encoding)
+    {
+        if(expected_channel < 1 || expected_channel > 4)
+        {
+            return VK_FORMAT_MAX_ENUM;
+        }
+        auto supported_formats = getSupportedColorFormat();
+        if(encoding == "sRGB"){
+            if(expected_channel == 4)
+            {
+                supported_channel = 4;
+                VkFormat fallback = VK_FORMAT_MAX_ENUM;
+                for(const auto & format : supported_formats)
+                {
+                    if(format == VK_FORMAT_R8G8B8A8_SRGB)
+                    {
+                        return VK_FORMAT_R8G8B8A8_SRGB;
+                    }
+                    if(format == VK_FORMAT_R8G8B8A8_UNORM)
+                    {
+                        fallback = VK_FORMAT_R8G8B8A8_UNORM;
+                    }
+                }
+                return fallback;
+            }
+            if(expected_channel == 3)
+            {
+
+            }
+            if(expected_channel == 1)
+            {
+
+            }
+        }
+        if(encoding == "linear"){
+            if(expected_channel == 4)
+            {
+                supported_channel = 4;
+                VkFormat fallback = VK_FORMAT_MAX_ENUM;
+                for(const auto & format : supported_formats)
+                {
+                    if(format == VK_FORMAT_R8G8B8A8_UNORM)
+                    {
+                        return VK_FORMAT_R8G8B8A8_UNORM;
+                    }
+                    if(format == VK_FORMAT_R8G8B8A8_SRGB)
+                    {
+                        fallback = VK_FORMAT_R8G8B8A8_SRGB;
+                    }
+                }
+                return fallback;
+            }
+            if(expected_channel == 3)
+            {
+
+            }
+            if(expected_channel == 1)
+            {
+
+            }
+        }
+        return VK_FORMAT_MAX_ENUM;
+    }
+
     auto getDLD()
     {
         return dld;
@@ -313,7 +407,7 @@ struct DeviceExtended : vkb::Device, vk::Device
 
     struct StagingBufferBlock
     {
-        VkBuffer buffer;
+        VkBuffer buffer = VK_NULL_HANDLE;
         VmaAllocation allocation;
         VmaAllocationInfo allocationInfo;
     };
@@ -322,6 +416,9 @@ struct DeviceExtended : vkb::Device, vk::Device
     //VMABuffer stagingBuffer{};
     //VmaAllocationInfo stagingBufferAllocationInfo{};
     std::vector<StagingBufferBlock> stagingBlocks;
+
+    uint32_t imageStagingBufferSize = 4096 * 4096 * 4;
+    StagingBufferBlock imageStagingBuffer;
     
 private:
     vk::CommandPool onceGraphicsCommandPool = VK_NULL_HANDLE;
