@@ -19,6 +19,7 @@ TextureHostObject AssetManager::loadImg(const std::string &relative_path) {
     int x,y,channels;
     stbi_info(fileName.c_str(),&x,&y,&channels);
     int desired_channels = (channels == 3 || channels == 2 )? 4 : channels;
+    stbi_set_flip_vertically_on_load(true);
     auto img_mem = stbi_load(fileName.c_str(),&x,&y,&channels,desired_channels);
     if(img_mem != nullptr){
         TextureHostObject textureHostObj{};
@@ -220,6 +221,7 @@ TextureDeviceHandle AssetManager::getOrLoadImgDevice(const std::string &relative
         } while (0);
         textureDevice.sampler = backendDevice->createSampler(samplerInfo);
         device_textures.emplace_back(relative_path,textureDevice);
+        handle.manager = this;
         handle.idx = device_textures.size() - 1;
     }
 
