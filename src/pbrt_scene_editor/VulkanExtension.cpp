@@ -332,80 +332,85 @@ void DeviceExtended::oneTimeUploadSync(void* data, VkImage dst, uint32_t channel
 
     transfer_cmd.copyBufferToImage(imageStagingBuffer.buffer,dst,vk::ImageLayout::eTransferDstOptimal,region);
 
-    if(imgInfo.mipLevels > 1)
+    vk::ImageMemoryBarrier barrier2; // TransferDstOptimal -> ShaderReadOnlyOptimal
+    barrier2.setSrcAccessMask(vk::AccessFlagBits::eTransferWrite);
+    barrier2.setDstAccessMask(vk::AccessFlagBits::eShaderRead);
+    barrier2.setOldLayout(vk::ImageLayout::eTransferDstOptimal);
+    barrier2.setNewLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+    barrier2.setSrcQueueFamilyIndex(vk::QueueFamilyIgnored);
+    barrier2.setDstQueueFamilyIndex(vk::QueueFamilyIgnored);
+    barrier2.setImage(dst);
+    barrier2.setSubresourceRange(subresourceRange);
+    transfer_cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eVertexShader, {}, 0, {}, barrier2);
+
+    transfer_cmd.end();
+    auto wait = submitOnceTransferCommand(transfer_cmd);
+    wait();
+
+    if (imgInfo.mipLevels <= 1)
     {
-        vk::ImageMemoryBarrier interBarrier{};
-        interBarrier.setImage(dst);
-        interBarrier.setSrcQueueFamilyIndex(vk::QueueFamilyIgnored);
-        interBarrier.setDstQueueFamilyIndex(vk::QueueFamilyIgnored);
-        interBarrier.subresourceRange.setAspectMask(vk::ImageAspectFlagBits::eColor);
-        interBarrier.subresourceRange.setBaseArrayLayer(0);
-        interBarrier.subresourceRange.setLayerCount(1);
-        interBarrier.subresourceRange.setLevelCount(1);
-
-        int32_t mipWidth = imgInfo.extent.width;
-        int32_t mipHeight = imgInfo.extent.height;
-        for(uint32_t level = 1; level < imgInfo.mipLevels; level++)
-        {
-            interBarrier.subresourceRange.setBaseMipLevel(level-1); // Transfer level i - 1 TransferDstOptimal -> TransferSrcOptimal
-            interBarrier.setOldLayout(vk::ImageLayout::eTransferDstOptimal);
-            interBarrier.setNewLayout(vk::ImageLayout::eTransferSrcOptimal);
-            interBarrier.setSrcAccessMask(vk::AccessFlagBits::eTransferWrite);
-            interBarrier.setDstAccessMask(vk::AccessFlagBits::eTransferRead);
-
-            vk::ImageBlit blitRegion{};
-            blitRegion.setSrcOffsets({vk::Offset3D{0,0,0},vk::Offset3D{mipWidth,mipHeight,1}});
-            blitRegion.srcSubresource.setMipLevel(level - 1);
-            blitRegion.srcSubresource.setAspectMask(vk::ImageAspectFlagBits::eColor);
-            blitRegion.srcSubresource.setBaseArrayLayer(0);
-            blitRegion.srcSubresource.setLayerCount(1);
-            blitRegion.setDstOffsets({vk::Offset3D{0,0,0},vk::Offset3D{mipWidth > 1 ? mipWidth / 2 : 1, mipHeight > 1 ? mipHeight / 2 : 1,1}});
-            blitRegion.dstSubresource.setMipLevel(level);
-            blitRegion.dstSubresource.setAspectMask(vk::ImageAspectFlagBits::eColor);
-            blitRegion.dstSubresource.setBaseArrayLayer(0);
-            blitRegion.dstSubresource.setLayerCount(1);
-            transfer_cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,vk::PipelineStageFlagBits::eTransfer,{},0,{},interBarrier);
-            transfer_cmd.blitImage(dst,vk::ImageLayout::eTransferSrcOptimal,dst,vk::ImageLayout::eTransferDstOptimal,blitRegion,vk::Filter::eLinear);
-
-            //Transfer level i - 1 TransferSrcOptimal -> ShaderReadOnlyOptimal
-            interBarrier.setOldLayout(vk::ImageLayout::eTransferSrcOptimal);
-            interBarrier.setNewLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
-            interBarrier.setSrcAccessMask(vk::AccessFlagBits::eTransferRead);
-            interBarrier.setDstAccessMask(vk::AccessFlagBits::eShaderRead);
-            transfer_cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,vk::PipelineStageFlagBits::eFragmentShader,{},0,{},interBarrier);
-
-            if (mipWidth > 1) mipWidth /= 2;
-            if (mipHeight > 1) mipHeight /= 2;
-        }
-
-        //Transfer the last level TransferDstOptimal -> ShaderReadOnlyOptimal
-        interBarrier.subresourceRange.baseMipLevel = imgInfo.mipLevels - 1;
-        interBarrier.setOldLayout(vk::ImageLayout::eTransferDstOptimal);
-        interBarrier.setNewLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
-        interBarrier.setSrcAccessMask(vk::AccessFlagBits::eTransferWrite);
-        interBarrier.setDstAccessMask(vk::AccessFlagBits::eShaderRead);
-
-        transfer_cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,vk::PipelineStageFlagBits::eFragmentShader,{},0,{},interBarrier);
-        transfer_cmd.end();
-        auto wait = submitOnceTransferCommand(transfer_cmd);
-        wait();
         return;
-    }else{
-        vk::ImageMemoryBarrier barrier2; // TransferDstOptimal -> ShaderReadOnlyOptimal
-        barrier2.setSrcAccessMask(vk::AccessFlagBits::eTransferWrite);
-        barrier2.setDstAccessMask(vk::AccessFlagBits::eShaderRead);
-        barrier2.setOldLayout(vk::ImageLayout::eTransferDstOptimal);
-        barrier2.setNewLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
-        barrier2.setSrcQueueFamilyIndex(vk::QueueFamilyIgnored);
-        barrier2.setDstQueueFamilyIndex(vk::QueueFamilyIgnored);
-        barrier2.setImage(dst);
-        barrier2.setSubresourceRange(subresourceRange);
-        transfer_cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,vk::PipelineStageFlagBits::eVertexShader,{},0,{},barrier2);
-
-        transfer_cmd.end();
-        auto wait = submitOnceTransferCommand(transfer_cmd);
-        wait();
     }
+    
+    auto blit_cmd = this->allocateOnceGraphicsCommand();
+    blit_cmd.begin(beginInfo);
+
+    vk::ImageMemoryBarrier interBarrier{};
+    interBarrier.setImage(dst);
+    interBarrier.setSrcQueueFamilyIndex(vk::QueueFamilyIgnored);
+    interBarrier.setDstQueueFamilyIndex(vk::QueueFamilyIgnored);
+    interBarrier.subresourceRange.setAspectMask(vk::ImageAspectFlagBits::eColor);
+    interBarrier.subresourceRange.setBaseArrayLayer(0);
+    interBarrier.subresourceRange.setLayerCount(1);
+    interBarrier.subresourceRange.setLevelCount(1);
+
+    int32_t mipWidth = imgInfo.extent.width;
+    int32_t mipHeight = imgInfo.extent.height;
+    for (uint32_t level = 1; level < imgInfo.mipLevels; level++)
+    {
+        interBarrier.subresourceRange.setBaseMipLevel(level - 1); // Transfer level i - 1 TransferDstOptimal -> TransferSrcOptimal
+        interBarrier.setOldLayout(vk::ImageLayout::eTransferDstOptimal);
+        interBarrier.setNewLayout(vk::ImageLayout::eTransferSrcOptimal);
+        interBarrier.setSrcAccessMask(vk::AccessFlagBits::eTransferWrite);
+        interBarrier.setDstAccessMask(vk::AccessFlagBits::eTransferRead);
+
+        vk::ImageBlit blitRegion{};
+        blitRegion.setSrcOffsets({ vk::Offset3D{0,0,0},vk::Offset3D{mipWidth,mipHeight,1} });
+        blitRegion.srcSubresource.setMipLevel(level - 1);
+        blitRegion.srcSubresource.setAspectMask(vk::ImageAspectFlagBits::eColor);
+        blitRegion.srcSubresource.setBaseArrayLayer(0);
+        blitRegion.srcSubresource.setLayerCount(1);
+        blitRegion.setDstOffsets({ vk::Offset3D{0,0,0},vk::Offset3D{mipWidth > 1 ? mipWidth / 2 : 1, mipHeight > 1 ? mipHeight / 2 : 1,1} });
+        blitRegion.dstSubresource.setMipLevel(level);
+        blitRegion.dstSubresource.setAspectMask(vk::ImageAspectFlagBits::eColor);
+        blitRegion.dstSubresource.setBaseArrayLayer(0);
+        blitRegion.dstSubresource.setLayerCount(1);
+        blit_cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eTransfer, {}, 0, {}, interBarrier);
+        blit_cmd.blitImage(dst, vk::ImageLayout::eTransferSrcOptimal, dst, vk::ImageLayout::eTransferDstOptimal, blitRegion, vk::Filter::eLinear);
+
+        //Transfer level i - 1 TransferSrcOptimal -> ShaderReadOnlyOptimal
+        interBarrier.setOldLayout(vk::ImageLayout::eTransferSrcOptimal);
+        interBarrier.setNewLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+        interBarrier.setSrcAccessMask(vk::AccessFlagBits::eTransferRead);
+        interBarrier.setDstAccessMask(vk::AccessFlagBits::eShaderRead);
+        blit_cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eFragmentShader, {}, 0, {}, interBarrier);
+
+        if (mipWidth > 1) mipWidth /= 2;
+        if (mipHeight > 1) mipHeight /= 2;
+    }
+
+    //Transfer the last level TransferDstOptimal -> ShaderReadOnlyOptimal
+    interBarrier.subresourceRange.baseMipLevel = imgInfo.mipLevels - 1;
+    interBarrier.setOldLayout(vk::ImageLayout::eTransferDstOptimal);
+    interBarrier.setNewLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+    interBarrier.setSrcAccessMask(vk::AccessFlagBits::eTransferWrite);
+    interBarrier.setDstAccessMask(vk::AccessFlagBits::eShaderRead);
+
+    blit_cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eFragmentShader, {}, 0, {}, interBarrier);
+    blit_cmd.end();
+    auto wait2 = submitOnceGraphicsCommand(blit_cmd);
+    wait2();
+    return;
 }
 
 void DeviceExtended::updateDescriptorSetUniformBuffer(vk::DescriptorSet dstSet, uint32_t dstBinding, vk::Buffer buffer,
