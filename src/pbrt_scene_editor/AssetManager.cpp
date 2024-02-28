@@ -87,7 +87,8 @@ std::future<TextureHostObject*>* AssetManager::getOrLoadImgAsync(const std::stri
 TextureDeviceHandle AssetManager::getOrLoadImgDevice(const std::string &relative_path,
                                                      const std::string & encoding,
                                                      const std::string & warp,
-                                                     float maxAnisotropy) {
+                                                     float maxAnisotropy,
+                                                     bool genMipmap) {
     TextureDeviceHandle handle;
     for(int i = 0; i < device_textures.size(); i++)
     {
@@ -108,7 +109,7 @@ TextureDeviceHandle AssetManager::getOrLoadImgDevice(const std::string &relative
         textureDevice.imgInfo.extent.width = textureHost->width;
         textureDevice.imgInfo.extent.height = textureHost->height;
         textureDevice.imgInfo.extent.depth = 1;
-        textureDevice.imgInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        textureDevice.imgInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
         textureDevice.imgInfo.imageType = VK_IMAGE_TYPE_2D;
         textureDevice.imgInfo.samples = VK_SAMPLE_COUNT_1_BIT;
         //https://www.intel.com/content/dam/develop/external/us/en/documents/apiwithoutwithoutsecretsintroductiontovulkanpart6-final-738455.pdf
@@ -149,7 +150,12 @@ TextureDeviceHandle AssetManager::getOrLoadImgDevice(const std::string &relative
             }
         } while (0);
         textureDevice.imgInfo.arrayLayers = 1;
-        textureDevice.imgInfo.mipLevels = 1;
+        if(genMipmap)
+        {
+            textureDevice.imgInfo.mipLevels = std::floor(std::log2(std::max(textureHost->width,textureHost->height))) + 1;
+        }else{
+            textureDevice.imgInfo.mipLevels = 1;
+        }
         textureDevice.imgInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         textureDevice.imgInfo.sharingMode = VkSharingMode::VK_SHARING_MODE_EXCLUSIVE;
         textureDevice.imgInfo.pQueueFamilyIndices = nullptr;
@@ -162,7 +168,7 @@ TextureDeviceHandle AssetManager::getOrLoadImgDevice(const std::string &relative
         textureDevice.image = img.value();
         backendDevice->setObjectDebugName(static_cast<vk::Image>(textureDevice.image.image),relative_path.c_str());
 
-        backendDevice->oneTimeUploadSync(textureHost->data.get(),textureHost->width,textureHost->height,textureHost->channels,textureDevice.image.image,VK_IMAGE_LAYOUT_UNDEFINED);
+        backendDevice->oneTimeUploadSync(textureHost->data.get(),textureDevice.image.image,textureHost->channels,textureDevice.imgInfo);
 
         textureDevice.imgViewInfo.setViewType(vk::ImageViewType::e2D);
         textureDevice.imgViewInfo.setImage(textureDevice.image.image);
@@ -175,7 +181,7 @@ TextureDeviceHandle AssetManager::getOrLoadImgDevice(const std::string &relative
         textureDevice.imgViewInfo.setComponents(mapping);
         vk::ImageSubresourceRange subresourceRange{};
         subresourceRange.setAspectMask(vk::ImageAspectFlagBits::eColor);
-        subresourceRange.setLevelCount(1);
+        subresourceRange.setLevelCount(textureDevice.imgInfo.mipLevels);
         subresourceRange.setBaseMipLevel(0);
         subresourceRange.setLayerCount(1);
         subresourceRange.setBaseArrayLayer(0);
@@ -189,7 +195,7 @@ TextureDeviceHandle AssetManager::getOrLoadImgDevice(const std::string &relative
         samplerInfo.setMagFilter(vk::Filter::eLinear);
         samplerInfo.setBorderColor(vk::BorderColor::eFloatOpaqueBlack);
         samplerInfo.setMinLod(0.0);
-        samplerInfo.setMaxLod(1.0);
+        samplerInfo.setMaxLod(textureDevice.imgInfo.mipLevels);
         samplerInfo.setMipLodBias(0.0);
         samplerInfo.setCompareEnable(vk::False);
         if(maxAnisotropy > 0.0)

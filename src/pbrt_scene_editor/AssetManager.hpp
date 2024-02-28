@@ -301,7 +301,8 @@ struct AssetManager
     TextureDeviceHandle getOrLoadImgDevice(const std::string & relative_path,
                                            const std::string & encoding,
                                            const std::string & warp,
-                                           float maxAnisotropy);
+                                           float maxAnisotropy,
+                                           bool genMipmap = true);
 
     /*
     *  For PBRT PLY file we assume that each file only contain single mesh

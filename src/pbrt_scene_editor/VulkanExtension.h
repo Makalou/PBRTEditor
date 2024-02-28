@@ -177,7 +177,7 @@ struct DeviceExtended : vkb::Device, vk::Device
      * */
     void oneTimeUploadSync(void* data, int size,VkBuffer dst);
 
-    void oneTimeUploadSync(void* data, uint32_t width, uint32_t height, uint32_t channel, VkImage dst, VkImageLayout layout);
+    void oneTimeUploadSync(void* data, VkImage dst, uint32_t channels,VkImageCreateInfo imgInfo);
 
     template<class ObjectT>
     auto setObjectDebugName(ObjectT object,const char* name) const
