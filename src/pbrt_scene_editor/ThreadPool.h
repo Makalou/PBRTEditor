@@ -42,8 +42,8 @@ public:
     }
 
     template<class F, class... Args>
-    auto enqueue(F&& f, Args&&... args) -> std::future<typename std::result_of<F(int, Args...)>::type> {
-        using return_type = typename std::result_of<F(int, Args...)>::type;
+    auto enqueue(F&& f, Args&&... args) -> std::future<typename std::invoke_result_t<F,int, Args...>> {
+        using return_type = typename std::invoke_result_t<F,int, Args...>;
 
         auto task = std::make_shared<std::packaged_task<return_type(int)>>(
                 std::bind(std::forward<F>(f), std::placeholders::_1, std::forward<Args>(args)...)

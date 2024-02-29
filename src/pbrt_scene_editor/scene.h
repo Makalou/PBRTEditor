@@ -85,14 +85,14 @@ struct GeneralOption : Inspectable
 
     void show() override
     {
-        SHOW_FIELD(disablepixeljitter);
-        SHOW_FIELD(disabletexturefiltering);
-        SHOW_FIELD(disablewavelengthjitter);
-        SHOW_FIELD(displacementedgescale);
-        SHOW_FIELD(seed);
-        SHOW_FIELD(forcediffuse);
-        SHOW_FIELD(pixelstats);
-        SHOW_FIELD(wavefront);
+        WATCH_FIELD(disablepixeljitter);
+        WATCH_FIELD(disabletexturefiltering);
+        WATCH_FIELD(disablewavelengthjitter);
+        WATCH_FIELD(displacementedgescale);
+        WATCH_FIELD(seed);
+        WATCH_FIELD(forcediffuse);
+        WATCH_FIELD(pixelstats);
+        WATCH_FIELD(wavefront);
     }
 };
 
@@ -107,8 +107,8 @@ DEF_BASECLASS_BEGIN(Camera)
 
     void show() override
     {
-        SHOW_FIELD(shutteropen);
-        SHOW_FIELD(shutterclose);
+        WATCH_FIELD(shutteropen);
+        WATCH_FIELD(shutterclose);
     }
 
 DEF_BASECLASS_END
@@ -131,11 +131,11 @@ DEF_SUBCLASS_BEGIN(Camera,Perspective)
     void show() override
     {
         Camera::show();
-        SHOW_FIELD(frameaspectratio);
-        SHOW_FIELD(screenwindow);
-        SHOW_FIELD(lensradius);
-        SHOW_FIELD(focaldistance);
-        SHOW_FIELD(fov);
+        WATCH_FIELD(frameaspectratio);
+        WATCH_FIELD(screenwindow);
+        WATCH_FIELD(lensradius);
+        WATCH_FIELD(focaldistance);
+        WATCH_FIELD(fov);
     }
 
 DEF_SUBCLASS_END
@@ -156,10 +156,10 @@ DEF_SUBCLASS_BEGIN(Camera,Orthognal)
     void show() override
     {
         Camera::show();
-        SHOW_FIELD(frameaspectratio);
-        SHOW_FILED_FlOAT2(screenwindow);
-        SHOW_FIELD(lensradius);
-        SHOW_FIELD(focaldistance);
+        WATCH_FIELD(frameaspectratio);
+        WATCH_FILED_FlOAT2(screenwindow);
+        WATCH_FIELD(lensradius);
+        WATCH_FIELD(focaldistance);
     }
 
 DEF_SUBCLASS_END
@@ -180,8 +180,8 @@ DEF_SUBCLASS_BEGIN(Camera,Realistic)
     void show() override
     {
         Camera::show();
-        SHOW_FIELD(aperturediameter);
-        SHOW_FIELD(focusdistance);
+        WATCH_FIELD(aperturediameter);
+        WATCH_FIELD(focusdistance);
     }
 
 DEF_SUBCLASS_END
@@ -412,8 +412,8 @@ DEF_BASECLASS_BEGIN(Shape)
     PARSE_SECTION_END_IN_BASE
     void show() override
     {
-        SHOW_FIELD(alpha_constant);
-        SHOW_FIELD(alpha_tex);
+        WATCH_FIELD(alpha_constant);
+        WATCH_FIELD(alpha_tex);
     }
 DEF_BASECLASS_END
 
@@ -469,8 +469,8 @@ DEF_SUBCLASS_BEGIN(Shape,PLYMesh)
     void show() override
     {
         Shape::show();
-        SHOW_FIELD(filename);
-        SHOW_FIELD(edgelength);
+        WATCH_FIELD(filename);
+        WATCH_FIELD(edgelength);
     }
 DEF_SUBCLASS_END
 

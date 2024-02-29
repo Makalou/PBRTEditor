@@ -190,7 +190,7 @@ TextureDeviceHandle AssetManager::getOrLoadImgDevice(const std::string &relative
         backendDevice->setObjectDebugName(textureDevice.imageView,relative_path.c_str());
 
         vk::SamplerCreateInfo samplerInfo{};
-        samplerInfo.setMipmapMode(vk::SamplerMipmapMode::eNearest);
+        samplerInfo.setMipmapMode(vk::SamplerMipmapMode::eLinear);
         samplerInfo.setMinFilter(vk::Filter::eLinear);
         samplerInfo.setMagFilter(vk::Filter::eLinear);
         samplerInfo.setBorderColor(vk::BorderColor::eFloatOpaqueBlack);
@@ -211,18 +211,21 @@ TextureDeviceHandle AssetManager::getOrLoadImgDevice(const std::string &relative
                 samplerInfo.setAddressModeU(vk::SamplerAddressMode::eRepeat);
                 samplerInfo.setAddressModeV(vk::SamplerAddressMode::eRepeat);
                 samplerInfo.setAddressModeW(vk::SamplerAddressMode::eRepeat);
+                break;
             }
             if(warp == "black")
             {
                 samplerInfo.setAddressModeU(vk::SamplerAddressMode::eClampToBorder);
                 samplerInfo.setAddressModeV(vk::SamplerAddressMode::eClampToBorder);
                 samplerInfo.setAddressModeW(vk::SamplerAddressMode::eClampToBorder);
+                break;
             }
             if(warp == "clamp")
             {
                 samplerInfo.setAddressModeU(vk::SamplerAddressMode::eClampToEdge);
                 samplerInfo.setAddressModeV(vk::SamplerAddressMode::eClampToEdge);
                 samplerInfo.setAddressModeW(vk::SamplerAddressMode::eClampToEdge);
+                break;
             }
         } while (0);
         textureDevice.sampler = backendDevice->createSampler(samplerInfo);

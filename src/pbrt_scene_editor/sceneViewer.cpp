@@ -79,6 +79,7 @@ void SceneViewer::setCurrentSceneGraph(SceneGraph *graph,AssetManager& assetMana
 }
 
 vk::CommandBuffer SceneViewer::recordGraphicsCommand(unsigned int idx) {
+    _renderScene->update();
     return _gpuFrames[idx].recordMainQueueCommands();
 }
 

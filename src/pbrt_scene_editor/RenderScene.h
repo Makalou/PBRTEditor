@@ -406,6 +406,8 @@ namespace renderScene {
         vk::DescriptorSetLayout materialLayout;
         vk::DescriptorPool materialDescriptorPool;
 
+        std::vector<DeviceExtended::BufferCopy> uploadRequests;
+
         explicit RenderScene(const std::shared_ptr<DeviceExtended>& device);
 
         void buildFrom(SceneGraph* sceneGraph, AssetManager & assetManager);
@@ -419,6 +421,8 @@ namespace renderScene {
                 visitor(dynamicInstance);
             }
         }
+
+        void update();
     };
 
     struct RayTracingScene {

@@ -7,7 +7,7 @@
 #include "imgui_impl_glfw.h"
 #include "implot.h"
 
-#include "imguiFileDialog.h"
+#include "ImGuiFileDialog.h"
 
 #include "Inspector.hpp"
 #include "AssetFileTree.hpp"

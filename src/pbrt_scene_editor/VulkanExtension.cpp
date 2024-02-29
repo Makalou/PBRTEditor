@@ -239,6 +239,83 @@ void DeviceExtended::oneTimeUploadSync(void* data, int size,VkBuffer dst)
     wait();
 }
 
+void DeviceExtended::oneTimeUploadSync(const std::vector<BufferCopy>& copies)
+{
+    uint32_t totalSize = 0;
+    for(const auto & copy : copies)
+    {
+        totalSize += copy.size;
+    }
+    if(totalSize == 0) return;
+
+    auto blockNeededNum = (totalSize + stagingBlockSize - 1) / stagingBlockSize;
+
+    if (stagingBlocks.size()< blockNeededNum)
+    {
+        auto newBlocksNum = blockNeededNum - stagingBlocks.size();
+        for (int i = 0; i < newBlocksNum; i++)
+        {
+            VkBufferCreateInfo bufferCreateInfo = { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
+            bufferCreateInfo.size = stagingBlockSize;
+            bufferCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+
+            VmaAllocationCreateInfo allocCreateInfo = {};
+            allocCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
+            allocCreateInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+
+            StagingBufferBlock newBlock;
+            auto result = vmaCreateBuffer(_globalVMAAllocator, &bufferCreateInfo, &allocCreateInfo,
+                                          &newBlock.buffer,
+                                          &newBlock.allocation,
+                                          &newBlock.allocationInfo);
+
+            assert(result == VK_SUCCESS);
+            VkMemoryPropertyFlags memPropFlags;
+            vmaGetAllocationMemoryProperties(_globalVMAAllocator, newBlock.allocation, &memPropFlags);
+            assert(memPropFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+            stagingBlocks.emplace_back(newBlock);
+        }
+    }
+
+    auto transfer_cmd = this->allocateOnceTransferCommand();
+    vk::CommandBufferBeginInfo beginInfo{};
+    transfer_cmd.begin(beginInfo);
+    int currentCopyBlockIdx = 0;
+    int currentCopyBlockOffset = 0;
+
+    for(const auto & copy : copies)
+    {
+        char * currentSrcPtr = static_cast<char *>(copy.data);
+        auto currentDstOffset = copy.dstOffset;
+        auto currentSrcRemain = copy.size;
+        while(currentSrcRemain > 0)
+        {
+            auto currentCopySize = std::min(currentSrcRemain,stagingBlockSize - currentCopyBlockOffset);
+            char * dst = static_cast<char*>(stagingBlocks[currentCopyBlockIdx].allocationInfo.pMappedData) + currentCopyBlockOffset;
+            memcpy(dst, currentSrcPtr, currentCopySize);
+            vk::BufferCopy copyRegion{};
+            copyRegion.size = currentCopySize;
+            copyRegion.srcOffset = currentCopyBlockOffset;
+            copyRegion.dstOffset = currentDstOffset;
+            transfer_cmd.copyBuffer(stagingBlocks[currentCopyBlockIdx].buffer,copy.dst, copyRegion);
+
+            currentSrcPtr += currentCopySize;
+            currentSrcRemain -= currentCopySize;
+            currentDstOffset += currentCopySize;
+            currentCopyBlockOffset += currentCopySize;
+            assert(currentCopyBlockOffset <= stagingBlockSize);
+            if(currentCopyBlockOffset == stagingBlockSize)
+            {
+                currentCopyBlockIdx ++;
+                currentCopyBlockOffset = 0;
+            }
+        }
+    }
+    transfer_cmd.end();
+    auto wait = submitOnceTransferCommand(transfer_cmd);
+    wait();
+}
+
 void DeviceExtended::oneTimeUploadSync(void* data, VkImage dst, uint32_t channels, VkImageCreateInfo imgInfo) {
     auto size = imgInfo.extent.width * imgInfo.extent.height * channels;
     if (size == 0) return;

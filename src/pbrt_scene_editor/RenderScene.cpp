@@ -76,7 +76,7 @@ namespace renderScene
 
     void RenderScene::buildFrom(SceneGraph * sceneGraph, AssetManager &assetManager)
     {
-        auto handleNode = [this, sceneGraph,&assetManager](SceneGraphNode* node,const glm::mat4& baseTransform )->void{
+        auto handleNode = [this, sceneGraph,&assetManager](SceneGraphNode* node,const glm::mat4& instanceBaseTransform )->void{
             if(!node->shapes.empty())
             {
                 for(int i = 0; i < node->shapes.size(); i++)
@@ -116,21 +116,36 @@ namespace renderScene
 
                     // For now we assume the instance with same mesh also share same material.
                     bool foundInstance = false;
-                    for(auto & inst : _dynamicRigidMeshBatch)
+                    for(int instIdx = 0; instIdx < _dynamicRigidMeshBatch.size(); instIdx++)
                     {
+                        auto & inst = _dynamicRigidMeshBatch[instIdx];
                         if(inst.mesh == meshHandle)
                         {
                             assert(mat->name == inst.materialName);
                             foundInstance = true;
-                            inst.perInstanceData.push_back({node->_finalTransform * baseTransform});
+                            inst.perInstanceData.push_back({node->_finalTransform * instanceBaseTransform});
+                            auto instDataIdx = inst.perInstanceData.size() - 1;
+                            node->finalTransformChange += [this, instIdx,instDataIdx](const glm::mat4 & newTransform)
+                            {
+                                auto & inst = _dynamicRigidMeshBatch[instIdx];
+                                auto & instData = inst.perInstanceData[instDataIdx];
+                                instData._wTransform = newTransform;
+                                DeviceExtended::BufferCopy copy{};
+                                copy.data = &instData._wTransform;
+                                copy.dst = inst.perInstDataBuffer.buffer;
+                                copy.size = sizeof(instData._wTransform);
+                                copy.dstOffset = sizeof(instData._wTransform) * instDataIdx;
+                                uploadRequests.emplace_back(copy);
+                            };
                             break;
                         }
                     }
 
                     if(!foundInstance)
                     {
+                        // need to create new instance batch
                         InstanceBatchRigidDynamic<PerInstanceData> meshInstanceRigidDynamic(meshHandle);
-                        meshInstanceRigidDynamic.perInstanceData.push_back({node->_finalTransform * baseTransform});
+                        meshInstanceRigidDynamic.perInstanceData.push_back({node->_finalTransform * instanceBaseTransform});
                         meshInstanceRigidDynamic.materialName = mat->name;
 
                         do{
@@ -155,6 +170,19 @@ namespace renderScene
                         } while (0);
 
                         _dynamicRigidMeshBatch.push_back(meshInstanceRigidDynamic);
+                        auto instIdx = _dynamicRigidMeshBatch.size() - 1;
+                        node->finalTransformChange += [this, instIdx](const glm::mat4 & newTransform)
+                        {
+                            auto & inst = _dynamicRigidMeshBatch[instIdx];
+                            auto & instData = inst.perInstanceData[0];
+                            instData._wTransform = newTransform;
+                            DeviceExtended::BufferCopy copy{};
+                            copy.data = &instData._wTransform;
+                            copy.dst = inst.perInstDataBuffer.buffer;
+                            copy.size = sizeof(instData._wTransform);
+                            copy.dstOffset = 0;
+                            uploadRequests.emplace_back(copy);
+                        };
                     }
                 }
             }
@@ -254,4 +282,8 @@ namespace renderScene
         }
     }
 
+    void RenderScene::update() {
+       backendDevice->oneTimeUploadSync(uploadRequests);
+       uploadRequests.clear();
+    }
 }

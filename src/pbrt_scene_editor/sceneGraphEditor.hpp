@@ -9,6 +9,7 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtx/euler_angles.hpp>
 #include "scene.h"
+#include "rocket.hpp"
 
 struct AssetManager;
 struct PBRTScene;
@@ -81,8 +82,19 @@ struct SceneGraphNode : Inspectable
     bool is_selected;
     bool is_instance = false;
 
-    glm::mat4x4 _selfTransform;
-    glm::mat4x4 _finalTransform;
+    glm::mat4 _selfTransform;
+    glm::mat4 _finalTransform;
+
+    rocket::signal<void(const glm::vec3 &)> selfTranslateChange;
+    rocket::signal<void(const glm::vec3 &)> selfRotationChange;
+    rocket::signal<void(const glm::vec3 &)> selfScaleChange;
+    rocket::signal<void(const glm::mat4 &)> selfTransformChange;
+
+    rocket::signal<void(const glm::vec3 &)> finalTranslateChange;
+    rocket::signal<void(const glm::vec3 &)> finalRotationChange;
+    rocket::signal<void(const glm::vec3 &)> finalScaleChange;
+    rocket::thread_safe_signal<void(const glm::mat4 &)> finalTransformChange;
+    rocket::signal<void(SceneGraphNode*)> selectedSignal;
 
     SceneGraphNode()
     {
@@ -153,18 +165,34 @@ struct SceneGraphNode : Inspectable
     void show() override
     {
         float translate[3];
-        translate[0] = glm::vec3{_selfTransform[3]}.x;
-        translate[1] = glm::vec3{_selfTransform[3]}.y;
-        translate[2] = glm::vec3{_selfTransform[3]}.z;
-        SHOW_FILED_FlOAT3(translate)
+        translate[0] = _selfTransform[3].x;
+        translate[1] = _selfTransform[3].y;
+        translate[2] = _selfTransform[3].z;
+        WATCH_FILED_FlOAT3_NOTIFY(translate,[this](float x0, float x1, float x2){
+            _selfTransform[3].x = x0;
+            _selfTransform[3].y = x1;
+            _selfTransform[3].z = x2;
+            printf("%s change translate to [%f, %f, %f]\n", this->name.c_str(),x0,x1,x2);
+            selfTranslateChange({x0,x1,x2});
+            updateSelfTransform();
+        });
         float rotation[3];
         glm::extractEulerAngleXYZ(_selfTransform,rotation[0],rotation[1],rotation[2]);
-        SHOW_FILED_FlOAT3(rotation);
+        WATCH_FILED_FlOAT3_NOTIFY(rotation,[this](float x0, float x1, float x2){
+            printf("%s change rotation to [%f, %f, %f]\n", this->name.c_str(),x0,x1,x2);
+        });
         float scale[3];
         scale[0] = _selfTransform[0][0];
         scale[1] = _selfTransform[1][1];
         scale[2] = _selfTransform[2][2];
-        SHOW_FILED_FlOAT3(scale);
+        WATCH_FILED_FlOAT3_NOTIFY(scale,[this](float x0, float x1, float x2){
+            _selfTransform[0][0] = x0;
+            _selfTransform[1][1] = x1;
+            _selfTransform[2][2] = x2;
+            printf("%s change scale to [%f, %f, %f]\n", this->name.c_str(),x0,x1,x2);
+            selfScaleChange({x0,x1,x2});
+            updateSelfTransform();
+        });
         ImGui::Separator();
         for(auto shape : shapes)
         {
@@ -177,6 +205,32 @@ struct SceneGraphNode : Inspectable
         for(auto areaLight : lights)
         {
             areaLight->show();
+        }
+    }
+
+    void updateSelfTransform()
+    {
+        selfTransformChange(_selfTransform);
+        if(parent!= nullptr)
+        {
+            _finalTransform = parent->_finalTransform * _selfTransform;
+        }else{
+            _finalTransform = _selfTransform;
+        }
+        finalTransformChange(_finalTransform);
+        for(auto & child : children)
+        {
+            child->updateFinalTransform(_finalTransform);
+        }
+    }
+
+    void updateFinalTransform(const glm::mat4 & parentTransform)
+    {
+        _finalTransform = _selfTransform * parentTransform;
+        finalTransformChange(_finalTransform);
+        for(auto & child : children)
+        {
+            child->updateFinalTransform(_finalTransform);
         }
     }
 

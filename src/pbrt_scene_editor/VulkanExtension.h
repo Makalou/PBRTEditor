@@ -177,6 +177,14 @@ struct DeviceExtended : vkb::Device, vk::Device
      * */
     void oneTimeUploadSync(void* data, int size,VkBuffer dst);
 
+    struct BufferCopy{
+        void * data;
+        uint32_t size;
+        uint32_t dstOffset;
+        VkBuffer dst;
+    };
+    void oneTimeUploadSync(const std::vector<BufferCopy>&);
+
     void oneTimeUploadSync(void* data, VkImage dst, uint32_t channels,VkImageCreateInfo imgInfo);
 
     template<class ObjectT>
