@@ -1,7 +1,7 @@
 #include "window.h"
 #include "window_config.h"
 #include <stdexcept>
-
+#include "imgui.h"
 Window::Window()
 {
 	width = WINDOW_WIDTH;
@@ -87,18 +87,34 @@ void Window::framebufferResizeCallback(GLFWwindow* window, int width, int height
 }
 void Window::keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
+    if(ImGui::GetIO().WantCaptureKeyboard)
+    {
+        return;
+    }
 	keySignal(key,scancode,action,mods);
 }
 void Window::scrollCallback(GLFWwindow* window, double xoffset, double yoffset)
 {
+    if(ImGui::GetIO().WantCaptureMouse)
+    {
+        return;
+    }
     scrollSignal(xoffset,yoffset);
 }
 void Window::mouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
 {
+    if(ImGui::GetIO().WantCaptureMouse)
+    {
+        return;
+    }
     mouseButtonSignal(button,action,mods);
 }
 
 void Window::cursorPosCallback(GLFWwindow *window, double xPos, double yPos) {
+    if(ImGui::GetIO().WantCaptureMouse)
+    {
+        return;
+    }
     cursorPosSignal(xPos,yPos);
 
     static bool is_mouse_button_left_pressing = false;
