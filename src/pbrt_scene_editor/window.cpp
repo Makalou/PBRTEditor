@@ -34,11 +34,6 @@ Window::~Window()
 	glfwTerminate();
 }
 
-void Window::resize(int width, int height)
-{
-
-}
-
 bool Window::shouldClose()
 {
 	return glfwWindowShouldClose(window);
@@ -54,72 +49,57 @@ GLFWwindow* Window::getRawWindowHandle() const
 	return window;
 }
 
-std::vector<framebufferResizeCallbackT> Window::framebufferResizeCallbackList = {};
-std::vector<keyCallbackT> Window::keyCallbackList = {};
-std::vector<scrollCallbackT> Window::scrollCallbackList = {};
-std::vector<mouseButtonCallbackT> Window::mouseButtonCallbackList = {};
-std::vector<cursorPosCallbackT> Window::cursorPosCallbackList = {};
-std::vector<mouseDragCallbackT> Window::mouseDragCallbackList = {};
+rocket::signal<void(int width, int height)> Window::framebufferResizeSignal;
+rocket::signal<void(int key, int scancode, int action, int mods)> Window::keySignal;
+rocket::signal<void(double xoffset, double yoffset)> Window::scrollSignal;
+rocket::signal<void(int button, int action, int mods)> Window::mouseButtonSignal;
+rocket::signal<void(double xPos, double yPos)> Window::cursorPosSignal;
+rocket::signal<void(int button, double xOffset, double yOffset)> Window::mouseDragSignal;
 
 void Window::registerFramebufferResizeCallback(const framebufferResizeCallbackT& fn)
 {
-	framebufferResizeCallbackList.push_back(fn);
+	framebufferResizeSignal.connect(fn);
 }
 void Window::registerKeyCallback(const keyCallbackT& fn)
 {
-	keyCallbackList.push_back(fn);
+    keySignal.connect(fn);
 }
 void Window::registerScrollCallback(const scrollCallbackT& fn)
 {
-	scrollCallbackList.push_back(fn);
+    scrollSignal.connect(fn);
 }
 void Window::registerMouseButtonCallback(const mouseButtonCallbackT& fn)
 {
-	mouseButtonCallbackList.push_back(fn);
+    mouseButtonSignal.connect(fn);
 }
 
 void Window::registerCursorPosCallback(const cursorPosCallbackT& fn) {
-    cursorPosCallbackList.emplace_back(fn);
+    cursorPosSignal.connect(fn);
 }
 
 void Window::registerMouseDragCallback(const mouseDragCallbackT& fn) {
-    mouseDragCallbackList.emplace_back(fn);
+    mouseDragSignal.connect(fn);
 }
 
 void Window::framebufferResizeCallback(GLFWwindow* window, int width, int height)
 {
-	for (auto& callback : framebufferResizeCallbackList)
-	{
-		callback(width,height);
-	}
+	framebufferResizeSignal(width,height);
 }
 void Window::keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
-	for (auto& callback : keyCallbackList)
-	{
-		callback(key, scancode, action, mods);
-	}
+	keySignal(key,scancode,action,mods);
 }
 void Window::scrollCallback(GLFWwindow* window, double xoffset, double yoffset)
 {
-	for (auto& callback : scrollCallbackList)
-	{
-		callback(xoffset,yoffset);
-	}
+    scrollSignal(xoffset,yoffset);
 }
 void Window::mouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
 {
-	for (auto& callback : mouseButtonCallbackList)
-	{
-		callback(button,action,mods);
-	}
+    mouseButtonSignal(button,action,mods);
 }
 
 void Window::cursorPosCallback(GLFWwindow *window, double xPos, double yPos) {
-    for(auto & callback : cursorPosCallbackList)
-    {
-        callback(xPos,yPos);
-    }
+    cursorPosSignal(xPos,yPos);
 
     static bool is_mouse_button_left_pressing = false;
 
@@ -133,10 +113,11 @@ void Window::cursorPosCallback(GLFWwindow *window, double xPos, double yPos) {
             double xOffset = xPos - last_x;
             double yOffset = yPos - last_y;
 
-            for(auto & callback : mouseDragCallbackList)
+            /*for(auto & callback : mouseDragCallbackList)
             {
                 callback(GLFW_MOUSE_BUTTON_LEFT,xOffset,yOffset);
-            }
+            }*/
+            mouseDragSignal(GLFW_MOUSE_BUTTON_LEFT,xOffset,yOffset);
         }else{
             is_mouse_button_left_pressing = true;
         }
@@ -158,11 +139,7 @@ void Window::cursorPosCallback(GLFWwindow *window, double xPos, double yPos) {
         {
             double xOffset = xPos - last_x;
             double yOffset = yPos - last_y;
-
-            for(auto & callback : mouseDragCallbackList)
-            {
-                callback(GLFW_MOUSE_BUTTON_RIGHT,xOffset,yOffset);
-            }
+            mouseDragSignal(GLFW_MOUSE_BUTTON_RIGHT,xOffset,yOffset);
         }else{
             is_mouse_button_right_pressing = true;
         }
@@ -184,11 +161,7 @@ void Window::cursorPosCallback(GLFWwindow *window, double xPos, double yPos) {
         {
             double xOffset = xPos - last_x;
             double yOffset = yPos - last_y;
-
-            for(auto & callback : mouseDragCallbackList)
-            {
-                callback(GLFW_MOUSE_BUTTON_MIDDLE,xOffset,yOffset);
-            }
+            mouseDragSignal(GLFW_MOUSE_BUTTON_RIGHT,xOffset,yOffset);
         }else{
             is_mouse_button_middle_pressing = true;
         }

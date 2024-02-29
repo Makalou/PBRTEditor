@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include <functional>
+#include "rocket.hpp"
 
 using framebufferResizeCallbackT = std::function<void(int width, int height)>;
 using keyCallbackT = std::function<void(int key, int scancode, int action, int mods)>;
@@ -18,7 +19,6 @@ public:
 	Window();
 	void init();
 	~Window();
-	void resize(int width, int height);
 	bool shouldClose();
 	void pollEvents();
 	GLFWwindow* getRawWindowHandle() const;
@@ -52,11 +52,10 @@ private:
 	static void mouseButtonCallback(GLFWwindow* window,int button, int action, int mods);
     static void cursorPosCallback(GLFWwindow* window,double xPos, double yPos);
 
-	static std::vector<framebufferResizeCallbackT> framebufferResizeCallbackList;
-	static std::vector<keyCallbackT> keyCallbackList;
-	static std::vector<scrollCallbackT> scrollCallbackList;
-	static std::vector<mouseButtonCallbackT> mouseButtonCallbackList;
-    static std::vector<cursorPosCallbackT> cursorPosCallbackList;
-    static std::vector<mouseDragCallbackT> mouseDragCallbackList;
-
+    static rocket::signal<void(int width, int height)> framebufferResizeSignal;
+    static rocket::signal<void(int key, int scancode, int action, int mods)> keySignal;
+    static rocket::signal<void(double xoffset, double yoffset)> scrollSignal;
+    static rocket::signal<void(int button, int action, int mods)> mouseButtonSignal;
+    static rocket::signal<void(double xPos, double yPos)> cursorPosSignal;
+    static rocket::signal<void(int button, double xOffset, double yOffset)> mouseDragSignal;
 };
