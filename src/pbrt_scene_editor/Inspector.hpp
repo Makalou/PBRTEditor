@@ -76,7 +76,7 @@ static void watchFieldCombo(const std::string& label, int* current,const char* c
 
 static void watchField(const std::string& label,std::string* str)
 {
-    ImGui::Text("%s", str->c_str());
+    ImGui::LabelText(label.c_str(),"%s", str->c_str());
 }
 
 template <typename Callback>
@@ -100,7 +100,7 @@ static void watchFieldNotify(const std::string& label, float* field,Callback cal
 template <typename Callback>
 static void watchFieldNotify(const std::string& label, int* field,Callback callback)
 {
-    if(ImGui::SliderInt(label.c_str(),field,-100.0f,100.0f))
+    if(ImGui::SliderInt(label.c_str(),field,-10.0f,10.0f))
     {
         callback(*field);
     }
@@ -109,7 +109,7 @@ static void watchFieldNotify(const std::string& label, int* field,Callback callb
 template <typename Callback>
 static void watchFieldFloat2Notify(const std::string& label, float* field,Callback callback)
 {
-    if(ImGui::SliderFloat2(label.c_str(),field,-100.0f,100.0f))
+    if(ImGui::SliderFloat2(label.c_str(),field,-10.0f,10.0f))
     {
         callback(field[0],field[1]);
     }
@@ -118,7 +118,7 @@ static void watchFieldFloat2Notify(const std::string& label, float* field,Callba
 template <typename Callback>
 static void watchFieldFloat3Notify(const std::string& label, float* field,Callback callback)
 {
-    if(ImGui::SliderFloat3(label.c_str(),field,-100.0f,100.0f))
+    if(ImGui::SliderFloat3(label.c_str(),field,-10.0f,10.0f))
     {
         callback(field[0],field[1],field[2]);
     }

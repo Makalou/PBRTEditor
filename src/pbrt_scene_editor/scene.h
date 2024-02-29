@@ -542,6 +542,10 @@ DEF_BASECLASS_BEGIN(Material)
     PARSE_SECTION_BEGIN_IN_BASE
         PARSE_FOR(name);
     PARSE_SECTION_END
+    void show() override
+    {
+        WATCH_FIELD(name);
+    }
 DEF_BASECLASS_END
 
 DEF_SUBCLASS_BEGIN(Material,CoatedDiffuse)
@@ -572,13 +576,20 @@ DEF_SUBCLASS_BEGIN(Material,CoatedDiffuse)
         PARSE_FOR(remaproughness)
         PARSE_FOR_VARIANT(reflectance)
     PARSE_SECTION_END_IN_DERIVED
+
+    void show() override
+    {
+        Material::show();
+        WATCH_FIELD(normalmap)
+    }
+
 DEF_SUBCLASS_END
 
 DEF_SUBCLASS_BEGIN(Material,CoatedConductor)
     std::variant<texture,float> displacement;
     std::string normalmap;
-    std::string albedo;
-    std::string g;
+    std::variant<texture,spectrum,rgb> albedo;
+    std::variant<texture,float> g;
     int maxdepth = 10;
     int nsamples = 1;
     float thickness = 0.01;
@@ -589,8 +600,8 @@ DEF_SUBCLASS_BEGIN(Material,CoatedConductor)
     PARSE_SECTION_CONTINUE_IN_DERIVED
         PARSE_FOR_VARIANT(displacement)
         PARSE_FOR(normalmap)
-        PARSE_FOR(albedo)
-        PARSE_FOR(g)
+        PARSE_FOR_VARIANT(albedo)
+        PARSE_FOR_VARIANT(g)
         PARSE_FOR(maxdepth)
         PARSE_FOR(nsamples)
         PARSE_FOR(thickness)
@@ -598,6 +609,12 @@ DEF_SUBCLASS_BEGIN(Material,CoatedConductor)
         PARSE_FOR(conductor_k)
         PARSE_FOR(reflectance)
     PARSE_SECTION_END_IN_DERIVED
+
+    void show() override
+    {
+        Material::show();
+        WATCH_FIELD(normalmap)
+    }
 DEF_SUBCLASS_END
 
 DEF_SUBCLASS_BEGIN(Material,Conductor)

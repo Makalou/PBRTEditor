@@ -79,7 +79,7 @@ struct SceneGraphNode : Inspectable
 
     bool is_empty = true;
     bool is_transform_detached;//transform not be affected by its parent
-    bool is_selected;
+    bool is_selected = false;
     bool is_instance = false;
 
     glm::mat4 _selfTransform;
@@ -193,18 +193,41 @@ struct SceneGraphNode : Inspectable
             selfScaleChange({x0,x1,x2});
             updateSelfTransform();
         });
-        ImGui::Separator();
-        for(auto shape : shapes)
+
+        if(!shapes.empty())
         {
-            shape->show();
+            ImGui::Separator();
+            for(auto shape : shapes)
+            {
+                shape->show();
+            }
         }
-        for(auto light : lights)
+
+        if(!materials.empty())
         {
-            light->show();
+            ImGui::Separator();
+            for(auto material : materials)
+            {
+                material->show();
+            }
         }
-        for(auto areaLight : lights)
+
+        if(!lights.empty())
         {
-            areaLight->show();
+            ImGui::Separator();
+            for(auto light : lights)
+            {
+                light->show();
+            }
+        }
+
+        if(!areaLights.empty())
+        {
+            ImGui::Separator();
+            for(auto areaLight : areaLights)
+            {
+                areaLight->show();
+            }
         }
     }
 

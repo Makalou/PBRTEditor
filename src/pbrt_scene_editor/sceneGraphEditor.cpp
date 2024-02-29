@@ -87,35 +87,54 @@ void SceneGraphEditor::constructFrame()
         return;
    }
 
-    static auto nodePreVisitor = [](SceneGraphNode* node){
-        if(node->children.empty()){
-            if (ImGui::Selectable(node->name.c_str(), &node->is_selected))
-            {
+   static SceneGraphNode * currentSingleSelectedNode = nullptr;
+
+   static auto singleSelectionPreVisitor = [](SceneGraphNode* node)
+   {
+       if(!node->children.empty()){
+           int nodeFlags = ImGuiTreeNodeFlags_OpenOnArrow;
+           if(node == currentSingleSelectedNode)
+           {
+               nodeFlags |= ImGuiTreeNodeFlags_Selected;
+           }
+           bool is_node_open = ImGui::TreeNodeEx(node->name.c_str(), nodeFlags);
+           if(ImGui::IsItemClicked())
+           {
+               if(node == currentSingleSelectedNode)
+                   currentSingleSelectedNode = nullptr;
+               else
+                   currentSingleSelectedNode = node;
+           } //node->is_selected ^= 1;
+           //rightClickMenu2(node->is_selected);
+           return std::make_pair(is_node_open, is_node_open);
+       }else{
+           // For leaf node
+           bool selected = (currentSingleSelectedNode == node);
+           if (ImGui::Selectable(node->name.c_str(), &selected))
+           {
 //                if (!ImGui::GetIO().KeyCtrl)    // Clear selection when CTRL is not held
 //                    node->is_selected = false;//memset(selection, 0, sizeof(selection));
 //                node->is_selected ^= 1;
-            }
-            if(node->is_selected)
-                Inspector::inspect(node);
-            rightClickMenu2(node->is_selected);
-            return std::make_pair(false, false);
-        }else{
-            auto nodeFlags = node->is_selected? ImGuiTreeNodeFlags_OpenOnArrow| ImGuiTreeNodeFlags_Selected : ImGuiTreeNodeFlags_OpenOnArrow;
-            bool is_node_open = ImGui::TreeNodeEx(node->name.c_str(), nodeFlags);
-            if(ImGui::IsItemClicked())
-                node->is_selected ^= 1;
-            if(node->is_selected)
-                Inspector::inspect(node);
-            rightClickMenu2(node->is_selected);
-            return std::make_pair(is_node_open, is_node_open);
-        }
-    };
+           }
+           if(selected)
+               currentSingleSelectedNode = node;
+           //rightClickMenu2(node->is_selected);
+           return std::make_pair(false, false);
+       }
+   };
 
-    static auto nodePostVisitor = [](SceneGraphNode* node)->void{
+   static auto singleSelectionPostVisitor = [](SceneGraphNode* node)->void{
         ImGui::TreePop();
-    };
+   };
 
-    _sceneGraphRootNode->visit(nodePreVisitor,nodePostVisitor);
+    _sceneGraphRootNode->visit(singleSelectionPreVisitor,singleSelectionPostVisitor);
+
+    if(currentSingleSelectedNode == nullptr)
+    {
+        Inspector::inspectDummy();
+    }else{
+        Inspector::inspect(currentSingleSelectedNode);
+    }
 
     ImGui::End();
 }
