@@ -76,7 +76,19 @@ namespace renderScene
 
     void RenderScene::buildFrom(SceneGraph * sceneGraph, AssetManager &assetManager)
     {
+        static auto nodeFocusOn = [this](SceneGraphNode* node)->void
+        {
+            glm::vec3 target;
+            target.x = node->_finalTransform[3].x;
+            target.y = node->_finalTransform[3].y;
+            target.z = node->_finalTransform[3].z;
+            glm::vec3 eye = mainView.camera.data->position;
+            mainView.camera.front = target - eye;
+            mainView.camera.data->view = glm::lookAt(eye, target, { 0,1,0 });
+        };
+
         auto handleNode = [this, sceneGraph,&assetManager](SceneGraphNode* node,const glm::mat4& instanceBaseTransform )->void{
+            node->focusOnSignal += nodeFocusOn;
             if(!node->shapes.empty())
             {
                 for(int i = 0; i < node->shapes.size(); i++)

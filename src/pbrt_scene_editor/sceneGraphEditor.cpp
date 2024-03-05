@@ -102,8 +102,13 @@ void SceneGraphEditor::constructFrame()
            {
                if(node == currentSingleSelectedNode)
                    currentSingleSelectedNode = nullptr;
-               else
+               else {
                    currentSingleSelectedNode = node;
+                   if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+                       std::cout << "focus on " << node->name << "\n";
+                       node->focusOnSignal(node);
+                   }
+               }
            } //node->is_selected ^= 1;
            //rightClickMenu2(node->is_selected);
            return std::make_pair(is_node_open, is_node_open);
@@ -117,7 +122,13 @@ void SceneGraphEditor::constructFrame()
 //                node->is_selected ^= 1;
            }
            if(selected)
+           {
                currentSingleSelectedNode = node;
+               if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+                   std::cout << "focus on " << node->name << "\n";
+                   node->focusOnSignal(node);
+               }
+           }
            //rightClickMenu2(node->is_selected);
            return std::make_pair(false, false);
        }
