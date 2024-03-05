@@ -5,3 +5,4 @@ cmake-build-release
 build
 .vs
 res/shaders/compiled
+.DS_Store
