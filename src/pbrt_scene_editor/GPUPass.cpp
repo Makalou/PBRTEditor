@@ -44,7 +44,7 @@ void GPURasterizedPass::beginPass(vk::CommandBuffer cmdBuf) {
     renderArea.extent.height = framebufferCreateInfo.height;
     beginInfo.setRenderArea(renderArea);
     //todo hard-code for now
-    beginInfo.setClearValueCount(1);
+    beginInfo.setClearValueCount(3);
     auto clearValue = vk::ClearValue{};
     clearValue.setColor(vk::ClearColorValue{});
     clearValue.depthStencil.depth = 1.0f;
@@ -693,8 +693,8 @@ void GPUFrame::update(GPUFrame::Event event) {
             }
         }
 
-        std::sort(needRebuilds.begin(), needRebuilds.end());
         // Remove duplicate elements
+        std::sort(needRebuilds.begin(), needRebuilds.end());
         auto last = std::unique(needRebuilds.begin(), needRebuilds.end());
         needRebuilds.erase(last, needRebuilds.end());
 
@@ -710,6 +710,7 @@ void GPUFrame::update(GPUFrame::Event event) {
         {
             auto passIdx = sortedIndices[idx];
             auto & pass = _rasterPasses[passIdx];
+            uint32_t dstImgBinding = 0;
             for(auto & input : pass->inputs)
             {
                 if(input->getType() == Texture && input->outputHandle->getType() == Attachment)
@@ -718,6 +719,7 @@ void GPUFrame::update(GPUFrame::Event event) {
                     if (std::holds_alternative<PassAttachmentExtent::SwapchainRelative>(desc->extent)) {
                         vk::WriteDescriptorSet write;
                         write.setDstSet(getManagedDescriptorSet(pass->_name + "InputDescriptorSet"));
+                        write.setDstBinding(dstImgBinding++);
                         write.setDescriptorType(vk::DescriptorType::eCombinedImageSampler);
                         write.setDescriptorCount(1);
                         vk::DescriptorImageInfo imgInfo{};
@@ -799,6 +801,10 @@ vk::CommandBuffer GPUFrame::recordMainQueueCommands() {
 
     for(int i = 0 ; i < _rasterPasses.size(); i ++)
     {
+        if (!_rasterPasses[i]->enabled)
+        {
+            continue;
+        }
         _rasterPasses[i]->prepareIncremental(this);
         vk::DebugUtilsLabelEXT passLabel{};
         passLabel.setPLabelName(_rasterPasses[i]->_name.c_str());

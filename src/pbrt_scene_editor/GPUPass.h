@@ -303,6 +303,11 @@ struct GPUPass
     {
         inouts.emplace_back(std::make_unique<T>(inputName + "->" + outputName,args...));
     }
+
+    void addInputVariant()
+    {
+
+    }
 };
 
 struct FrameExternalResourceImmutable
@@ -548,6 +553,18 @@ struct GPUFrame {
 
     void getAllocatedDescriptorSet(int handle, const std::function<void(vk::DescriptorSet)> &callback) const {
 
+    }
+
+    GPUPass* getPass(const std::string & name)
+    {
+        for (auto & pass  : this->_rasterPasses)
+        {
+            if (pass->_name == name)
+            {
+                return pass.get();
+            }
+        }
+        return nullptr;
     }
 
     void connectResources(PassResourceDescriptionBase *output, PassResourceDescriptionBase *input);

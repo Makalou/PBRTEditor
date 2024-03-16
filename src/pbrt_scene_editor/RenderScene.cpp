@@ -284,13 +284,15 @@ namespace renderScene
         {
             dynamicInstance.prepare(backendDevice.get());
             auto descriptorSet = backendDevice->allocateSingleDescriptorSet(perInstanceDataDescriptorPool,perInstanceDataSetLayout);
-            dynamicInstance.perInstDataDescriptorLayout = perInstanceDataSetLayout;
-            dynamicInstance.perInstDataDescriptorSet = descriptorSet;
+            
             backendDevice->updateDescriptorSetStorageBuffer(descriptorSet,0,dynamicInstance.perInstDataBuffer.buffer);
             if(dynamicInstance.texture)
             {
                 backendDevice->updateDescriptorSetCombinedImageSampler(descriptorSet,1,dynamicInstance.texture->imageView,dynamicInstance.texture->sampler);
             }
+
+            dynamicInstance.perInstDataDescriptorLayout = perInstanceDataSetLayout;
+            dynamicInstance.perInstDataDescriptorSet = descriptorSet;
         }
     }
 

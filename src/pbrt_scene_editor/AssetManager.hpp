@@ -206,7 +206,7 @@ struct MeshRigidDevice{
             attributeDesc.emplace_back(4,0,vk::Format::eR32G32Sfloat,vertexAttribute.uvOffset);
         }
 
-        return std::move(attributeDesc);
+        return attributeDesc;
     }
 
     explicit MeshRigidDevice(const VertexAttribute& attribute,uint32_t uuid) : vertexAttribute(attribute),

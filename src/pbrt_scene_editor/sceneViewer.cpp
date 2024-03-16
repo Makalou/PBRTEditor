@@ -33,12 +33,14 @@ void SceneViewer::init(std::shared_ptr<DeviceExtended> device) {
             gBufferPass->scene = this->_renderScene;
             gBufferPass->addOutput<PassAttachmentDescription>("depth",vk::Format::eD32Sfloat, PassAttachmentExtent::SwapchainRelative(1.0, 1.0),
                                                               vk::AttachmentLoadOp::eClear,vk::AttachmentStoreOp::eStore);
-            //gBufferPass->addOutput<PassAttachmentDescription>("wPosition",vk::Format::eR16G16B16A16Sfloat,WINDOW_WIDTH,WINDOW_HEIGHT,
-            //                                                  vk::AttachmentLoadOp::eClear,vk::AttachmentStoreOp::eStore);
             gBufferPass->addOutput<PassAttachmentDescription>("wPosition",vk::Format::eR8G8B8A8Srgb, PassAttachmentExtent::SwapchainRelative(1.0, 1.0),
                                                               vk::AttachmentLoadOp::eClear,vk::AttachmentStoreOp::eStore);
-//            gBufferPass->addOutput<PassAttachmentDescription>("wNormal",vk::Format::eR16G16B16A16Sfloat,WINDOW_WIDTH,WINDOW_HEIGHT,
-//                                                              vk::AttachmentLoadOp::eClear,vk::AttachmentStoreOp::eStore);
+            gBufferPass->addOutput<PassAttachmentDescription>("wNormal", vk::Format::eR8G8B8A8Srgb, PassAttachmentExtent::SwapchainRelative(1.0, 1.0),
+                                                                vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore);
+            gBufferPass->addOutput<PassAttachmentDescription>("UV", vk::Format::eR8G8B8A8Srgb, PassAttachmentExtent::SwapchainRelative(1.0, 1.0),
+                                                                vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore);
+            gBufferPass->addOutput<PassAttachmentDescription>("AlbedoColor", vk::Format::eR8G8B8A8Srgb, PassAttachmentExtent::SwapchainRelative(1.0, 1.0),
+                                                              vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore);
             frameGraph.registerRasterizedGPUPass(std::move(gBufferPass));
         }
 //        {
@@ -50,7 +52,8 @@ void SceneViewer::init(std::shared_ptr<DeviceExtended> device) {
         {
             auto deferredLightingPass = std::make_unique<DeferredLightingPass>();
             deferredLightingPass->addInput<PassTextureDescription>("GBufferPass::wPosition");
-            //deferredLightingPass->addInput<PassTextureDescription>("GBufferPass::wNormal");
+            deferredLightingPass->addInput<PassTextureDescription>("GBufferPass::wNormal");
+            deferredLightingPass->addInput<PassTextureDescription>("GBufferPass::AlbedoColor");
 //            deferredLightingPass->addInput<PassTextureDescription>("ShadowPass::mainShadowMap");
             deferredLightingPass->addInOut<PassAttachmentDescription>("SkyBoxPass::result", "result", vk::AttachmentLoadOp::eLoad, vk::AttachmentStoreOp::eStore);
             frameGraph.registerRasterizedGPUPass(std::move(deferredLightingPass));
@@ -61,6 +64,16 @@ void SceneViewer::init(std::shared_ptr<DeviceExtended> device) {
             postProcessPass->addInOut<PassAttachmentDescription>("SwapchainImage", "result", vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore);
             frameGraph.registerRasterizedGPUPass(std::move(postProcessPass));
         }
+        {
+            auto copyPass = std::make_unique<CopyPass>();
+            copyPass->enabled = false;
+            copyPass->addInput<PassTextureDescription>("GBufferPass::wPosition");
+            copyPass->addInput<PassTextureDescription>("GBufferPass::wNormal");
+            copyPass->addInput<PassTextureDescription>("GBufferPass::UV");
+            copyPass->addInput<PassTextureDescription>("GBufferPass::AlbedoColor");
+            copyPass->addInOut<PassAttachmentDescription>("SwapchainImage", "result", vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore);
+            frameGraph.registerRasterizedGPUPass(std::move(copyPass));
+        }
         _gpuFrames.push_back(std::move(frameGraph));
     }
 
@@ -69,7 +82,6 @@ void SceneViewer::init(std::shared_ptr<DeviceExtended> device) {
         _gpuFrames[i].frameIdx = i;
         _gpuFrames[i].compileAOT();
     }
-
 }
 
 void SceneViewer::setCurrentSceneGraph(SceneGraph *graph,AssetManager& assetManager)
@@ -79,6 +91,47 @@ void SceneViewer::setCurrentSceneGraph(SceneGraph *graph,AssetManager& assetMana
 }
 
 vk::CommandBuffer SceneViewer::recordGraphicsCommand(unsigned int idx) {
+    auto* copyPass = dynamic_cast<CopyPass*>(_gpuFrames[idx].getPass("CopyPass"));
+    switch (currenShadingMode)
+    {
+    case SceneViewer::ShadingMode::FLAT:
+        _gpuFrames[idx].getPass("DeferredLightingPass")->enabled = false;
+        _gpuFrames[idx].getPass("PostProcessPass")->enabled = false;
+        copyPass->enabled = true;
+        copyPass->currentTexIdx.x = 0;
+        break;
+    case SceneViewer::ShadingMode::POSITION:
+        _gpuFrames[idx].getPass("DeferredLightingPass")->enabled = false;
+        _gpuFrames[idx].getPass("PostProcessPass")->enabled = false;
+        copyPass->enabled = true;
+        copyPass->currentTexIdx.x = 0;
+        break;
+    case SceneViewer::ShadingMode::NORMAL:
+        _gpuFrames[idx].getPass("DeferredLightingPass")->enabled = false;
+        _gpuFrames[idx].getPass("PostProcessPass")->enabled = false;
+        copyPass->enabled = true;
+        copyPass->currentTexIdx.x = 1;
+        break;
+    case SceneViewer::ShadingMode::UV:
+        _gpuFrames[idx].getPass("DeferredLightingPass")->enabled = false;
+        _gpuFrames[idx].getPass("PostProcessPass")->enabled = false;
+        copyPass->enabled = true;
+        copyPass->currentTexIdx.x = 2;
+        break;
+    case SceneViewer::ShadingMode::ALBEDO:
+        _gpuFrames[idx].getPass("DeferredLightingPass")->enabled = false;
+        _gpuFrames[idx].getPass("PostProcessPass")->enabled = false;
+        copyPass->enabled = true;
+        copyPass->currentTexIdx.x = 3;
+        break;
+    case SceneViewer::ShadingMode::FINAL:
+        _gpuFrames[idx].getPass("DeferredLightingPass")->enabled = true;
+        _gpuFrames[idx].getPass("PostProcessPass")->enabled = true;
+        copyPass->enabled = false;
+        break;
+    default:
+        break;
+    }
     _renderScene->update();
     return _gpuFrames[idx].recordMainQueueCommands();
 }
