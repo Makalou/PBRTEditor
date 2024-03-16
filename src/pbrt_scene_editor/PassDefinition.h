@@ -415,7 +415,6 @@ RASTERIZEDPASS_DEF_BEGIN(CopyPass)
 
     void prepareAOT(GPUFrame* frame) override
     {
-        //todo : better way use push constant
         auto vs = FullScreenQuadDrawer::getVertexShader(frame->backendDevice.get());
         auto fs = ShaderManager::getInstance().createFragmentShader(frame->backendDevice.get(), "copy.frag");
 
@@ -449,6 +448,61 @@ RASTERIZEDPASS_DEF_BEGIN(CopyPass)
     }
 RASTERIZEDPASS_DEF_END(CopyPass)
 
+RASTERIZEDPASS_DEF_BEGIN(SelectedMaskPass)
+    renderScene::RenderScene* scene{};
+    vk::PipelineLayout pipelineLayout = VK_NULL_HANDLE;
+    vk::DescriptorSetLayout passDataDescriptorLayout;
+    void prepareAOT(GPUFrame* frame) override
+    {
+        std::vector<vk::DescriptorSetLayoutBinding> bindings;
+        vk::DescriptorSetLayoutBinding camBinding;
+        camBinding.setBinding(0);
+        camBinding.setDescriptorType(vk::DescriptorType::eUniformBuffer);
+        camBinding.setDescriptorCount(1);
+        camBinding.setStageFlags(vk::ShaderStageFlagBits::eAllGraphics);
+        bindings.push_back(camBinding);
+
+        passDataDescriptorLayout = frame->manageDescriptorSet("SelectedMaskPassDataDescriptorSet", bindings);
+
+        frame->getManagedDescriptorSet("SelectedMaskPassDataDescriptorSet", [frame, this](const vk::DescriptorSet& passDataDescriptorSet) mutable {
+            frame->backendDevice->updateDescriptorSetUniformBuffer(passDataDescriptorSet, 0, scene->mainView.camera.data.getBuffer());
+        });
+    }
+
+    void record(vk::CommandBuffer cmdBuf, const GPUFrame* frame) override
+    {
+        beginPass(cmdBuf);
+        auto passDataDescriptorSet = frame->getManagedDescriptorSet("SelectedMaskPassDataDescriptorSet");
+        for (int i = 0; i < scene->_dynamicRigidMeshBatch.size(); i++)
+        {
+            auto& instanceRigidDynamic = scene->_dynamicRigidMeshBatch[i];
+            if (graphicsPipelines.empty())
+            {
+                pipelineLayout = frame->backendDevice->createPipelineLayout2({ frame->_frameGlobalDescriptorSetLayout,passDataDescriptorLayout,instanceRigidDynamic.getSetLayout()});
+                frame->backendDevice->setObjectDebugName(pipelineLayout, "SelectedMaskPassPipelineLayout");
+                auto vs = ShaderManager::getInstance().createVertexShader(frame->backendDevice.get(), "positionOnly.vert");
+                auto fs = ShaderManager::getInstance().createFragmentShader(frame->backendDevice.get(), "constantColor.frag");
+                VulkanGraphicsPipelineBuilder builder(frame->backendDevice->device, vs, fs,
+                    instanceRigidDynamic.getPosOnlyVertexInputState().getCreateInfo(), renderPass,
+                    pipelineLayout);
+                builder.addDynamicState(vk::DynamicState::eVertexInputBindingStride);
+                auto pipeline = builder.build();
+                frame->backendDevice->setObjectDebugName(pipeline.getPipeline(), "SelectedMaskPassPipeline");
+                graphicsPipelines.push_back(pipeline);
+            }
+            if (instanceRigidDynamic.updateCurrentMask(1, frame->backendDevice.get()) > 0)
+            {
+                cmdBuf.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipelines[0].getPipeline());
+                cmdBuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 1, passDataDescriptorSet, nullptr);
+                cmdBuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 2, instanceRigidDynamic.getDescriptorSet(), nullptr);
+                instanceRigidDynamic.drawAllPosOnlyMasked(cmdBuf);
+            }
+        }
+
+        endPass(cmdBuf);
+    }
+RASTERIZEDPASS_DEF_END(SelectedMaskPass)
+
 RASTERIZEDPASS_DEF_BEGIN(BoundingBoxPass)
 
 RASTERIZEDPASS_DEF_END(BoundingBoxPass)
@@ -458,6 +512,14 @@ RASTERIZEDPASS_DEF_BEGIN(WireFramePass)
 RASTERIZEDPASS_DEF_END(WireFramePass)
 
 RASTERIZEDPASS_DEF_BEGIN(OutlinePass)
+    void prepareAOT(GPUFrame* frame) override
+    {
+      
+    }
 
+    void record(vk::CommandBuffer cmdBuf, const GPUFrame* frame) override
+    {
+        
+    }
 RASTERIZEDPASS_DEF_END(OutlinePass)
 #endif //PBRTEDITOR_PASSDEFINITION_H

@@ -144,8 +144,8 @@ int main( int /*argc*/, char ** /*argv*/ )
         vkb::InstanceBuilder instanceBuilder;
         auto inst = instanceBuilder
             .set_app_name("pbrt editor")
-            .require_api_version(1,2)
-            .set_minimum_instance_version(1,2)
+            .require_api_version(1,3)
+            .set_minimum_instance_version(1,3)
             .enable_extension(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)
             .enable_extension(VK_EXT_DEBUG_UTILS_EXTENSION_NAME)
             //.request_validation_layers()
@@ -161,15 +161,21 @@ int main( int /*argc*/, char ** /*argv*/ )
         vkb::PhysicalDeviceSelector phyDevSelector{ inst.value()};
 
         auto required_device_extension = {VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
-                                          VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME};
+                                          VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
+                                          VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME};
 
         VkPhysicalDeviceBufferDeviceAddressFeaturesKHR deviceAddressFeaturesKhr{};
         deviceAddressFeaturesKhr.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_KHR;
         deviceAddressFeaturesKhr.bufferDeviceAddress = VK_TRUE;
+
         VkPhysicalDeviceDescriptorIndexingFeaturesEXT descriptorIndexingFeatures{};
         descriptorIndexingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT;
         descriptorIndexingFeatures.descriptorBindingPartiallyBound = VK_TRUE;
         descriptorIndexingFeatures.runtimeDescriptorArray = VK_TRUE;
+
+        VkPhysicalDeviceExtendedDynamicStateFeaturesEXT extendedDynamicStateFeatures{};
+        extendedDynamicStateFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT;
+        extendedDynamicStateFeatures.extendedDynamicState = VK_TRUE;
 
         auto phy_dev = phyDevSelector
             .set_surface(surface)
@@ -178,6 +184,7 @@ int main( int /*argc*/, char ** /*argv*/ )
             .add_required_extensions(required_device_extension)
             .add_required_extension_features(deviceAddressFeaturesKhr)
             .add_required_extension_features(descriptorIndexingFeatures)
+            .add_required_extension_features(extendedDynamicStateFeatures)
             .select();
 
             if(!phy_dev)

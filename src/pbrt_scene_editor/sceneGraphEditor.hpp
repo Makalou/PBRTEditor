@@ -96,6 +96,7 @@ struct SceneGraphNode : Inspectable
     rocket::thread_safe_signal<void(const glm::mat4 &)> finalTransformChange;
     rocket::signal<void(SceneGraphNode*)> selectedSignal;
     rocket::signal<void(SceneGraphNode*)> focusOnSignal;
+    rocket::signal<void(SceneGraphNode*)> unSelectedSignal;
 
     SceneGraphNode()
     {
