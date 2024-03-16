@@ -885,6 +885,12 @@ struct VulkanGraphicsPipelineBuilder
      */
     VulkanGraphicsPipeline build() const;
 
+    void addDynamicState(const vk::DynamicState& dynamic)
+    {
+        dynamicStates.push_back(dynamic);
+        _DynamicStateInfo.setDynamicStates(dynamicStates);
+    }
+
     VK_GRAPHICS_PIPELINE_BUILDER_STATE_DEF_ACCESSOR(InputAssembly)
     VK_GRAPHICS_PIPELINE_BUILDER_STATE_DEF_ACCESSOR(ColorBlend)
     VK_GRAPHICS_PIPELINE_BUILDER_STATE_DEF_ACCESSOR(DepthStencil)
@@ -901,6 +907,6 @@ private:
     vk::RenderPass _renderPass;
     vk::PipelineLayout _pipelineLayout;
     vk::PipelineColorBlendAttachmentState defaultAttachmentState{};
-    vk::DynamicState dynamicStates[2]{ vk::DynamicState::eViewport,vk::DynamicState::eScissor };
+    std::vector<vk::DynamicState> dynamicStates{ vk::DynamicState::eViewport,vk::DynamicState::eScissor };
 };
 

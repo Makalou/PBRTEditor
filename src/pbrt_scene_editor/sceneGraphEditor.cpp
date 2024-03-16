@@ -100,10 +100,16 @@ void SceneGraphEditor::constructFrame()
            bool is_node_open = ImGui::TreeNodeEx(node->name.c_str(), nodeFlags);
            if(ImGui::IsItemClicked())
            {
-               if(node == currentSingleSelectedNode)
+               if (node == currentSingleSelectedNode)
+               {
                    currentSingleSelectedNode = nullptr;
+                   node->unSelectedSignal(node);
+               }
                else
+               {
                    currentSingleSelectedNode = node;
+                   node->selectedSignal(node);
+               }
            } //node->is_selected ^= 1;
            //rightClickMenu2(node->is_selected);
            return std::make_pair(is_node_open, is_node_open);
@@ -116,8 +122,15 @@ void SceneGraphEditor::constructFrame()
 //                    node->is_selected = false;//memset(selection, 0, sizeof(selection));
 //                node->is_selected ^= 1;
            }
-           if(selected)
+           if (selected)
+           {
                currentSingleSelectedNode = node;
+               node->selectedSignal(node);
+           }
+           else
+           {
+               node->unSelectedSignal(node);
+           }
            //rightClickMenu2(node->is_selected);
            return std::make_pair(false, false);
        }

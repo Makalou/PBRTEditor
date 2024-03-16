@@ -126,11 +126,22 @@ namespace renderScene {
 
             if (!bufferRes.has_value())
             {
-                throw std::runtime_error("Failed to allocate instance data buffer");
+                throw std::runtime_error("Failed to allocate instance indies buffer");
             }
 
             instanceDataIdicesBuffer = bufferRes.value();
             device->oneTimeUploadSync(instanceDataIdices.data(), sizeof(uint32_t) * perInstanceData.size(), instanceDataIdicesBuffer.buffer);
+
+            bufferRes = device->allocateBuffer(sizeof(uint32_t) * perInstanceData.size(),
+                (VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT),
+                VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE);
+
+            if (!bufferRes.has_value())
+            {
+                throw std::runtime_error("Failed to allocate instance mask indies buffer");
+            }
+
+            instanceMaskedIdicesBuffer = bufferRes.value();
         }
 
         VkBuffer getInstanceDataBuffer() const
@@ -152,15 +163,73 @@ namespace renderScene {
             mesh->bind(cmd);
             //bind per instance data
             cmd.bindVertexBuffers(1, { instanceDataIdicesBuffer.buffer }, {0});
-            //cmd.bindVertexBuffers(perInstanceBindingIdx,instDataIdxBuffer)
             cmd.drawIndexed(mesh->indexCount, perInstanceData.size(), 0, 0, 0);
+        }
+
+        void drawAllPosOnly(vk::CommandBuffer cmd) const {
+            mesh->bindPosOnly(cmd);
+            //bind per instance data
+            cmd.bindVertexBuffers2(1, { instanceDataIdicesBuffer.buffer }, { 0 }, nullptr, { sizeof(uint32_t) });
+            cmd.drawIndexed(mesh->indexCount, perInstanceData.size(), 0, 0, 0);
+        }
+
+        uint32_t updateCurrentMask(uint32_t _mask,DeviceExtended* device)
+        {
+            std::vector<uint32_t> collectMaskedIdices;
+            for (int i = 0; i < mask.size(); i++)
+            {
+                if (mask[i] == _mask)
+                {
+                    collectMaskedIdices.push_back(i);
+                }
+            }
+            if (collectMaskedIdices.empty())
+            {
+                collectedMaskedCache.clear();
+                return 0;
+            }
+
+            if (collectMaskedIdices.size() > collectedMaskedCache.size())
+            {
+                collectedMaskedCache = collectMaskedIdices;
+                device->oneTimeUploadSync(collectedMaskedCache.data(), sizeof(uint32_t) * collectedMaskedCache.size(), instanceMaskedIdicesBuffer.buffer);
+                return collectedMaskedCache.size();
+            }
+
+            bool consistence = true;
+            for (int i = 0; i < collectMaskedIdices.size(); i++)
+            {
+                if (collectMaskedIdices[i] != collectedMaskedCache[i])
+                {
+                    consistence = false;
+                    break;
+                }
+            }
+
+            if (consistence)
+            {
+                collectedMaskedCache.resize(collectMaskedIdices.size());
+                return collectedMaskedCache.size();
+            }
+
+            collectedMaskedCache = collectMaskedIdices;
+            device->oneTimeUploadSync(collectedMaskedCache.data(), sizeof(uint32_t) * collectedMaskedCache.size(), instanceMaskedIdicesBuffer.buffer);
+            return collectedMaskedCache.size();
+        }
+
+        void drawAllPosOnlyMasked(vk::CommandBuffer cmd) const {
+            if (collectedMaskedCache.empty()) return;
+
+            mesh->bindPosOnly(cmd);
+           
+            //bind per instance data
+            cmd.bindVertexBuffers2(1, { instanceMaskedIdicesBuffer.buffer }, { 0 }, nullptr, { sizeof(uint32_t) });
+            cmd.drawIndexed(mesh->indexCount, collectedMaskedCache.size(), 0, 0, 0);
         }
 
         void drawOne(vk::CommandBuffer cmd) const{
             mesh->bind(cmd);
             //todo bind per instance data
-            //cmd.bindVertexBuffers(perInstanceBindingIdx,instDataIdxBuffer)
-            //cmd.drawIndexed(mesh->vertexCount,1,0,0);
             cmd.drawIndexed(mesh->indexCount, 1, 0, 0, 0);
         }
 
@@ -200,32 +269,34 @@ namespace renderScene {
             return pipelineVertexInputStateInfo;
         }
 
-        auto getPosOnlyVertexInputState() const
+        static auto getPosOnlyVertexInputState()
         {
             vk::PipelineVertexInputStateCreateInfo vertexInputStateCreateInfo{};
-            auto perVertexBindingDesc = meshHandle->getVertexInputBindingDesc();
-            vk::VertexInputAttributeDescription perVertexAttributeDesc;
-            perVertexAttributeDesc.binding = 0;
-            perVertexAttributeDesc.location = 0;
-            perVertexAttributeDesc.offset = 0;
-            perVertexAttributeDesc.format = vk::Format::eR32G32B32Sfloat;
+            vk::VertexInputBindingDescription perVertexBindingDesc{};
+            perVertexBindingDesc.setInputRate(vk::VertexInputRate::eVertex);
+            perVertexBindingDesc.setBinding(0);
+            //Stride is ignored
+            vk::VertexInputAttributeDescription perVertexPosAttributeDesc;
+            perVertexPosAttributeDesc.setBinding(0);
+            perVertexPosAttributeDesc.setBinding(0);
+            perVertexPosAttributeDesc.setOffset(0);
+            perVertexPosAttributeDesc.setFormat(vk::Format::eR32G32B32Sfloat);
 
             vk::VertexInputBindingDescription perInstanceBindingDesc{};
             perInstanceBindingDesc.setInputRate(vk::VertexInputRate::eInstance);
             perInstanceBindingDesc.setBinding(1);
-            perInstanceBindingDesc.setStride(sizeof(uint32_t));//todo wrong way to calculate stride
-
-            vk::VertexInputAttributeDescription perInstanceAttributeDescription{};
-            perInstanceAttributeDescription.setBinding(perInstanceBindingDesc.binding);
-            perInstanceAttributeDescription.setOffset(0);
-            perInstanceAttributeDescription.setLocation(1);
-            // todo if we can modify the shader variant, then explicitly specific location may be unnecessary
-            perInstanceAttributeDescription.setFormat(vk::Format::eR32Uint);
+            //perInstanceBindingDesc.setStride(sizeof(uint32_t));//todo wrong way to calculate stride
+            //Stride is ignored
+            vk::VertexInputAttributeDescription perInstanceAttributeDesc{};
+            perInstanceAttributeDesc.setBinding(perInstanceBindingDesc.binding);
+            perInstanceAttributeDesc.setOffset(0);
+            perInstanceAttributeDesc.setLocation(1);
+            perInstanceAttributeDesc.setFormat(vk::Format::eR32Uint);
 
             std::vector<vk::VertexInputBindingDescription> bindings{ perVertexBindingDesc,perInstanceBindingDesc };
-            perVertexAttributeDesc.push_back(perInstanceAttributeDescription);// misleading, but efficient ...
+            std::vector<vk::VertexInputAttributeDescription> attributes{ perVertexPosAttributeDesc,perInstanceAttributeDesc };
             vertexInputStateCreateInfo.setVertexBindingDescriptions(bindings);
-            vertexInputStateCreateInfo.setVertexAttributeDescriptions(perVertexAttributeDesc);
+            vertexInputStateCreateInfo.setVertexAttributeDescriptions(attributes);
 
             return VulkanPipelineVertexInputStateInfo(vertexInputStateCreateInfo);
         }
@@ -237,6 +308,9 @@ namespace renderScene {
 
         std::vector<PerInstDataT> perInstanceData;
         std::vector<uint32_t> instanceDataIdices;
+        std::vector<uint32_t> mask;
+
+        std::vector<uint32_t> collectedMaskedCache;
 
         int perInstanceBindingIdx;
         MeshRigidHandle mesh;
@@ -249,6 +323,7 @@ namespace renderScene {
         // Short answer : for better support on culling.
         //https://app.diagrams.net/#G1ei8XsclhGNg_qMR_J7LBKmGRjSSXyShI#%7B%22pageId%22%3A%22sedBS7P0nTr2XQddadu8%22%7D
         VMABuffer instanceDataIdicesBuffer{};
+        VMABuffer instanceMaskedIdicesBuffer{};
         InstanceUUID _uuid;
         std::string materialName;
     };

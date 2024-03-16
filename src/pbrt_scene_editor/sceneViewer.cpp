@@ -21,6 +21,7 @@ void SceneViewer::init(std::shared_ptr<DeviceExtended> device) {
     for(int i = 0 ; i < 3; i ++)
     {
         GPUFrame frameGraph(8,backendDevice);
+
         {
             auto skyBoxPass = std::make_unique<SkyBoxPass>();
             skyBoxPass->addOutput<PassAttachmentDescription>("result",vk::Format::eR8G8B8A8Srgb,PassAttachmentExtent::SwapchainRelative(1.0,1.0),
@@ -43,6 +44,13 @@ void SceneViewer::init(std::shared_ptr<DeviceExtended> device) {
                                                               vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore);
             frameGraph.registerRasterizedGPUPass(std::move(gBufferPass));
         }
+        {
+            auto selectedMaskPass = std::make_unique<SelectedMaskPass>();
+            selectedMaskPass->scene = this->_renderScene;
+            selectedMaskPass->addOutput<PassAttachmentDescription>("mask",vk::Format::eR8G8B8A8Srgb, PassAttachmentExtent::SwapchainRelative(1.0, 1.0),
+                                                                   vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore);
+            frameGraph.registerRasterizedGPUPass(std::move(selectedMaskPass));
+        }
 //        {
 //            auto shadowPass = std::make_unique<ShadowPass>();
 //            shadowPass->addOutput<PassAttachmentDescription>("mainShadowMap",vk::Format::eD32Sfloat,WINDOW_WIDTH,WINDOW_HEIGHT,
@@ -61,6 +69,7 @@ void SceneViewer::init(std::shared_ptr<DeviceExtended> device) {
         {
             auto postProcessPass = std::make_unique<PostProcessPass>();
             postProcessPass->addInput<PassTextureDescription>("DeferredLightingPass::result");
+            postProcessPass->addInput<PassTextureDescription>("SelectedMaskPass::mask");
             postProcessPass->addInOut<PassAttachmentDescription>("SwapchainImage", "result", vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore);
             frameGraph.registerRasterizedGPUPass(std::move(postProcessPass));
         }
@@ -73,6 +82,12 @@ void SceneViewer::init(std::shared_ptr<DeviceExtended> device) {
             copyPass->addInput<PassTextureDescription>("GBufferPass::AlbedoColor");
             copyPass->addInOut<PassAttachmentDescription>("SwapchainImage", "result", vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore);
             frameGraph.registerRasterizedGPUPass(std::move(copyPass));
+        }
+        {
+            auto outlinePass = std::make_unique<OutlinePass>();
+            outlinePass->addInput<PassTextureDescription>("SelectedMaskPass:mask");
+            outlinePass->addInOut<PassAttachmentDescription>("SwapchainImage", "result", vk::AttachmentLoadOp::eLoad, vk::AttachmentStoreOp::eStore);
+            //frameGraph.registerRasterizedGPUPass(std::move(outlinePass));
         }
         _gpuFrames.push_back(std::move(frameGraph));
     }

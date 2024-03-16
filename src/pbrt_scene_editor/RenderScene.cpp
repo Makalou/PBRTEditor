@@ -124,6 +124,7 @@ namespace renderScene
                             assert(mat->name == inst.materialName);
                             foundInstance = true;
                             inst.perInstanceData.push_back({node->_finalTransform * instanceBaseTransform});
+                            inst.mask.push_back(0);
                             auto instDataIdx = inst.perInstanceData.size() - 1;
                             node->finalTransformChange += [this, instIdx,instDataIdx](const glm::mat4 & newTransform)
                             {
@@ -137,6 +138,14 @@ namespace renderScene
                                 copy.dstOffset = sizeof(instData._wTransform) * instDataIdx;
                                 uploadRequests.emplace_back(copy);
                             };
+                            node->selectedSignal += [this, instIdx, instDataIdx](SceneGraphNode* node)
+                            {
+                                _dynamicRigidMeshBatch[instIdx].mask[instDataIdx] = 1;
+                            };
+                            node->unSelectedSignal += [this, instIdx, instDataIdx](SceneGraphNode* node)
+                            {
+                                _dynamicRigidMeshBatch[instIdx].mask[instDataIdx] = 0;
+                            };
                             break;
                         }
                     }
@@ -147,7 +156,7 @@ namespace renderScene
                         InstanceBatchRigidDynamic<PerInstanceData> meshInstanceRigidDynamic(meshHandle);
                         meshInstanceRigidDynamic.perInstanceData.push_back({node->_finalTransform * instanceBaseTransform});
                         meshInstanceRigidDynamic.materialName = mat->name;
-
+                        meshInstanceRigidDynamic.mask.push_back(0);
                         do{
                             auto * coatedDiffuse = dynamic_cast<CoatedDiffuseMaterial*>(mat);
                             if(coatedDiffuse != nullptr && std::holds_alternative<texture>(coatedDiffuse->reflectance))
@@ -182,6 +191,14 @@ namespace renderScene
                             copy.size = sizeof(instData._wTransform);
                             copy.dstOffset = 0;
                             uploadRequests.emplace_back(copy);
+                        };
+                        node->selectedSignal += [this, instIdx](SceneGraphNode* node)
+                        {
+                            _dynamicRigidMeshBatch[instIdx].mask[0] = 1;
+                        };
+                        node->unSelectedSignal += [this, instIdx](SceneGraphNode* node)
+                        {
+                            _dynamicRigidMeshBatch[instIdx].mask[0] = 0;
                         };
                     }
                 }
