@@ -238,9 +238,9 @@ struct MeshRigidDevice{
         cmd.bindIndexBuffer(indexBuffer.buffer, 0, vk::IndexType::eUint32);
     }
 
-    void bindPosOnly(vk::CommandBuffer cmd) {
+    void bindPosOnly(vk::CommandBuffer cmd,vk::DispatchLoaderDynamic loader) {
         vk::DeviceSize vertexStride = vertexAttribute.stride;
-        cmd.bindVertexBuffers2(0, { vertexBuffer.buffer }, { 0 }, nullptr, { vertexStride });
+        cmd.bindVertexBuffers2EXT(0, { vertexBuffer.buffer }, { 0 }, nullptr, { vertexStride },loader);
         cmd.bindIndexBuffer(indexBuffer.buffer, 0, vk::IndexType::eUint32);
     }
 };

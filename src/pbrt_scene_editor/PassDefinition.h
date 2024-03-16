@@ -495,7 +495,7 @@ RASTERIZEDPASS_DEF_BEGIN(SelectedMaskPass)
                 cmdBuf.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipelines[0].getPipeline());
                 cmdBuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 1, passDataDescriptorSet, nullptr);
                 cmdBuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 2, instanceRigidDynamic.getDescriptorSet(), nullptr);
-                instanceRigidDynamic.drawAllPosOnlyMasked(cmdBuf);
+                instanceRigidDynamic.drawAllPosOnlyMasked(cmdBuf,frame->backendDevice->getDLD());
             }
         }
 

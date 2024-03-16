@@ -166,10 +166,11 @@ namespace renderScene {
             cmd.drawIndexed(mesh->indexCount, perInstanceData.size(), 0, 0, 0);
         }
 
-        void drawAllPosOnly(vk::CommandBuffer cmd) const {
-            mesh->bindPosOnly(cmd);
+        void drawAllPosOnly(vk::CommandBuffer cmd,vk::DispatchLoaderDynamic loader) const {
+            mesh->bindPosOnly(cmd,loader);
+
             //bind per instance data
-            cmd.bindVertexBuffers2(1, { instanceDataIdicesBuffer.buffer }, { 0 }, nullptr, { sizeof(uint32_t) });
+            cmd.bindVertexBuffers2(1, { instanceDataIdicesBuffer.buffer }, { 0 }, nullptr, { sizeof(uint32_t) },loader);
             cmd.drawIndexed(mesh->indexCount, perInstanceData.size(), 0, 0, 0);
         }
 
@@ -217,13 +218,13 @@ namespace renderScene {
             return collectedMaskedCache.size();
         }
 
-        void drawAllPosOnlyMasked(vk::CommandBuffer cmd) const {
+        void drawAllPosOnlyMasked(vk::CommandBuffer cmd,vk::DispatchLoaderDynamic loader) const {
             if (collectedMaskedCache.empty()) return;
 
-            mesh->bindPosOnly(cmd);
+            mesh->bindPosOnly(cmd,loader);
            
             //bind per instance data
-            cmd.bindVertexBuffers2(1, { instanceMaskedIdicesBuffer.buffer }, { 0 }, nullptr, { sizeof(uint32_t) });
+            cmd.bindVertexBuffers2EXT(1, { instanceMaskedIdicesBuffer.buffer }, { 0 }, nullptr, { sizeof(uint32_t) },loader);
             cmd.drawIndexed(mesh->indexCount, collectedMaskedCache.size(), 0, 0, 0);
         }
 
