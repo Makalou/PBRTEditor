@@ -27,6 +27,18 @@ struct SceneViewer
         RAYTRACING
     };
 
+    enum class ShadingMode
+    {
+        FLAT,
+        POSITION,
+        NORMAL,
+        UV,
+        ALBEDO,
+        FINAL
+    };
+
+    ShadingMode currenShadingMode = ShadingMode::ALBEDO;
+
 private:
 	std::shared_ptr<DeviceExtended> backendDevice;
     RenderingMode _renderingMode;

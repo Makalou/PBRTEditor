@@ -12,6 +12,10 @@
 
 #define RASTERIZEDPASS_DEF_END(name) };
 
+#define COMPUTEPASS_DEF_BEGIN(name) struct name : GPUComputePass { name() : GPUComputePass(#name){};
+
+#define COMPUTEPASS_DEF_END(name) };
+
 namespace FullScreenQuadDrawer
 {
     auto static getVertexShader(DeviceExtended * device)
@@ -95,6 +99,8 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
     vk::PipelineLayout passLevelPipelineLayout;
     vk::PipelineRasterizationStateCreateInfo rasterInfo{};
     vk::PipelineDepthStencilStateCreateInfo depthStencilInfo{};
+    vk::PipelineColorBlendAttachmentState attachmentStates[4];
+    vk::PipelineColorBlendStateCreateInfo colorBlendInfo{};
     vk::DescriptorSetLayout passDataDescriptorLayout;
 
     void prepareAOT(GPUFrame* frame) override
@@ -129,6 +135,23 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
         depthStencilInfo.setMinDepthBounds(0.0f);
         depthStencilInfo.setMaxDepthBounds(1.0f);
         depthStencilInfo.setStencilTestEnable(vk::False);
+
+        auto colorComponentAll = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
+        for (int i = 0; i < 4; i++)
+        {
+            attachmentStates[i].setColorWriteMask(colorComponentAll);
+            attachmentStates[i].setSrcColorBlendFactor(vk::BlendFactor::eOne);
+            attachmentStates[i].setDstColorBlendFactor(vk::BlendFactor::eZero);
+            attachmentStates[i].setColorBlendOp(vk::BlendOp::eAdd);
+            attachmentStates[i].setSrcAlphaBlendFactor(vk::BlendFactor::eOne);
+            attachmentStates[i].setDstAlphaBlendFactor(vk::BlendFactor::eZero);
+            attachmentStates[i].setAlphaBlendOp(vk::BlendOp::eAdd);
+            attachmentStates[i].blendEnable = VK_FALSE;
+        }
+
+        colorBlendInfo.setLogicOpEnable(vk::False);
+        colorBlendInfo.setAttachments(attachmentStates);
+        colorBlendInfo.setBlendConstants({ 1.0,1.0,1.0,1.0 });
     }
 
     using InstanceUUIDMap = std::unordered_map<renderScene::InstanceUUID,int,renderScene::InstanceUUIDHash>;
@@ -207,7 +230,7 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
                 vertexInputState.getCreateInfo(),
                 renderPass,
                 instancePipelineLayouts[pipelineLayoutIdx],
-                rasterInfo,depthStencilInfo);
+                rasterInfo,depthStencilInfo,colorBlendInfo);
             auto pipeline = builder.build();
             graphicsPipelines.push_back(pipeline);
             idx = graphicsPipelines.size() - 1;
@@ -386,4 +409,55 @@ RASTERIZEDPASS_DEF_BEGIN(PostProcessPass)
 
 RASTERIZEDPASS_DEF_END(PostProcessPass)
 
+RASTERIZEDPASS_DEF_BEGIN(CopyPass)
+    vk::PipelineLayout pipelineLayout;
+    glm::uvec4 currentTexIdx{};
+
+    void prepareAOT(GPUFrame* frame) override
+    {
+        //todo : better way use push constant
+        auto vs = FullScreenQuadDrawer::getVertexShader(frame->backendDevice.get());
+        auto fs = ShaderManager::getInstance().createFragmentShader(frame->backendDevice.get(), "copy.frag");
+
+        vk::PushConstantRange pushConstant{};
+        pushConstant.setOffset(0);
+        pushConstant.setSize(sizeof(glm::uvec4));
+        pushConstant.setStageFlags(vk::ShaderStageFlagBits::eFragment);
+
+        pipelineLayout = frame->backendDevice->createPipelineLayout2({ frame->_frameGlobalDescriptorSetLayout,
+                                                                                passInputDescriptorSetLayout }, {pushConstant});
+
+        frame->backendDevice->setObjectDebugName(pipelineLayout, "CopyPassPipelineLayout");
+
+        VulkanGraphicsPipelineBuilder builder(frame->backendDevice->device, vs, fs,
+            FullScreenQuadDrawer::getVertexInputStateInfo(), renderPass,
+            pipelineLayout);
+        auto pipeline = builder.build();
+        frame->backendDevice->setObjectDebugName(pipeline.getPipeline(), "CopyPassPipeline");
+        graphicsPipelines.push_back(pipeline);
+    }
+
+    void record(vk::CommandBuffer cmdBuf, const GPUFrame* frame) override
+    {
+        beginPass(cmdBuf);
+        auto passInputDescriptorSet = frame->getManagedDescriptorSet("CopyPassInputDescriptorSet");
+        cmdBuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 1, passInputDescriptorSet, nullptr);
+        cmdBuf.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eFragment,0, sizeof(glm::uvec4), &currentTexIdx);
+        cmdBuf.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipelines[0].getPipeline());
+        FullScreenQuadDrawer::draw(cmdBuf);
+        endPass(cmdBuf);
+    }
+RASTERIZEDPASS_DEF_END(CopyPass)
+
+RASTERIZEDPASS_DEF_BEGIN(BoundingBoxPass)
+
+RASTERIZEDPASS_DEF_END(BoundingBoxPass)
+
+RASTERIZEDPASS_DEF_BEGIN(WireFramePass)
+
+RASTERIZEDPASS_DEF_END(WireFramePass)
+
+RASTERIZEDPASS_DEF_BEGIN(OutlinePass)
+
+RASTERIZEDPASS_DEF_END(OutlinePass)
 #endif //PBRTEDITOR_PASSDEFINITION_H

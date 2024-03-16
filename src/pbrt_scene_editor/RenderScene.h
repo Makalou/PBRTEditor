@@ -200,6 +200,36 @@ namespace renderScene {
             return pipelineVertexInputStateInfo;
         }
 
+        auto getPosOnlyVertexInputState() const
+        {
+            vk::PipelineVertexInputStateCreateInfo vertexInputStateCreateInfo{};
+            auto perVertexBindingDesc = meshHandle->getVertexInputBindingDesc();
+            vk::VertexInputAttributeDescription perVertexAttributeDesc;
+            perVertexAttributeDesc.binding = 0;
+            perVertexAttributeDesc.location = 0;
+            perVertexAttributeDesc.offset = 0;
+            perVertexAttributeDesc.format = vk::Format::eR32G32B32Sfloat;
+
+            vk::VertexInputBindingDescription perInstanceBindingDesc{};
+            perInstanceBindingDesc.setInputRate(vk::VertexInputRate::eInstance);
+            perInstanceBindingDesc.setBinding(1);
+            perInstanceBindingDesc.setStride(sizeof(uint32_t));//todo wrong way to calculate stride
+
+            vk::VertexInputAttributeDescription perInstanceAttributeDescription{};
+            perInstanceAttributeDescription.setBinding(perInstanceBindingDesc.binding);
+            perInstanceAttributeDescription.setOffset(0);
+            perInstanceAttributeDescription.setLocation(1);
+            // todo if we can modify the shader variant, then explicitly specific location may be unnecessary
+            perInstanceAttributeDescription.setFormat(vk::Format::eR32Uint);
+
+            std::vector<vk::VertexInputBindingDescription> bindings{ perVertexBindingDesc,perInstanceBindingDesc };
+            perVertexAttributeDesc.push_back(perInstanceAttributeDescription);// misleading, but efficient ...
+            vertexInputStateCreateInfo.setVertexBindingDescriptions(bindings);
+            vertexInputStateCreateInfo.setVertexAttributeDescriptions(perVertexAttributeDesc);
+
+            return VulkanPipelineVertexInputStateInfo(vertexInputStateCreateInfo);
+        }
+
         inline InstanceUUID getUUID() const
         {
             return _uuid;

@@ -44,6 +44,7 @@ private:
 	void showMainMenuBar();
 	void showMenuFile();
 	void showMenuEdit();
+	void showMenuShading();
 	void showMenuView();
 	void showMenuRender();
 	void showMenuTools();

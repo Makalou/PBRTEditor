@@ -84,6 +84,11 @@ void EditorGUI::showMainMenuBar()
 			showMenuEdit();
 			ImGui::EndMenu();
 		}
+		if (ImGui::BeginMenu("Shading"))
+		{
+			showMenuShading();
+			ImGui::EndMenu();
+		}
 		if (ImGui::BeginMenu("View"))
 		{
 			showMenuView();
@@ -226,6 +231,41 @@ void EditorGUI::showMenuEdit()
 	if (ImGui::MenuItem("Paste", "CTRL+V")) {}
 }
 
+void EditorGUI::showMenuShading()
+{
+	static int e = 4;
+	ImGui::RadioButton("Flat", &e, 0);
+	ImGui::RadioButton("World Position", &e, 1); 
+	ImGui::RadioButton("World Normal", &e, 2); 
+	ImGui::RadioButton("UV", &e, 3); 
+	ImGui::RadioButton("Albedo", &e, 4); 
+	ImGui::RadioButton("Final", &e, 5);
+
+	switch (e)
+	{
+	case 0:
+		viewer->currenShadingMode = SceneViewer::ShadingMode::FLAT;
+		break;
+	case 1:
+		viewer->currenShadingMode = SceneViewer::ShadingMode::POSITION;
+		break;
+	case 2:
+		viewer->currenShadingMode = SceneViewer::ShadingMode::NORMAL;
+		break;
+	case 3:
+		viewer->currenShadingMode = SceneViewer::ShadingMode::UV;
+		break;
+	case 4:
+		viewer->currenShadingMode = SceneViewer::ShadingMode::ALBEDO;
+		break;
+	case 5:
+		viewer->currenShadingMode = SceneViewer::ShadingMode::FINAL;
+		break;
+	default:
+		break;
+	}
+}
+
 void EditorGUI::showMenuView()
 {
 	if (ImGui::MenuItem("SceneGraphEditor")) {
@@ -235,11 +275,11 @@ void EditorGUI::showMenuView()
 		_assetFileTree->setOpen();
 	}
 	if (ImGui::MenuItem("Inspector")) {
-        _inspector->setOpen();
+		_inspector->setOpen();
 	}
-    if (ImGui::MenuItem("Log")) {
-        _loggerWindow->setOpen();
-    }
+	if (ImGui::MenuItem("Log")) {
+		_loggerWindow->setOpen();
+	}
 }
 
 void EditorGUI::showMenuRender()
@@ -274,7 +314,6 @@ void EditorGUI::constructFrame()
 	ImGui_ImplVulkan_NewFrame();
 	ImGui_ImplGlfw_NewFrame();
 	ImGui::NewFrame();
-	//ImGui::ShowDemoWindow();
 	showMainMenuBar();
     _inspector->constructFrame();
 	_assetFileTree->constructFrame();

@@ -250,6 +250,15 @@ struct DeviceExtended : vkb::Device, vk::Device
         return createPipelineLayout(createInfo);
     }
 
+    auto createPipelineLayout2(std::vector<vk::DescriptorSetLayout>&& descriptorSetLayouts, 
+                               std::vector<vk::PushConstantRange>&& pushConstantRanges)
+    {
+        vk::PipelineLayoutCreateInfo createInfo{};
+        createInfo.setSetLayouts(descriptorSetLayouts);
+        createInfo.setPushConstantRanges(pushConstantRanges);
+        return createPipelineLayout(createInfo);
+    }
+
     auto getSupportedDepthStencilFormat() const
     {
         VkImageTiling tiling = VK_IMAGE_TILING_OPTIMAL;
