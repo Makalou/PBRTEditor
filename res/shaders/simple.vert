@@ -34,6 +34,7 @@ layout(location = 3) out vec3 outVertexBiTangent;
 layout(location = 4) out vec2 outVertexUV;
 #endif
 
+layout(location = 5) flat out uint outInstanceID;
 #include "built_in/frameGlobalData.glsl"
 #include "built_in/camera.glsl"
 
@@ -48,6 +49,7 @@ layout(std140,set = 2, binding = 0) readonly buffer PerInstanceData
 } instData;
 
 void main() {
+    outInstanceID = inInstDataIdx;
     mat4 model = instData.transform[inInstDataIdx];
     vec3 position = vec3(inVertexPosition.x,inVertexPosition.y,inVertexPosition.z);
     vec4 worldPosition = model * vec4(position, 1.0);

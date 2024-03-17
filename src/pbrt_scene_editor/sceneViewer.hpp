@@ -30,6 +30,7 @@ struct SceneViewer
     enum class ShadingMode
     {
         FLAT,
+        MESHID,
         POSITION,
         NORMAL,
         UV,

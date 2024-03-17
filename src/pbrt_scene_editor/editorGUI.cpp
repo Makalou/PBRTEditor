@@ -240,30 +240,34 @@ void EditorGUI::showMenuShading()
 	}
 	static int e = 4;
 	ImGui::RadioButton("Flat", &e, 0);
-	ImGui::RadioButton("World Position", &e, 1); 
-	ImGui::RadioButton("World Normal", &e, 2); 
-	ImGui::RadioButton("UV", &e, 3); 
-	ImGui::RadioButton("Albedo", &e, 4); 
-	ImGui::RadioButton("Final", &e, 5);
+	ImGui::RadioButton("MeshID", &e, 1);
+	ImGui::RadioButton("World Position", &e, 2);
+	ImGui::RadioButton("World Normal", &e, 3);
+	ImGui::RadioButton("UV", &e, 4);
+	ImGui::RadioButton("Albedo", &e, 5);
+	ImGui::RadioButton("Final", &e, 6);
 
 	switch (e)
 	{
 	case 0:
 		viewer->currenShadingMode = SceneViewer::ShadingMode::FLAT;
 		break;
-	case 1:
+    case 1:
+        viewer->currenShadingMode = SceneViewer::ShadingMode::MESHID;
+        break;
+	case 2:
 		viewer->currenShadingMode = SceneViewer::ShadingMode::POSITION;
 		break;
-	case 2:
+	case 3:
 		viewer->currenShadingMode = SceneViewer::ShadingMode::NORMAL;
 		break;
-	case 3:
+	case 4:
 		viewer->currenShadingMode = SceneViewer::ShadingMode::UV;
 		break;
-	case 4:
+	case 5:
 		viewer->currenShadingMode = SceneViewer::ShadingMode::ALBEDO;
 		break;
-	case 5:
+	case 6:
 		viewer->currenShadingMode = SceneViewer::ShadingMode::FINAL;
 		break;
 	default:

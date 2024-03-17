@@ -36,6 +36,8 @@ void SceneViewer::init(std::shared_ptr<DeviceExtended> device) {
                                                               vk::AttachmentLoadOp::eClear,vk::AttachmentStoreOp::eStore);
             gBufferPass->addOutput<PassAttachmentDescription>("flat", vk::Format::eR8G8B8A8Srgb, PassAttachmentExtent::SwapchainRelative(1.0, 1.0),
                                                               vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore);
+            gBufferPass->addOutput<PassAttachmentDescription>("meshID", vk::Format::eR8G8B8A8Srgb, PassAttachmentExtent::SwapchainRelative(1.0, 1.0),
+                                                              vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore);
             gBufferPass->addOutput<PassAttachmentDescription>("wPosition",vk::Format::eR8G8B8A8Srgb, PassAttachmentExtent::SwapchainRelative(1.0, 1.0),
                                                               vk::AttachmentLoadOp::eClear,vk::AttachmentStoreOp::eStore);
             gBufferPass->addOutput<PassAttachmentDescription>("wNormal", vk::Format::eR8G8B8A8Srgb, PassAttachmentExtent::SwapchainRelative(1.0, 1.0),
@@ -79,6 +81,7 @@ void SceneViewer::init(std::shared_ptr<DeviceExtended> device) {
             auto copyPass = std::make_unique<CopyPass>();
             copyPass->enabled = false;
             copyPass->addInput<PassTextureDescription>("GBufferPass::flat");
+            copyPass->addInput<PassTextureDescription>("GBufferPass::meshID");
             copyPass->addInput<PassTextureDescription>("GBufferPass::wPosition");
             copyPass->addInput<PassTextureDescription>("GBufferPass::wNormal");
             copyPass->addInput<PassTextureDescription>("GBufferPass::UV");
@@ -125,29 +128,35 @@ vk::CommandBuffer SceneViewer::recordGraphicsCommand(unsigned int idx) {
         copyPass->enabled = true;
         copyPass->currentTexIdx.x = 0;
         break;
-    case SceneViewer::ShadingMode::POSITION:
+    case SceneViewer::ShadingMode::MESHID:
         _gpuFrames[idx].getPass("DeferredLightingPass")->enabled = false;
         _gpuFrames[idx].getPass("PostProcessPass")->enabled = false;
         copyPass->enabled = true;
         copyPass->currentTexIdx.x = 1;
         break;
-    case SceneViewer::ShadingMode::NORMAL:
+    case SceneViewer::ShadingMode::POSITION:
         _gpuFrames[idx].getPass("DeferredLightingPass")->enabled = false;
         _gpuFrames[idx].getPass("PostProcessPass")->enabled = false;
         copyPass->enabled = true;
         copyPass->currentTexIdx.x = 2;
         break;
-    case SceneViewer::ShadingMode::UV:
+    case SceneViewer::ShadingMode::NORMAL:
         _gpuFrames[idx].getPass("DeferredLightingPass")->enabled = false;
         _gpuFrames[idx].getPass("PostProcessPass")->enabled = false;
         copyPass->enabled = true;
         copyPass->currentTexIdx.x = 3;
         break;
-    case SceneViewer::ShadingMode::ALBEDO:
+    case SceneViewer::ShadingMode::UV:
         _gpuFrames[idx].getPass("DeferredLightingPass")->enabled = false;
         _gpuFrames[idx].getPass("PostProcessPass")->enabled = false;
         copyPass->enabled = true;
         copyPass->currentTexIdx.x = 4;
+        break;
+    case SceneViewer::ShadingMode::ALBEDO:
+        _gpuFrames[idx].getPass("DeferredLightingPass")->enabled = false;
+        _gpuFrames[idx].getPass("PostProcessPass")->enabled = false;
+        copyPass->enabled = true;
+        copyPass->currentTexIdx.x = 5;
         break;
     case SceneViewer::ShadingMode::FINAL:
         _gpuFrames[idx].getPass("DeferredLightingPass")->enabled = true;

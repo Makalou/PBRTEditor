@@ -99,7 +99,7 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
     vk::PipelineLayout passLevelPipelineLayout;
     vk::PipelineRasterizationStateCreateInfo rasterInfo{};
     vk::PipelineDepthStencilStateCreateInfo depthStencilInfo{};
-    vk::PipelineColorBlendAttachmentState attachmentStates[5];
+    vk::PipelineColorBlendAttachmentState attachmentStates[6];
     vk::PipelineColorBlendStateCreateInfo colorBlendInfo{};
     vk::DescriptorSetLayout passDataDescriptorLayout;
 
@@ -137,7 +137,7 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
         depthStencilInfo.setStencilTestEnable(vk::False);
 
         auto colorComponentAll = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
-        for (int i = 0; i < 5; i++)
+        for (int i = 0; i < 6; i++)
         {
             attachmentStates[i].setColorWriteMask(colorComponentAll);
             attachmentStates[i].setSrcColorBlendFactor(vk::BlendFactor::eOne);
@@ -172,9 +172,14 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
     {
         if(instancePipelineLayouts.empty())
         {
+            vk::PushConstantRange pushConstant{};
+            pushConstant.setOffset(0);
+            pushConstant.setSize(sizeof(glm::uvec4));
+            pushConstant.setStageFlags(vk::ShaderStageFlagBits::eFragment);
+
             auto pipelineLayout = frame->backendDevice->createPipelineLayout2({frame->_frameGlobalDescriptorSetLayout,
                                                          passDataDescriptorLayout,
-                                                         instanceRigidDynamic.getSetLayout()});
+                                                         instanceRigidDynamic.getSetLayout()},{pushConstant});
             instancePipelineLayouts.push_back(pipelineLayout);
         }
         return 0;
@@ -313,6 +318,10 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
                 // renderState = vertex input state + pipeline layout + shader + pipeline
                 // todo : Here is a big problem. The performance is unpredictable.
                 bindRenderState(cmdBuf,frame,instanceRigidDynamic);
+                glm::uvec4 meshIdx;
+                meshIdx.x = i;
+                meshIdx.y = scene->_dynamicRigidMeshBatch.size();
+                cmdBuf.pushConstants(graphicsPipelines[currentPipelineIdx].getPipelineLayout(), vk::ShaderStageFlagBits::eFragment,0, sizeof(glm::uvec4), &meshIdx);
                 //mesh instance know how to bind the geometry buffer, how to draw
                 instanceRigidDynamic.drawAll(cmdBuf);
                 //instanceRigidDynamic.drawOne(cmdBuf);
@@ -440,9 +449,9 @@ RASTERIZEDPASS_DEF_BEGIN(CopyPass)
     {
         beginPass(cmdBuf);
         auto passInputDescriptorSet = frame->getManagedDescriptorSet("CopyPassInputDescriptorSet");
+        cmdBuf.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipelines[0].getPipeline());
         cmdBuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 1, passInputDescriptorSet, nullptr);
         cmdBuf.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eFragment,0, sizeof(glm::uvec4), &currentTexIdx);
-        cmdBuf.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipelines[0].getPipeline());
         FullScreenQuadDrawer::draw(cmdBuf);
         endPass(cmdBuf);
     }
