@@ -233,6 +233,11 @@ void EditorGUI::showMenuEdit()
 
 void EditorGUI::showMenuShading()
 {
+	if (ImGui::BeginMenu("Effects")) // <-- Append!
+	{
+		ImGui::Checkbox("WireFrame", &viewer->enableWireFrame);
+		ImGui::EndMenu();
+	}
 	static int e = 4;
 	ImGui::RadioButton("Flat", &e, 0);
 	ImGui::RadioButton("World Position", &e, 1); 

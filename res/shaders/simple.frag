@@ -15,10 +15,11 @@ layout(location = 3) in vec3 inFragBiTangent;
 layout(location = 4) in vec2 inFragUV;
 #endif
 
-layout(location = 0) out vec4 outFragPosition;
-layout(location = 1) out vec4 outFragNormal;
-layout(location = 2) out vec4 outFragUV;
-layout(location = 3) out vec4 outFragColor;
+layout(location = 0) out vec4 outFlat;
+layout(location = 1) out vec4 outFragPosition;
+layout(location = 2) out vec4 outFragNormal;
+layout(location = 3) out vec4 outFragUV;
+layout(location = 4) out vec4 outFragColor;
 
 layout(set = 2, binding = 1) uniform sampler2D reflectanceMap;
 
@@ -34,6 +35,7 @@ void main() {
 //    #endif
     //outFragColor = vec4(vec3(0.5) * max(0.0,dot(inFragNormal,normalize(vec3(1.0,1.0,1.0)))), 1.0);
     //outFragColor = vec4(inFragNormal,1.0);
+    outFlat = vec4(vec3(0.5),1.0);
     outFragPosition = vec4(inFragPosition,1.0);
     #if HAS_VERTEX_NORMAL
     outFragNormal = vec4(inFragNormal,1.0);

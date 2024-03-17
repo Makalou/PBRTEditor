@@ -170,7 +170,7 @@ namespace renderScene {
             mesh->bindPosOnly(cmd,loader);
 
             //bind per instance data
-            cmd.bindVertexBuffers2(1, { instanceDataIdicesBuffer.buffer }, { 0 }, nullptr, { sizeof(uint32_t) },loader);
+            cmd.bindVertexBuffers2EXT(1, { instanceDataIdicesBuffer.buffer }, { 0 }, nullptr, { sizeof(uint32_t) },loader);
             cmd.drawIndexed(mesh->indexCount, perInstanceData.size(), 0, 0, 0);
         }
 

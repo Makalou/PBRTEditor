@@ -34,13 +34,15 @@ void SceneViewer::init(std::shared_ptr<DeviceExtended> device) {
             gBufferPass->scene = this->_renderScene;
             gBufferPass->addOutput<PassAttachmentDescription>("depth",vk::Format::eD32Sfloat, PassAttachmentExtent::SwapchainRelative(1.0, 1.0),
                                                               vk::AttachmentLoadOp::eClear,vk::AttachmentStoreOp::eStore);
+            gBufferPass->addOutput<PassAttachmentDescription>("flat", vk::Format::eR8G8B8A8Srgb, PassAttachmentExtent::SwapchainRelative(1.0, 1.0),
+                                                              vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore);
             gBufferPass->addOutput<PassAttachmentDescription>("wPosition",vk::Format::eR8G8B8A8Srgb, PassAttachmentExtent::SwapchainRelative(1.0, 1.0),
                                                               vk::AttachmentLoadOp::eClear,vk::AttachmentStoreOp::eStore);
             gBufferPass->addOutput<PassAttachmentDescription>("wNormal", vk::Format::eR8G8B8A8Srgb, PassAttachmentExtent::SwapchainRelative(1.0, 1.0),
-                                                                vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore);
+                                                              vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore);
             gBufferPass->addOutput<PassAttachmentDescription>("UV", vk::Format::eR8G8B8A8Srgb, PassAttachmentExtent::SwapchainRelative(1.0, 1.0),
-                                                                vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore);
-            gBufferPass->addOutput<PassAttachmentDescription>("AlbedoColor", vk::Format::eR8G8B8A8Srgb, PassAttachmentExtent::SwapchainRelative(1.0, 1.0),
+                                                              vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore);
+            gBufferPass->addOutput<PassAttachmentDescription>("albedoColor", vk::Format::eR8G8B8A8Srgb, PassAttachmentExtent::SwapchainRelative(1.0, 1.0),
                                                               vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore);
             frameGraph.registerRasterizedGPUPass(std::move(gBufferPass));
         }
@@ -61,7 +63,7 @@ void SceneViewer::init(std::shared_ptr<DeviceExtended> device) {
             auto deferredLightingPass = std::make_unique<DeferredLightingPass>();
             deferredLightingPass->addInput<PassTextureDescription>("GBufferPass::wPosition");
             deferredLightingPass->addInput<PassTextureDescription>("GBufferPass::wNormal");
-            deferredLightingPass->addInput<PassTextureDescription>("GBufferPass::AlbedoColor");
+            deferredLightingPass->addInput<PassTextureDescription>("GBufferPass::albedoColor");
 //            deferredLightingPass->addInput<PassTextureDescription>("ShadowPass::mainShadowMap");
             deferredLightingPass->addInOut<PassAttachmentDescription>("SkyBoxPass::result", "result", vk::AttachmentLoadOp::eLoad, vk::AttachmentStoreOp::eStore);
             frameGraph.registerRasterizedGPUPass(std::move(deferredLightingPass));
@@ -76,12 +78,20 @@ void SceneViewer::init(std::shared_ptr<DeviceExtended> device) {
         {
             auto copyPass = std::make_unique<CopyPass>();
             copyPass->enabled = false;
+            copyPass->addInput<PassTextureDescription>("GBufferPass::flat");
             copyPass->addInput<PassTextureDescription>("GBufferPass::wPosition");
             copyPass->addInput<PassTextureDescription>("GBufferPass::wNormal");
             copyPass->addInput<PassTextureDescription>("GBufferPass::UV");
-            copyPass->addInput<PassTextureDescription>("GBufferPass::AlbedoColor");
+            copyPass->addInput<PassTextureDescription>("GBufferPass::albedoColor");
             copyPass->addInOut<PassAttachmentDescription>("SwapchainImage", "result", vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore);
             frameGraph.registerRasterizedGPUPass(std::move(copyPass));
+        }
+        {
+            auto wireFramePass = std::make_unique<WireFramePass>();
+            wireFramePass->scene = this->_renderScene;
+            wireFramePass->addInOut<PassAttachmentDescription>("GBufferPass::depth", "depth", vk::AttachmentLoadOp::eLoad, vk::AttachmentStoreOp::eStore);
+            wireFramePass->addInOut<PassAttachmentDescription>("SwapchainImage", "result", vk::AttachmentLoadOp::eLoad, vk::AttachmentStoreOp::eStore);
+            frameGraph.registerRasterizedGPUPass(std::move(wireFramePass));
         }
         {
             auto outlinePass = std::make_unique<OutlinePass>();
@@ -119,25 +129,25 @@ vk::CommandBuffer SceneViewer::recordGraphicsCommand(unsigned int idx) {
         _gpuFrames[idx].getPass("DeferredLightingPass")->enabled = false;
         _gpuFrames[idx].getPass("PostProcessPass")->enabled = false;
         copyPass->enabled = true;
-        copyPass->currentTexIdx.x = 0;
+        copyPass->currentTexIdx.x = 1;
         break;
     case SceneViewer::ShadingMode::NORMAL:
         _gpuFrames[idx].getPass("DeferredLightingPass")->enabled = false;
         _gpuFrames[idx].getPass("PostProcessPass")->enabled = false;
         copyPass->enabled = true;
-        copyPass->currentTexIdx.x = 1;
+        copyPass->currentTexIdx.x = 2;
         break;
     case SceneViewer::ShadingMode::UV:
         _gpuFrames[idx].getPass("DeferredLightingPass")->enabled = false;
         _gpuFrames[idx].getPass("PostProcessPass")->enabled = false;
         copyPass->enabled = true;
-        copyPass->currentTexIdx.x = 2;
+        copyPass->currentTexIdx.x = 3;
         break;
     case SceneViewer::ShadingMode::ALBEDO:
         _gpuFrames[idx].getPass("DeferredLightingPass")->enabled = false;
         _gpuFrames[idx].getPass("PostProcessPass")->enabled = false;
         copyPass->enabled = true;
-        copyPass->currentTexIdx.x = 3;
+        copyPass->currentTexIdx.x = 4;
         break;
     case SceneViewer::ShadingMode::FINAL:
         _gpuFrames[idx].getPass("DeferredLightingPass")->enabled = true;
@@ -147,6 +157,7 @@ vk::CommandBuffer SceneViewer::recordGraphicsCommand(unsigned int idx) {
     default:
         break;
     }
+    _gpuFrames[idx].getPass("WireFramePass")->enabled = enableWireFrame;
     _renderScene->update();
     return _gpuFrames[idx].recordMainQueueCommands();
 }

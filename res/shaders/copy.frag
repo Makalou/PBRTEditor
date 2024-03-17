@@ -13,6 +13,7 @@ layout(set = 1, binding = 0) uniform sampler2D inputTex0;
 layout(set = 1, binding = 1) uniform sampler2D inputTex1;
 layout(set = 1, binding = 2) uniform sampler2D inputTex2;
 layout(set = 1, binding = 3) uniform sampler2D inputTex3;
+layout(set = 1, binding = 4) uniform sampler2D inputTex4;
 
 layout( push_constant ) uniform constants
 {
@@ -34,6 +35,9 @@ void main() {
         break;
         case 3:
         outColor = vec4(texture(inputTex3,inUV).rgb,1.0);
+        break;
+        case 4:
+        outColor = vec4(texture(inputTex4,inUV).rgb,1.0);
         break;
         default:
         outColor = vec4(vec3(0.0),1.0);

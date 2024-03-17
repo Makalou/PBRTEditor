@@ -99,7 +99,7 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
     vk::PipelineLayout passLevelPipelineLayout;
     vk::PipelineRasterizationStateCreateInfo rasterInfo{};
     vk::PipelineDepthStencilStateCreateInfo depthStencilInfo{};
-    vk::PipelineColorBlendAttachmentState attachmentStates[4];
+    vk::PipelineColorBlendAttachmentState attachmentStates[5];
     vk::PipelineColorBlendStateCreateInfo colorBlendInfo{};
     vk::DescriptorSetLayout passDataDescriptorLayout;
 
@@ -137,7 +137,7 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
         depthStencilInfo.setStencilTestEnable(vk::False);
 
         auto colorComponentAll = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
-        for (int i = 0; i < 4; i++)
+        for (int i = 0; i < 5; i++)
         {
             attachmentStates[i].setColorWriteMask(colorComponentAll);
             attachmentStates[i].setSrcColorBlendFactor(vk::BlendFactor::eOne);
@@ -508,7 +508,72 @@ RASTERIZEDPASS_DEF_BEGIN(BoundingBoxPass)
 RASTERIZEDPASS_DEF_END(BoundingBoxPass)
 
 RASTERIZEDPASS_DEF_BEGIN(WireFramePass)
+    renderScene::RenderScene* scene{};
+    vk::PipelineLayout pipelineLayout = VK_NULL_HANDLE;
+    vk::DescriptorSetLayout passDataDescriptorLayout;
+    void prepareAOT(GPUFrame* frame) override
+    {
+        std::vector<vk::DescriptorSetLayoutBinding> bindings;
+        vk::DescriptorSetLayoutBinding camBinding;
+        camBinding.setBinding(0);
+        camBinding.setDescriptorType(vk::DescriptorType::eUniformBuffer);
+        camBinding.setDescriptorCount(1);
+        camBinding.setStageFlags(vk::ShaderStageFlagBits::eAllGraphics);
+        bindings.push_back(camBinding);
 
+        passDataDescriptorLayout = frame->manageDescriptorSet("WireFramePassDataDescriptorSet", bindings);
+
+        frame->getManagedDescriptorSet("WireFramePassDataDescriptorSet", [frame, this](const vk::DescriptorSet& passDataDescriptorSet) mutable {
+            frame->backendDevice->updateDescriptorSetUniformBuffer(passDataDescriptorSet, 0, scene->mainView.camera.data.getBuffer());
+        });
+    }
+
+    void record(vk::CommandBuffer cmdBuf, const GPUFrame* frame) override
+    {
+        beginPass(cmdBuf);
+        auto passDataDescriptorSet = frame->getManagedDescriptorSet("WireFramePassDataDescriptorSet");
+        for (int i = 0; i < scene->_dynamicRigidMeshBatch.size(); i++)
+        {
+            auto& instanceRigidDynamic = scene->_dynamicRigidMeshBatch[i];
+            if (graphicsPipelines.empty())
+            {
+                pipelineLayout = frame->backendDevice->createPipelineLayout2({ frame->_frameGlobalDescriptorSetLayout,passDataDescriptorLayout,instanceRigidDynamic.getSetLayout() });
+                frame->backendDevice->setObjectDebugName(pipelineLayout, "WireFramePassPipelineLayout");
+                auto vs = ShaderManager::getInstance().createVertexShader(frame->backendDevice.get(), "positionOnly.vert");
+                auto fs = ShaderManager::getInstance().createFragmentShader(frame->backendDevice.get(), "constantColor.frag");
+
+                vk::PipelineRasterizationStateCreateInfo rasterInfo{};
+                rasterInfo.setCullMode(vk::CullModeFlagBits::eNone);
+                rasterInfo.setRasterizerDiscardEnable(vk::False);
+                rasterInfo.setFrontFace(vk::FrontFace::eClockwise);
+                rasterInfo.setPolygonMode(vk::PolygonMode::eLine);
+                rasterInfo.setLineWidth(2.0);
+
+                vk::PipelineDepthStencilStateCreateInfo depthStencilInfo{};
+                depthStencilInfo.setDepthTestEnable(vk::True);
+                depthStencilInfo.setDepthWriteEnable(vk::True);
+                depthStencilInfo.setDepthCompareOp(vk::CompareOp::eLess);
+                depthStencilInfo.setDepthBoundsTestEnable(vk::False);
+                depthStencilInfo.setMinDepthBounds(0.0f);
+                depthStencilInfo.setMaxDepthBounds(1.0f);
+                depthStencilInfo.setStencilTestEnable(vk::False);
+
+                VulkanGraphicsPipelineBuilder builder(frame->backendDevice->device, vs, fs,
+                    instanceRigidDynamic.getPosOnlyVertexInputState().getCreateInfo(), renderPass,
+                    pipelineLayout,rasterInfo,depthStencilInfo);
+                builder.addDynamicState(vk::DynamicState::eVertexInputBindingStride);
+                auto pipeline = builder.build();
+                frame->backendDevice->setObjectDebugName(pipeline.getPipeline(), "WireFramePassPipeline");
+                graphicsPipelines.push_back(pipeline);
+            }
+            cmdBuf.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipelines[0].getPipeline());
+            cmdBuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 1, passDataDescriptorSet, nullptr);
+            cmdBuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 2, instanceRigidDynamic.getDescriptorSet(), nullptr);
+            instanceRigidDynamic.drawAllPosOnly(cmdBuf, frame->backendDevice->getDLD());
+        }
+
+        endPass(cmdBuf);
+    }
 RASTERIZEDPASS_DEF_END(WireFramePass)
 
 RASTERIZEDPASS_DEF_BEGIN(OutlinePass)

@@ -38,6 +38,7 @@ struct SceneViewer
     };
 
     ShadingMode currenShadingMode = ShadingMode::ALBEDO;
+    bool enableWireFrame = false;
 
 private:
 	std::shared_ptr<DeviceExtended> backendDevice;
