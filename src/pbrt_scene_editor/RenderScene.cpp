@@ -96,6 +96,178 @@ namespace renderScene
         }
     }
 
+    void RenderScene::handleNodeShapes(SceneGraphNode* node, const glm::mat4& instanceBaseTransform, AssetManager& assetManager)
+    {
+        for (int i = 0; i < node->shapes.size(); i++)
+        {
+            auto* shape = node->shapes[i];
+            std::string shape_uuid;
+            PLYMeshShape* plyMeshPtr = nullptr;
+            if (shape->getType() == "PLYMesh")
+            {
+                plyMeshPtr = static_cast<PLYMeshShape*>(shape);
+                shape_uuid = plyMeshPtr->filename;
+            }
+            else {
+                return;
+                throw std::runtime_error("Only support ply mesh for now");
+            }
+
+            MeshRigidHandle meshHandle;
+
+            for (const auto& mesh : meshes)
+            {
+                if (mesh.first == shape_uuid)
+                {
+                    meshHandle = mesh.second;
+                }
+            }
+
+            if (!meshHandle)
+            {
+                meshHandle = assetManager.getOrLoadPLYMeshDevice(shape_uuid);
+                AABB aabb{};
+                aabb.minX = meshHandle.hostObject->aabb[0]; aabb.minY = meshHandle.hostObject->aabb[1];
+                aabb.minZ = meshHandle.hostObject->aabb[2]; aabb.maxX = meshHandle.hostObject->aabb[3];
+                aabb.maxY = meshHandle.hostObject->aabb[4]; aabb.maxZ = meshHandle.hostObject->aabb[5];
+                aabbs.emplace_back(aabb);
+            }
+
+            Material* mat = node->materials[i];;
+
+            // For now we assume the instance with same mesh also share same material.
+            bool foundInstance = false;
+            for (int instIdx = 0; instIdx < _dynamicRigidMeshBatch.size(); instIdx++)
+            {
+                auto& inst = _dynamicRigidMeshBatch[instIdx];
+                if (inst.mesh == meshHandle)
+                {
+                    assert(mat->name == inst.materialName);
+                    foundInstance = true;
+                    inst.perInstanceData.push_back({ node->_finalTransform * instanceBaseTransform });
+                    inst.mask.push_back(0);
+                    auto instDataIdx = inst.perInstanceData.size() - 1;
+                    node->finalTransformChange += [this, instIdx, instDataIdx](const glm::mat4& newTransform)
+                        {
+                            auto& inst = _dynamicRigidMeshBatch[instIdx];
+                            auto& instData = inst.perInstanceData[instDataIdx];
+                            instData._wTransform = newTransform;
+                            DeviceExtended::BufferCopy copy{};
+                            copy.data = &instData._wTransform;
+                            copy.dst = inst.perInstDataBuffer.buffer;
+                            copy.size = sizeof(instData._wTransform);
+                            copy.dstOffset = sizeof(instData._wTransform) * instDataIdx;
+                            uploadRequests.emplace_back(copy);
+                        };
+                    _sceneGraphNodeDynamicRigidMeshBatchBindingTable.emplace_back(node, std::make_pair(instIdx, instDataIdx));
+                    break;
+                }
+            }
+
+            if (!foundInstance)
+            {
+                // need to create new instance batch
+                InstanceBatchRigidDynamic<PerInstanceData> meshInstanceRigidDynamic(meshHandle);
+                meshInstanceRigidDynamic.perInstanceData.push_back({ node->_finalTransform * instanceBaseTransform });
+                meshInstanceRigidDynamic.materialName = mat->name;
+                meshInstanceRigidDynamic.mask.push_back(0);
+                do {
+                    if (mat->getType() == "CoatedDiffuse")
+                    {
+                        auto* coatedDiffuse = static_cast<CoatedDiffuseMaterial*>(mat);
+                        if (std::holds_alternative<texture>(coatedDiffuse->reflectance))
+                        {
+                            auto reflectanceTex = std::get<texture>(coatedDiffuse->reflectance);
+                            for (auto tex : m_sceneGraph->namedTextures)
+                            {
+                                if (tex->name == reflectanceTex.name && tex->getType() == "ImageMap")
+                                {
+                                    ImageMapTexture* imageMap = static_cast<ImageMapTexture*>(tex);
+                                    meshInstanceRigidDynamic.texture = assetManager.getOrLoadImgDevice(imageMap->filename,
+                                        imageMap->encoding,
+                                        imageMap->wrap,
+                                        imageMap->maxanisotropy);
+                                    break;
+                                }
+                            }
+                            break;
+                        }
+                    }
+                } while (0);
+
+                _dynamicRigidMeshBatch.push_back(meshInstanceRigidDynamic);
+                auto instIdx = _dynamicRigidMeshBatch.size() - 1;
+                node->finalTransformChange += [this, instIdx](const glm::mat4& newTransform)
+                    {
+                        auto& inst = _dynamicRigidMeshBatch[instIdx];
+                        auto& instData = inst.perInstanceData[0];
+                        instData._wTransform = newTransform;
+                        DeviceExtended::BufferCopy copy{};
+                        copy.data = &instData._wTransform;
+                        copy.dst = inst.perInstDataBuffer.buffer;
+                        copy.size = sizeof(instData._wTransform);
+                        copy.dstOffset = 0;
+                        uploadRequests.emplace_back(copy);
+                    };
+                _sceneGraphNodeDynamicRigidMeshBatchBindingTable.emplace_back(node, std::make_pair(instIdx, 0));
+            }
+        }
+    }
+
+    void RenderScene::handleNodeLights(SceneGraphNode* node, const glm::mat4& instanceBaseTransform, AssetManager& assetManager)
+    {
+        for (int i = 0; i < node->lights.size(); i++)
+        {
+            auto * light = node->lights[i];
+            if (light->getType() == "Infinite")
+            {
+                auto * infiniteLight = static_cast<InfiniteLight*>(light);
+            }
+        }
+    }
+
+    void RenderScene::prepareGPUResource()
+    {
+        vk::DescriptorSetLayoutBinding binding1{};
+        binding1.setBinding(0);
+        binding1.setStageFlags(vk::ShaderStageFlagBits::eAllGraphics);
+        binding1.setDescriptorType(vk::DescriptorType::eStorageBuffer);
+        binding1.setDescriptorCount(1);
+
+        vk::DescriptorSetLayoutBinding materialAlbedoBinding{};
+        materialAlbedoBinding.setBinding(1);
+        materialAlbedoBinding.setStageFlags(vk::ShaderStageFlagBits::eAllGraphics);
+        materialAlbedoBinding.setDescriptorType(vk::DescriptorType::eCombinedImageSampler);
+        materialAlbedoBinding.setDescriptorCount(1);
+
+        perInstanceDataSetLayout = backendDevice->createDescriptorSetLayout2({ binding1,materialAlbedoBinding });
+
+        vk::DescriptorPoolCreateInfo poolCreateInfo{};
+        std::array<vk::DescriptorPoolSize, 2> poolSize{};
+        poolSize[0].setType(vk::DescriptorType::eStorageBuffer);
+        poolSize[0].setDescriptorCount(_dynamicRigidMeshBatch.size());
+        poolSize[1].setType(vk::DescriptorType::eCombinedImageSampler);
+        poolSize[1].setDescriptorCount(_dynamicRigidMeshBatch.size());
+        poolCreateInfo.setPoolSizes(poolSize);
+        poolCreateInfo.setMaxSets(_dynamicRigidMeshBatch.size());
+        perInstanceDataDescriptorPool = backendDevice->createDescriptorPool(poolCreateInfo);
+
+        for (auto& dynamicInstance : _dynamicRigidMeshBatch)
+        {
+            dynamicInstance.prepare(backendDevice.get());
+            auto descriptorSet = backendDevice->allocateSingleDescriptorSet(perInstanceDataDescriptorPool, perInstanceDataSetLayout);
+
+            backendDevice->updateDescriptorSetStorageBuffer(descriptorSet, 0, dynamicInstance.perInstDataBuffer.buffer);
+            if (dynamicInstance.texture)
+            {
+                backendDevice->updateDescriptorSetCombinedImageSampler(descriptorSet, 1, dynamicInstance.texture->imageView, dynamicInstance.texture->sampler);
+            }
+
+            dynamicInstance.perInstDataDescriptorLayout = perInstanceDataSetLayout;
+            dynamicInstance.perInstDataDescriptorSet = descriptorSet;
+        }
+    }
+
     void RenderScene::buildFrom(SceneGraph * sceneGraph, AssetManager &assetManager)
     {
         m_sceneGraph = sceneGraph;
@@ -113,120 +285,8 @@ namespace renderScene
 
         auto handleNode = [this,&assetManager](SceneGraphNode* node,const glm::mat4& instanceBaseTransform )->void{
             node->focusOnSignal += nodeFocusOn;
-            if(!node->shapes.empty())
-            {
-                for(int i = 0; i < node->shapes.size(); i++)
-                {
-                    auto shape = node->shapes[i];
-                    std::string shape_uuid;
-                    PLYMeshShape* plyMeshPtr = nullptr;
-                    if (shape->getType() == "PLYMesh")
-                    {
-                        plyMeshPtr = static_cast<PLYMeshShape*>(shape);
-                        shape_uuid = plyMeshPtr->filename;
-                    }
-                    else {
-                        break;
-                        throw std::runtime_error("Only support ply mesh for now");
-                    }
-
-                    MeshRigidHandle meshHandle;
-
-                    for(const auto & mesh : meshes)
-                    {
-                        if(mesh.first == shape_uuid)
-                        {
-                            meshHandle = mesh.second;
-                        }
-                    }
-
-                    if(!meshHandle)
-                    {
-                        meshHandle = assetManager.getOrLoadPLYMeshDevice(shape_uuid);
-                        AABB aabb{};
-                        aabb.minX = meshHandle.hostObject->aabb[0]; aabb.minY = meshHandle.hostObject->aabb[1];
-                        aabb.minZ = meshHandle.hostObject->aabb[2]; aabb.maxX = meshHandle.hostObject->aabb[3];
-                        aabb.maxY = meshHandle.hostObject->aabb[4]; aabb.maxZ = meshHandle.hostObject->aabb[5];
-                        aabbs.emplace_back(aabb);
-                    }
-
-                    Material* mat = node->materials[i];;
-
-                    // For now we assume the instance with same mesh also share same material.
-                    bool foundInstance = false;
-                    for(int instIdx = 0; instIdx < _dynamicRigidMeshBatch.size(); instIdx++)
-                    {
-                        auto & inst = _dynamicRigidMeshBatch[instIdx];
-                        if(inst.mesh == meshHandle)
-                        {
-                            assert(mat->name == inst.materialName);
-                            foundInstance = true;
-                            inst.perInstanceData.push_back({node->_finalTransform * instanceBaseTransform});
-                            inst.mask.push_back(0);
-                            auto instDataIdx = inst.perInstanceData.size() - 1;
-                            node->finalTransformChange += [this, instIdx,instDataIdx](const glm::mat4 & newTransform)
-                            {
-                                auto & inst = _dynamicRigidMeshBatch[instIdx];
-                                auto & instData = inst.perInstanceData[instDataIdx];
-                                instData._wTransform = newTransform;
-                                DeviceExtended::BufferCopy copy{};
-                                copy.data = &instData._wTransform;
-                                copy.dst = inst.perInstDataBuffer.buffer;
-                                copy.size = sizeof(instData._wTransform);
-                                copy.dstOffset = sizeof(instData._wTransform) * instDataIdx;
-                                uploadRequests.emplace_back(copy);
-                            };
-                            _sceneGraphNodeDynamicRigidMeshBatchBindingTable.emplace_back(node, std::make_pair(instIdx, instDataIdx));
-                            break;
-                        }
-                    }
-
-                    if(!foundInstance)
-                    {
-                        // need to create new instance batch
-                        InstanceBatchRigidDynamic<PerInstanceData> meshInstanceRigidDynamic(meshHandle);
-                        meshInstanceRigidDynamic.perInstanceData.push_back({node->_finalTransform * instanceBaseTransform});
-                        meshInstanceRigidDynamic.materialName = mat->name;
-                        meshInstanceRigidDynamic.mask.push_back(0);
-                        do{
-                            auto * coatedDiffuse = dynamic_cast<CoatedDiffuseMaterial*>(mat);
-                            if(coatedDiffuse != nullptr && std::holds_alternative<texture>(coatedDiffuse->reflectance))
-                            {
-                                auto reflectanceTex = std::get<texture>(coatedDiffuse->reflectance);
-                                for(auto tex : m_sceneGraph->namedTextures)
-                                {
-                                    if(tex->name == reflectanceTex.name && dynamic_cast<ImageMapTexture*>(tex)!= nullptr)
-                                    {
-                                        ImageMapTexture * imageMap = dynamic_cast<ImageMapTexture*>(tex);
-                                        meshInstanceRigidDynamic.texture = assetManager.getOrLoadImgDevice(imageMap->filename,
-                                                                                                           imageMap->encoding,
-                                                                                                           imageMap->wrap,
-                                                                                                           imageMap->maxanisotropy);
-                                        break;
-                                    }
-                                }
-                                break;
-                            }
-                        } while (0);
-
-                        _dynamicRigidMeshBatch.push_back(meshInstanceRigidDynamic);
-                        auto instIdx = _dynamicRigidMeshBatch.size() - 1;
-                        node->finalTransformChange += [this, instIdx](const glm::mat4 & newTransform)
-                        {
-                            auto & inst = _dynamicRigidMeshBatch[instIdx];
-                            auto & instData = inst.perInstanceData[0];
-                            instData._wTransform = newTransform;
-                            DeviceExtended::BufferCopy copy{};
-                            copy.data = &instData._wTransform;
-                            copy.dst = inst.perInstDataBuffer.buffer;
-                            copy.size = sizeof(instData._wTransform);
-                            copy.dstOffset = 0;
-                            uploadRequests.emplace_back(copy);
-                        };
-                        _sceneGraphNodeDynamicRigidMeshBatchBindingTable.emplace_back(node,std::make_pair(instIdx,0));
-                    }
-                }
-            }
+            handleNodeShapes(node, instanceBaseTransform, assetManager);
+            handleNodeLights(node, instanceBaseTransform, assetManager);
         };
 
         std::vector<SceneGraphNode *> stack;
@@ -263,9 +323,9 @@ namespace renderScene
 
         for(Texture * tex : m_sceneGraph->namedTextures)
         {
-            if(dynamic_cast<ImageMapTexture*>(tex)!= nullptr)
+            if(tex->getType() == "ImageMap")
             {
-                ImageMapTexture* image = dynamic_cast<ImageMapTexture*>(tex);
+                ImageMapTexture* image = static_cast<ImageMapTexture*>(tex);
                 TextureDeviceHandle texture = assetManager.getOrLoadImgDevice(image->filename,image->encoding,image->wrap,image->maxanisotropy);
             }
         }
@@ -285,44 +345,8 @@ namespace renderScene
          *
          * In other word, all the manipulation of data must go through the subsystem, or manager.
          */
-        vk::DescriptorSetLayoutBinding binding1{};
-        binding1.setBinding(0);
-        binding1.setStageFlags(vk::ShaderStageFlagBits::eAllGraphics);
-        binding1.setDescriptorType(vk::DescriptorType::eStorageBuffer);
-        binding1.setDescriptorCount(1);
-
-        vk::DescriptorSetLayoutBinding materialAlbedoBinding{};
-        materialAlbedoBinding.setBinding(1);
-        materialAlbedoBinding.setStageFlags(vk::ShaderStageFlagBits::eAllGraphics);
-        materialAlbedoBinding.setDescriptorType(vk::DescriptorType::eCombinedImageSampler);
-        materialAlbedoBinding.setDescriptorCount(1);
-
-        perInstanceDataSetLayout = backendDevice->createDescriptorSetLayout2({binding1,materialAlbedoBinding});
-
-        vk::DescriptorPoolCreateInfo poolCreateInfo{};
-        std::array<vk::DescriptorPoolSize,2> poolSize{};
-        poolSize[0].setType(vk::DescriptorType::eStorageBuffer);
-        poolSize[0].setDescriptorCount(_dynamicRigidMeshBatch.size());
-        poolSize[1].setType(vk::DescriptorType::eCombinedImageSampler);
-        poolSize[1].setDescriptorCount(_dynamicRigidMeshBatch.size());
-        poolCreateInfo.setPoolSizes(poolSize);
-        poolCreateInfo.setMaxSets(_dynamicRigidMeshBatch.size());
-        perInstanceDataDescriptorPool = backendDevice->createDescriptorPool(poolCreateInfo);
-
-        for (auto& dynamicInstance : _dynamicRigidMeshBatch)
-        {
-            dynamicInstance.prepare(backendDevice.get());
-            auto descriptorSet = backendDevice->allocateSingleDescriptorSet(perInstanceDataDescriptorPool,perInstanceDataSetLayout);
-            
-            backendDevice->updateDescriptorSetStorageBuffer(descriptorSet,0,dynamicInstance.perInstDataBuffer.buffer);
-            if(dynamicInstance.texture)
-            {
-                backendDevice->updateDescriptorSetCombinedImageSampler(descriptorSet,1,dynamicInstance.texture->imageView,dynamicInstance.texture->sampler);
-            }
-
-            dynamicInstance.perInstDataDescriptorLayout = perInstanceDataSetLayout;
-            dynamicInstance.perInstDataDescriptorSet = descriptorSet;
-        }
+        
+        prepareGPUResource();
 
         m_sceneGraph->nodeSelectSignal += [this](SceneGraphNode* node)
             {

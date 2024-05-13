@@ -414,31 +414,31 @@ namespace renderScene {
         glm::mat4x4 _wTransform;
     };
 
-    struct PointLight {
+    struct RenderScenePointLight {
 
     };
 
-    struct DistantLight {
+    struct RenderSceneDistantLight {
 
     };
 
-    struct SpotLight {
+    struct RenderSceneSpotLight {
 
     };
 
-    struct InfiniteLight {
+    struct RenderSceneInfiniteLight {
 
     };
 
-    struct GoniometricLight{
+    struct RenderSceneGoniometricLight{
 
     };
 
-    struct ProjectionLight{
+    struct RenderSceneProjectionLight{
 
     };
 
-    struct AreaLight {
+    struct RenderSceneAreaLight {
         MeshRigidDevice *mesh;
     };
 
@@ -522,6 +522,9 @@ namespace renderScene {
         explicit RenderScene(const std::shared_ptr<DeviceExtended>& device);
 
         void buildFrom(SceneGraph* sceneGraph, AssetManager & assetManager);
+        void handleNodeShapes(SceneGraphNode* node, const glm::mat4& instanceBaseTransform, AssetManager& assetManager);
+        void handleNodeLights(SceneGraphNode* node, const glm::mat4& instanceBaseTransform, AssetManager& assetManager);
+        void prepareGPUResource();
 
         std::shared_ptr<DeviceExtended> backendDevice;
 
