@@ -389,34 +389,44 @@ void GPUFrame::compileAOT() {
     // After this process we guarantee that every input
     // has a valid producer.
     // And we only allow concurrent read to the same resource.
-    
-    for(int i = 0; i < _rasterPasses.size();i++)
+
+    // Zip all types of passes
+    for (int i = 0; i < _rasterPasses.size(); i++)
     {
-        auto & pass = _rasterPasses[i];
+        _allPasses.push_back(_rasterPasses[i].get());
+    }
+    for (int i = 0; i < _computePasses.size(); i++)
+    {
+        _allPasses.push_back(_computePasses[i].get());
+    }
+    
+    for(auto & pass : _allPasses)
+    {
+        // Get pass inputs
         std::vector<std::tuple<std::string, std::string, PassResourceDescriptionBase*>> inputResourceTokens;
         inputResourceTokens.reserve(pass->inputs.size() + pass->inouts.size());
-        for(int j = 0; j < pass->inputs.size(); j++)
+        for(const auto & input : pass->inputs)
         {
-            auto inputName = pass->inputs[j]->name;
+            auto inputName = input->name;
             size_t pos = inputName.find("::");
             if(pos == std::string::npos)
                 throw std::invalid_argument("Input resource must using PassName as name space");
 
             auto producerPassName = inputName.substr(0, pos);
             auto resourceName = inputName.substr(pos + 2);
-            inputResourceTokens.emplace_back(producerPassName, resourceName, pass->inputs[j].get());
+            inputResourceTokens.emplace_back(producerPassName, resourceName, input.get());
         }
 
-        for (int j = 0; j < pass->inouts.size(); j++)
+        for (const auto & inout : pass->inouts)
         {
-            auto inoutName = pass->inouts[j]->name;
+            auto inoutName = inout->name;
             size_t pos = inoutName.find("->");
             if (pos == std::string::npos)
                 throw std::invalid_argument("Failed to parse inout name");
             auto inputName = inoutName.substr(0, pos);
             if(inputName == "SwapchainImage")
             {
-                pass->inouts[j]->outputHandle = swapchainAttachment;
+                inout->outputHandle = swapchainAttachment;
                 continue;
             }
 
@@ -426,8 +436,10 @@ void GPUFrame::compileAOT() {
 
             auto producerPassName = inputName.substr(0, pos);
             auto resourceName = inputName.substr(pos + 2);
-            inputResourceTokens.emplace_back(producerPassName, resourceName, pass->inouts[j].get());
+            inputResourceTokens.emplace_back(producerPassName, resourceName, inout.get());
         }
+
+        // Find producer pass for each input resource
 
         for (const auto& token : inputResourceTokens)
         {
@@ -435,11 +447,11 @@ void GPUFrame::compileAOT() {
             auto resourceName = std::get<1>(token);
 
             GPUPass* producerPass = nullptr;
-            for (int k = 0; k < _rasterPasses.size(); k++)
+            for (int k = 0; k < _allPasses.size(); k++)
             {
-                if (_rasterPasses[k]->_name == producerPassName)
+                if (_allPasses[k]->_name == producerPassName)
                 {
-                    producerPass = _rasterPasses[k].get();
+                    producerPass = _allPasses[k];
                     break;
                 }
             }
@@ -450,12 +462,12 @@ void GPUFrame::compileAOT() {
             }
 
             PassResourceDescriptionBase* output = nullptr;
-            for (int k = 0; k < producerPass->outputs.size(); k++)
+            for (const auto & producer_output : producerPass->outputs)
             {
                 //todo : check concurrent usage to avoid RW or WW
-                if (producerPass->outputs[k]->name == resourceName)
+                if (producer_output->name == resourceName)
                 {
-                    output = producerPass->outputs[k].get();
+                    output = producer_output.get();
                     std::get<2>(token)->outputHandle = output;
                     break;
                 }
@@ -463,17 +475,17 @@ void GPUFrame::compileAOT() {
 
             if (output == nullptr)
             {
-                for (int k = 0; k < producerPass->inouts.size(); k++)
+                for (const auto & producer_inout : producerPass->inouts)
                 {
                     //todo : check concurrent usage to avoid RW or WW
-                    auto inoutName = producerPass->inouts[k]->name;
+                    auto inoutName = producer_inout->name;
                     size_t pos = inoutName.find("->");
                     if (pos == std::string::npos)
                         throw std::invalid_argument("Failed to parse inout name");
                     auto outputName = inoutName.substr(pos+2);
                     if (outputName == resourceName)
                     {
-                        output = producerPass->inouts[k].get();
+                        output = producer_inout.get();
                         std::get<2>(token)->outputHandle = output;
                         break;
                     }
@@ -485,27 +497,27 @@ void GPUFrame::compileAOT() {
                 throw std::invalid_argument(producerPassName.append(" doesn't have output ").append(resourceName));
             }
 
-            producerPass->edges.push_back(pass.get());
+            producerPass->edges.push_back(pass);
         }
     }
 
     // Topological sorting
     std::stack<int> pass_idx_stk;
-    std::vector<bool> visitedMasks(_rasterPasses.size());
+    std::vector<bool> visitedMasks(_allPasses.size());
     std::unordered_set<int> visited;
-    sortedIndices.reserve(_rasterPasses.size());
+    sortedIndices.reserve(_allPasses.size());
 
     auto getPassIdx = [&](const std::string& name) ->int
     {
-        for(int i = 0; i < _rasterPasses.size();i++)
+        for(int i = 0; i < _allPasses.size();i++)
         {
-            if(_rasterPasses[i]->_name == name)
+            if(_allPasses[i]->_name == name)
                 return i;
         }
         return -1;
     };
 
-    for(int i = 0; i < _rasterPasses.size(); i ++)
+    for(int i = 0; i < _allPasses.size(); i ++)
     {
         if(!visitedMasks[i])
         {
@@ -514,7 +526,7 @@ void GPUFrame::compileAOT() {
                 auto current = pass_idx_stk.top();
                 bool allChildrenVisited = true;
 
-                for(auto child : _rasterPasses[current]->edges)
+                for(auto child : _allPasses[current]->edges)
                 {
                     int child_idx = getPassIdx(child->_name);
                     if(!visitedMasks[child_idx]){
@@ -559,9 +571,11 @@ void GPUFrame::compileAOT() {
 
     samplers.emplace_back(backendDevice->createSampler(defaultSamplerInfo));
 
+    // After topological sorting, we know how to assign and connect resources for each pass
     for(int idx = 0; idx < sortedIndices.size(); idx++)
     {
-        auto & pass = _rasterPasses[sortedIndices[idx]];
+        auto & pass = _allPasses[sortedIndices[idx]];
+        //std::cout << pass->_name << std::endl;
         for (auto& input : pass->inputs)
         {
             assert(input->outputHandle);
@@ -609,13 +623,14 @@ void GPUFrame::compileAOT() {
         pass->buildFrameBuffer(this);
     }
 
-    for(auto & pass : _rasterPasses)
+    // Manage pass input descriptorSet
+    for(auto & pass : _allPasses)
     {
-        managePassInputDescriptorSet(pass.get());
+        managePassInputDescriptorSet(pass);
     }
 
     // Pass ahead of time preparation
-    for(auto & pass : _rasterPasses)
+    for(auto & pass : _allPasses)
     {
         pass->prepareAOT(this);
     }
@@ -636,19 +651,25 @@ void GPUFrame::update(GPUFrame::Event event) {
     if(event == Event::SWAPCHAIN_RESIZE)
     {
         backingImageViews["SwapchainImage"] = backendDevice->_swapchain.get_image_views().value()[frameIdx];
+        // We need to rebuild all passes whose framebuffer's size changes
         std::vector<GPURasterizedPass *> needRebuilds;
         for(int idx = 0; idx < sortedIndices.size(); idx ++)
         {
             auto passIdx = sortedIndices[idx];
-            auto & pass = _rasterPasses[passIdx];
+            auto & pass = _allPasses[passIdx];
+
+            if (pass->getType() != GPUPassType::Graphics)
+            {
+                continue;
+            }
 
             for(auto& output : pass->outputs)
             {
                 if(output->getType() == Attachment)
                 {
-                    auto attachmentDesc = dynamic_cast<PassAttachmentDescription*>(output.get());
-                    if (auto ptr = std::get_if<PassAttachmentExtent::SwapchainRelative>(&attachmentDesc->extent)) {
-                        needRebuilds.push_back(_rasterPasses[passIdx].get());
+                    auto attachmentDesc = static_cast<PassAttachmentDescription*>(output.get());
+                    if (std::holds_alternative<PassAttachmentExtent::SwapchainRelative>(attachmentDesc->extent)) {
+                        needRebuilds.push_back(static_cast<GPURasterizedPass*>(pass));
                         VMAImage newImg = createBackingImage(attachmentDesc);
                         auto name = pass->_name + "::" + output->name;
                         auto oldImg = backingImages[name];
@@ -668,7 +689,7 @@ void GPUFrame::update(GPUFrame::Event event) {
                 {
                     if(inout->outputHandle->name == "SwapchainImage")
                     {
-                        needRebuilds.push_back(_rasterPasses[passIdx].get());
+                        needRebuilds.push_back(static_cast<GPURasterizedPass*>(pass));
                         auto inoutName = inout->name;
                         size_t pos = inoutName.find("->");
                         if (pos == std::string::npos)
@@ -677,9 +698,9 @@ void GPUFrame::update(GPUFrame::Event event) {
                         auto name = pass->_name + "::" + outputName;
                         backingImageViews[name] = backingImageViews["SwapchainImage"];
                     }
-                    auto desc = dynamic_cast<PassAttachmentDescription*>(inout->outputHandle.pointer);
+                    auto desc = static_cast<PassAttachmentDescription*>(inout->outputHandle.pointer);
                     if (std::holds_alternative<PassAttachmentExtent::SwapchainRelative>(desc->extent)) {
-                        needRebuilds.push_back(_rasterPasses[passIdx].get());
+                        needRebuilds.push_back(static_cast<GPURasterizedPass*>(pass));
                         auto inoutName = inout->name;
                         size_t pos = inoutName.find("->");
                         if (pos == std::string::npos)
@@ -704,18 +725,19 @@ void GPUFrame::update(GPUFrame::Event event) {
             needRebuilds[i]->buildFrameBuffer(this);
         }
 
+        // Update all descriptorsets which ref to a updated attachement/texture
         std::vector<vk::DescriptorImageInfo> imgInfos;
         std::vector<vk::WriteDescriptorSet> writes;
         for(int idx = 0; idx < sortedIndices.size(); idx ++)
         {
             auto passIdx = sortedIndices[idx];
-            auto & pass = _rasterPasses[passIdx];
+            auto & pass = _allPasses[passIdx];
             uint32_t dstImgBinding = 0;
             for(auto & input : pass->inputs)
             {
                 if(input->getType() == Texture && input->outputHandle->getType() == Attachment)
                 {
-                    auto desc = dynamic_cast<PassAttachmentDescription*>(input->outputHandle.pointer);
+                    auto desc = static_cast<PassAttachmentDescription*>(input->outputHandle.pointer);
                     if (std::holds_alternative<PassAttachmentExtent::SwapchainRelative>(desc->extent)) {
                         vk::WriteDescriptorSet write;
                         write.setDstSet(getManagedDescriptorSet(pass->_name + "InputDescriptorSet"));
@@ -751,18 +773,7 @@ vk::CommandBuffer GPUFrame::recordMainQueueCommands() {
 
     //Once all pending uses have completed, it is legal to update and reuse a descriptor set.
     //https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/vkCmdBindDescriptorSets.html
-    vk::WriteDescriptorSet write{};
-    write.setDescriptorType(vk::DescriptorType::eUniformBuffer);
-    write.setDescriptorCount(1);
-    write.setDstBinding(0);
-    write.setDstSet(_frameGlobalDescriptorSet);
-    vk::DescriptorBufferInfo bufferInfo;
-    bufferInfo.setOffset(0);
-    bufferInfo.setBuffer(_frameGlobalDataBuffer.getBuffer());
-    bufferInfo.setRange(vk::WholeSize);
-    write.setBufferInfo(bufferInfo);
-
-    backendDevice->updateDescriptorSets(write,{});
+    backendDevice->updateDescriptorSetUniformBuffer(_frameGlobalDescriptorSet, 0, _frameGlobalDataBuffer.getBuffer());
 
     for(auto & allocator : perThreadMainCommandAllocators)
     {
@@ -777,10 +788,10 @@ vk::CommandBuffer GPUFrame::recordMainQueueCommands() {
      * No matter what you need to explicitly do the synchronization job.(By using pipeline barriers).
      *
      * Pipeline barrier will affect all commands that have been submitted to the queue, and commands would be submitted
-     * in to the same queue, no matter whether there are recorded into same command buffer.
+     * in to the same queue, no matter whether there are recorded into same command buffer or not.
      *
      * All in all, the only two reason we use multiple command buffers is 1. we want to serve different type of
-     * operation(which doesn't make too much different if we only use omnipotent main queue)
+     * operation(which doesn't make difference if we only use omnipotent main queue)
      * 2. we cannot operate on single command buffer in parallel.
      */
     int threadId = 0;
@@ -794,22 +805,28 @@ vk::CommandBuffer GPUFrame::recordMainQueueCommands() {
     auto frameLabelName = std::string("Frame ").append(std::to_string(frameIdx));
     frameLabel.setPLabelName(frameLabelName.c_str());
     cmdPrimary.beginDebugUtilsLabelEXT(frameLabel,backendDevice->getDLD());
-    cmdPrimary.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,_frameLevelPipelineLayout,0,_frameGlobalDescriptorSet,nullptr);
-
     cmdPrimary.setViewport(0, backendDevice->_swapchain.getDefaultViewport());
-    cmdPrimary.setScissor(0,backendDevice->_swapchain.getDefaultScissor());
+    cmdPrimary.setScissor(0, backendDevice->_swapchain.getDefaultScissor());
 
-    for(int i = 0 ; i < _rasterPasses.size(); i ++)
+    for(int i = 0 ; i < sortedIndices.size(); i ++)
     {
-        if (!_rasterPasses[i]->enabled)
+        auto& pass = _allPasses[sortedIndices[i]];
+        if (!pass->enabled)
         {
             continue;
         }
-        _rasterPasses[i]->prepareIncremental(this);
+        if (pass->getType() == GPUPassType::Graphics)
+        {
+            cmdPrimary.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, _frameLevelPipelineLayout, 0, _frameGlobalDescriptorSet, nullptr);
+        }
+        else {
+            cmdPrimary.bindDescriptorSets(vk::PipelineBindPoint::eCompute, _frameLevelPipelineLayout, 0, _frameGlobalDescriptorSet, nullptr);
+        }
+        pass->prepareIncremental(this);
         vk::DebugUtilsLabelEXT passLabel{};
-        passLabel.setPLabelName(_rasterPasses[i]->_name.c_str());
+        passLabel.setPLabelName(pass->_name.c_str());
         cmdPrimary.beginDebugUtilsLabelEXT(passLabel,backendDevice->getDLD());
-        _rasterPasses[i]->record(cmdPrimary,this);
+        pass->record(cmdPrimary,this);
         cmdPrimary.endDebugUtilsLabelEXT(backendDevice->getDLD());
     }
     cmdPrimary.endDebugUtilsLabelEXT(backendDevice->getDLD());
@@ -906,7 +923,15 @@ void GPUFrame::managePassInputDescriptorSet(GPUPass *pass) {
         auto & input = pass->inputs[i];
         assert(input->getType() == PassResourceType::Texture || input->getType() == PassResourceType::Buffer);
         vk::DescriptorSetLayoutBinding binding;
-        binding.setStageFlags(vk::ShaderStageFlagBits::eAllGraphics);
+        if (pass->getType() == GPUPassType::Graphics)
+        {
+            binding.setStageFlags(vk::ShaderStageFlagBits::eAllGraphics);
+        }
+        else if (pass->getType() == GPUPassType::Compute)
+        {
+            binding.setStageFlags(vk::ShaderStageFlagBits::eCompute);
+        }
+        
         binding.setBinding(i);
         binding.setDescriptorCount(1);
         switch (input->getType()) {

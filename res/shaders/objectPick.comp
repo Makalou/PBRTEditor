@@ -1,0 +1,36 @@
+#version 450
+#extension GL_GOOGLE_include_directive : enable
+
+#include "built_in/frameGlobalData.glsl"
+
+USE_FRAME_GLOBAL_DATA;
+
+layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 1, binding = 0) uniform sampler2D encodedMeshIDTex;
+layout(set = 1, binding = 1) uniform sampler2D encodedInstanceIDTex;
+
+layout(set = 2, binding = 0) buffer ObjectID{
+    uvec4 id;
+}objectID;
+
+uint decodeVec3ToUInt(vec3 encodedVec3) {
+    float x = encodedVec3.r * 255.0;
+    float y = encodedVec3.g * 255.0;
+    float z = encodedVec3.b * 255.0;
+
+    uint value = uint(x) << 16u | uint(y) << 8u | uint(z);
+    return value;
+}
+
+void main() {
+   int x = int(FGData.mousePos.x);
+   int y = int(FGData.mousePos.y);
+
+   vec4 encodedMeshID = texelFetch(encodedMeshIDTex,ivec2(x,y),0);
+   vec4 encodedInstanceID = texelFetch(encodedInstanceIDTex,ivec2(x,y),0);
+
+   objectID.id.z = uint(encodedMeshID.a);
+   objectID.id.x = decodeVec3ToUInt(encodedMeshID.rgb);
+   objectID.id.y = decodeVec3ToUInt(encodedInstanceID.rgb);
+}

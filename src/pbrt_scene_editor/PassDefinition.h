@@ -99,7 +99,7 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
     vk::PipelineLayout passLevelPipelineLayout;
     vk::PipelineRasterizationStateCreateInfo rasterInfo{};
     vk::PipelineDepthStencilStateCreateInfo depthStencilInfo{};
-    vk::PipelineColorBlendAttachmentState attachmentStates[6];
+    vk::PipelineColorBlendAttachmentState attachmentStates[8];
     vk::PipelineColorBlendStateCreateInfo colorBlendInfo{};
     vk::DescriptorSetLayout passDataDescriptorLayout;
 
@@ -137,7 +137,7 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
         depthStencilInfo.setStencilTestEnable(vk::False);
 
         auto colorComponentAll = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
-        for (int i = 0; i < 6; i++)
+        for (int i = 0; i < 8; i++)
         {
             attachmentStates[i].setColorWriteMask(colorComponentAll);
             attachmentStates[i].setSrcColorBlendFactor(vk::BlendFactor::eOne);
@@ -586,14 +586,100 @@ RASTERIZEDPASS_DEF_BEGIN(WireFramePass)
 RASTERIZEDPASS_DEF_END(WireFramePass)
 
 RASTERIZEDPASS_DEF_BEGIN(OutlinePass)
+    vk::PipelineLayout pipelineLayout;
     void prepareAOT(GPUFrame* frame) override
     {
-      
+        auto vs = FullScreenQuadDrawer::getVertexShader(frame->backendDevice.get());
+        auto fs = ShaderManager::getInstance().createFragmentShader(frame->backendDevice.get(), "outline.frag");
+
+        pipelineLayout = frame->backendDevice->createPipelineLayout2({ frame->_frameGlobalDescriptorSetLayout,passInputDescriptorSetLayout });
+        frame->backendDevice->setObjectDebugName(pipelineLayout, "OutlinePassPipelineLayout");
+
+        vk::PipelineColorBlendAttachmentState attachmentState{};
+        attachmentState.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
+        attachmentState.blendEnable = vk::True;
+        attachmentState.srcColorBlendFactor = vk::BlendFactor::eOne;
+        attachmentState.dstColorBlendFactor = vk::BlendFactor::eDstAlpha;
+        attachmentState.colorBlendOp = vk::BlendOp::eAdd;
+        attachmentState.srcAlphaBlendFactor = vk::BlendFactor::eOne;
+        attachmentState.dstAlphaBlendFactor = vk::BlendFactor::eZero;
+        attachmentState.alphaBlendOp = vk::BlendOp::eAdd;
+        vk::PipelineColorBlendStateCreateInfo colorBlendInfo{};
+        colorBlendInfo.setAttachments(attachmentState);
+        colorBlendInfo.setLogicOpEnable(vk::False);
+
+        VulkanGraphicsPipelineBuilder builder(frame->backendDevice->device, vs, fs,
+            FullScreenQuadDrawer::getVertexInputStateInfo(), renderPass,
+            pipelineLayout,colorBlendInfo);
+        auto pipeline = builder.build();
+        frame->backendDevice->setObjectDebugName(pipeline.getPipeline(), "OutlinePassPipeline");
+        graphicsPipelines.push_back(pipeline);
     }
 
     void record(vk::CommandBuffer cmdBuf, const GPUFrame* frame) override
     {
-        
+        beginPass(cmdBuf);
+        auto passInputDescriptorSet = frame->getManagedDescriptorSet("OutlinePassInputDescriptorSet");
+        cmdBuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 1, passInputDescriptorSet, nullptr);
+        cmdBuf.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipelines[0].getPipeline());
+        FullScreenQuadDrawer::draw(cmdBuf);
+        endPass(cmdBuf);
     }
 RASTERIZEDPASS_DEF_END(OutlinePass)
+
+COMPUTEPASS_DEF_BEGIN(ObjectPickPass)
+    vk::PipelineLayout pipelineLayout;
+    vk::Pipeline pipeline;
+    vk::DescriptorSetLayout passDataDescriptorLayout;
+    VMAObservedBufferMapped<glm::uvec4> objectIDBuffer;
+    renderScene::RenderScene* scene{};
+
+    void prepareAOT(GPUFrame* frame) override
+    {
+        auto resBuffer = frame->backendDevice->allocateObservedBufferPull<glm::uvec4>(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+        if (!resBuffer)
+        {
+            throw std::runtime_error("Failed to create objectIDBuffer");
+        }
+        objectIDBuffer = resBuffer.value();
+        vk::DescriptorSetLayoutBinding binding;
+        binding.setBinding(0);
+        binding.setDescriptorType(vk::DescriptorType::eStorageBuffer);
+        binding.setDescriptorCount(1);
+        binding.setStageFlags(vk::ShaderStageFlagBits::eCompute);
+        passDataDescriptorLayout = frame->manageDescriptorSet("ObjectPickPassDataDescriptorSet", {binding});
+        frame->getManagedDescriptorSet("ObjectPickPassDataDescriptorSet", [frame, this](const vk::DescriptorSet& passDataDescriptorSet) mutable {
+            frame->backendDevice->updateDescriptorSetStorageBuffer(passDataDescriptorSet, 0, objectIDBuffer.getBuffer());
+        });
+
+        pipelineLayout = frame->backendDevice->createPipelineLayout2({ frame->_frameGlobalDescriptorSetLayout,
+            passInputDescriptorSetLayout, passDataDescriptorLayout });
+
+        auto cs = ShaderManager::getInstance().createComputeShader(frame->backendDevice.get(), "objectPick.comp");
+        vk::ComputePipelineCreateInfo pipelineInfo{};
+        pipelineInfo.setLayout(pipelineLayout);
+        pipelineInfo.setStage(cs->getStageCreateInfo());
+
+        auto newPipeline = frame->backendDevice->createComputePipeline(VK_NULL_HANDLE, pipelineInfo);
+        if (newPipeline.result != vk::Result::eSuccess)
+        {
+            throw std::runtime_error("Failed to create ObjectPickPassPipeline");
+        }
+        pipeline = newPipeline.value;
+        frame->backendDevice->setObjectDebugName(pipelineLayout, "ObjectPickPassPipelineLayout");
+        frame->backendDevice->setObjectDebugName(pipeline, "ObjectPickPassPipeline");
+    }
+
+    void record(vk::CommandBuffer cmdBuf, const GPUFrame* frame) override
+    {
+        auto passInputDescriptorSet = frame->getManagedDescriptorSet("ObjectPickPassInputDescriptorSet");
+        cmdBuf.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipelineLayout, 1, passInputDescriptorSet, nullptr);
+        auto passDataDescriptorSet = frame->getManagedDescriptorSet("ObjectPickPassDataDescriptorSet");
+        cmdBuf.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipelineLayout, 2, passDataDescriptorSet, nullptr);
+        cmdBuf.bindPipeline(vk::PipelineBindPoint::eCompute, pipeline);
+        cmdBuf.dispatch(1, 1, 1);
+        scene->selectedDynamicRigidMeshID.x = objectIDBuffer->x;
+        scene->selectedDynamicRigidMeshID.y = objectIDBuffer->y;
+    }
+COMPUTEPASS_DEF_END(ObjectPickPass)
 #endif //PBRTEDITOR_PASSDEFINITION_H

@@ -29,6 +29,7 @@ static HashCounter NameCounter;
 
 void PBRTSceneBuilder::AttributeBegin() {
     auto* newAttributeNode = new SceneGraphNode;
+    newAttributeNode->graph = sceneGraph;
     newAttributeNode->is_empty = true;
     newAttributeNode->parent = _currentVisitNode;
     newAttributeNode->is_instance = _currentVisitNode->is_instance;
@@ -68,6 +69,7 @@ void PBRTSceneBuilder::AttributeEnd() {
 void PBRTSceneBuilder::WorldBegin() {
     NameCounter = HashCounter();
     auto* worldRootNode = new SceneGraphNode;
+    worldRootNode->graph = sceneGraph;
     worldRootNode->name = "world_root";
     worldRootNode->is_empty = false;
     Identity();
@@ -154,6 +156,7 @@ void PBRTSceneBuilder::NamedMaterial(const std::string & name) {
 
 void PBRTSceneBuilder::ObjectBegin(const std::string & instanceName){
     auto* newNode = new SceneGraphNode;
+    newNode->graph = sceneGraph;
     newNode->is_empty = true;
     newNode->name = instanceName;
     newNode->is_instance = true;

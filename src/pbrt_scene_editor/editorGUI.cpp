@@ -236,6 +236,16 @@ void EditorGUI::showMenuShading()
 	if (ImGui::BeginMenu("Effects")) // <-- Append!
 	{
 		ImGui::Checkbox("WireFrame", &viewer->enableWireFrame);
+		static bool enableAO;
+		if (ImGui::BeginMenu("AO"))
+		{
+			static int ao = 0;
+			ImGui::RadioButton("Disable", &ao, 0);
+			ImGui::RadioButton("Screen Space AO", &ao, 1);
+			ImGui::RadioButton("Ray Trace AO", &ao, 2);
+			ImGui::EndMenu();
+		}
+
 		ImGui::EndMenu();
 	}
 	static int e = 4;

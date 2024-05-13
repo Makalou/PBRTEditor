@@ -123,6 +123,10 @@ public:
 
     FragmentShader* createFragmentShader(DeviceExtended* backendDev,const std::string& name);
 
+    ComputeShader* createComputeShader(DeviceExtended* backendDev, const std::string& name, const std::vector<ShaderMacro>& macro_defs);
+
+    ComputeShader* createComputeShader(DeviceExtended* backendDev, const std::string& name);
+
 private:
     template<typename T>
     std::vector<T> loadFileBinary(const std::string& fileName)
@@ -145,6 +149,7 @@ private:
 
     std::vector<VertexShader> cachedVertexShaders;
     std::vector<FragmentShader> cachedFragmentShader;
+    std::vector<ComputeShader> cachedComputeShader;
 };
 
 #endif //PBRTEDITOR_SHADERMANAGER_H

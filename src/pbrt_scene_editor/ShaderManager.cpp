@@ -82,6 +82,27 @@ FragmentShader *ShaderManager::createFragmentShader(DeviceExtended *backendDev, 
     return createFragmentShader(backendDev,name,{});
 }
 
+ComputeShader* ShaderManager::createComputeShader(DeviceExtended* backendDev, const std::string& shaderName,
+    const std::vector<ShaderMacro>& macro_defs)
+{
+    auto spv_data = getOrCreateSPIRVVariant(shaderName, macro_defs);
+    auto spv_data_size_in_bytes = spv_data.size() * sizeof(decltype(spv_data)::value_type);
+    vk::ShaderModuleCreateInfo shaderCreateInfo{};
+    shaderCreateInfo.setPCode(spv_data.data());
+    shaderCreateInfo.setCodeSize(spv_data_size_in_bytes);
+    auto shaderCreateRes = backendDev->createShaderModule(shaderCreateInfo);
+
+    ComputeShader computeShader{ queryShaderVariantUUID(shaderName,macro_defs),shaderCreateRes };
+    cachedComputeShader.push_back(computeShader);
+
+    return &cachedComputeShader.back();
+}
+
+ComputeShader* ShaderManager::createComputeShader(DeviceExtended* backendDev, const std::string& name)
+{
+    return createComputeShader(backendDev, name, {});
+}
+
 std::vector<uint32_t>
 ShaderManager::getOrCreateSPIRVVariant(const std::string &fileName, const std::vector<ShaderMacro> &macro_defs)
 {
@@ -136,8 +157,8 @@ ShaderManager::getOrCreateSPIRVVariant(const std::string &fileName, const std::v
 
     if(std::system(command.c_str())!=0)
     {
-        //throw std::runtime_error("Failed to run command.");
-        std::cerr<< "Failed to run command.\n";
+        std::cerr << "Failed to run command.\n";
+        throw std::runtime_error("Failed to run command.");
     }
 
     //load spir-v binary(Ideally we should cache loaded binary content)

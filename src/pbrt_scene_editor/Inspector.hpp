@@ -3,6 +3,7 @@
 #include "editorComponent.hpp"
 #include <string>
 #include "imgui.h"
+#include <vector>
 
 struct Inspectable
 {
@@ -32,16 +33,28 @@ struct Inspector : EditorComponentGUI
 
     static void inspect(Inspectable * ins)
     {
-        _currentInspect = ins;
+        _currentInspects.clear();
+        _currentInspects.push_back(ins);
     }
+
+    template<typename T>
+    //std::enable_if_t<std::is_base_of<Inspectable,T>::value>
+    static void inspect(const std::vector<T*> & ins)
+    {
+        _currentInspects.clear();
+        for(auto i : ins)
+        {
+            _currentInspects.push_back(i);
+        }
+    }
+
     static void inspectDummy()
     {
-        _currentInspect = &dummy;
+        _currentInspects.clear();
     }
 
 private:
-    static Inspectable dummy;
-	static Inspectable * _currentInspect;
+    static std::vector<Inspectable*> _currentInspects;
 };
 
 static void watchField(const std::string& label,bool* field)

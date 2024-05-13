@@ -23,6 +23,8 @@ layout(location = 2) out vec4 outFragPosition;
 layout(location = 3) out vec4 outFragNormal;
 layout(location = 4) out vec4 outFragUV;
 layout(location = 5) out vec4 outFragAlbedo;
+layout(location = 6) out vec4 outEncodedMeshID;
+layout(location = 7) out vec4 outEncodedInstanceID;
 
 layout(set = 2, binding = 1) uniform sampler2D reflectanceMap;
 
@@ -63,6 +65,14 @@ vec3 uintToColor(uint id,uint range)
     return rgbColor;
 }
 
+vec3 encodeUint(uint val)
+{
+    uint x = (val & 0x00FF0000u) >> 16u;
+    uint y = (val & 0x0000FF00u) >> 8u;
+    uint z = (val & 0x000000FFu);
+    return vec3(float(x) / 255.0, float(y) / 255.0, float(z) / 255.0);
+}
+
 void main() {
 //    #if HAS_VERTEX_UV
 //    outFragColor = vec4(inFragUV,1.0, 1.0);
@@ -75,6 +85,8 @@ void main() {
 //    atomicExchange(atomicBuffer.instanceID,instanceID);
     outFlat = vec4(vec3(0.5),1.0);
     outMeshID = vec4(uintToColor(pushConstant.ID.x,pushConstant.ID.y),1.0);
+    outEncodedMeshID = vec4(encodeUint(pushConstant.ID.x),1.0);
+    outEncodedInstanceID = vec4(encodeUint(instanceID),1.0);
     outFragPosition = vec4(inFragPosition,1.0);
     #if HAS_VERTEX_NORMAL
     outFragNormal = vec4(inFragNormal,1.0);

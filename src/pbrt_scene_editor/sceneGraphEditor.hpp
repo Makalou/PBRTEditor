@@ -13,6 +13,7 @@
 
 struct AssetManager;
 struct PBRTScene;
+struct SceneGraph;
 
 struct SceneGraphNode;
 
@@ -68,6 +69,7 @@ using SceneGraphPostVisitorPayloaded = std::function<void(SceneGraphNode*,Payloa
 
 struct SceneGraphNode : Inspectable
 {
+    SceneGraph* graph;
     std::string name;
     std::vector<SceneGraphNode*> children;
     SceneGraphNode* parent;
@@ -79,7 +81,7 @@ struct SceneGraphNode : Inspectable
 
     bool is_empty = true;
     bool is_transform_detached;//transform not be affected by its parent
-    bool is_selected = false;
+    bool m_is_selected = false;
     bool is_instance = false;
 
     glm::mat4 _selfTransform;
@@ -94,9 +96,7 @@ struct SceneGraphNode : Inspectable
     rocket::signal<void(const glm::vec3 &)> finalRotationChange;
     rocket::signal<void(const glm::vec3 &)> finalScaleChange;
     rocket::thread_safe_signal<void(const glm::mat4 &)> finalTransformChange;
-    rocket::signal<void(SceneGraphNode*)> selectedSignal;
     rocket::signal<void(SceneGraphNode*)> focusOnSignal;
-    rocket::signal<void(SceneGraphNode*)> unSelectedSignal;
 
     SceneGraphNode()
     {
@@ -174,14 +174,14 @@ struct SceneGraphNode : Inspectable
             _selfTransform[3].x = x0;
             _selfTransform[3].y = x1;
             _selfTransform[3].z = x2;
-            printf("%s change translate to [%f, %f, %f]\n", this->name.c_str(),x0,x1,x2);
+            //printf("%s change translate to [%f, %f, %f]\n", this->name.c_str(),x0,x1,x2);
             selfTranslateChange({x0,x1,x2});
             updateSelfTransform();
         });
         float rotation[3];
         glm::extractEulerAngleXYZ(_selfTransform,rotation[0],rotation[1],rotation[2]);
         WATCH_FILED_FlOAT3_NOTIFY(rotation,[this](float x0, float x1, float x2){
-            printf("%s change rotation to [%f, %f, %f]\n", this->name.c_str(),x0,x1,x2);
+            //printf("%s change rotation to [%f, %f, %f]\n", this->name.c_str(),x0,x1,x2);
         });
         float scale[3];
         scale[0] = _selfTransform[0][0];
@@ -191,7 +191,7 @@ struct SceneGraphNode : Inspectable
             _selfTransform[0][0] = x0;
             _selfTransform[1][1] = x1;
             _selfTransform[2][2] = x2;
-            printf("%s change scale to [%f, %f, %f]\n", this->name.c_str(),x0,x1,x2);
+            //printf("%s change scale to [%f, %f, %f]\n", this->name.c_str(),x0,x1,x2);
             selfScaleChange({x0,x1,x2});
             updateSelfTransform();
         });
@@ -230,6 +230,24 @@ struct SceneGraphNode : Inspectable
             {
                 areaLight->show();
             }
+        }
+    }
+    
+    bool is_selected() const {
+        return m_is_selected;
+    }
+
+    void select();
+
+    void unselect();
+
+    void toggle_select() {
+        if (is_selected())
+        {
+            unselect();
+        }
+        else {
+            select();
         }
     }
 
@@ -273,6 +291,19 @@ struct SceneGraph
     //todo : note, when initiation node modify the data, a deep copy is preferred.
     std::vector<SceneGraphNode*> _objInstances;
     std::unique_ptr<Camera> camera;
+
+    rocket::signal<void(SceneGraphNode*)> nodeSelectSignal;
+    rocket::signal<void(SceneGraphNode*)> nodeUnSelectSignal;
+
+    void selectNode(SceneGraphNode* node)
+    {
+        nodeSelectSignal(node);
+    }
+
+    void unSelectNode(SceneGraphNode* node)
+    {
+        nodeUnSelectSignal(node);
+    }
 };
 
 struct SceneGraphEditor : EditorComponentGUI
@@ -286,5 +317,6 @@ struct SceneGraphEditor : EditorComponentGUI
 	SceneGraph* parsePBRTSceneFile(const std::filesystem::path& path, AssetManager& assetLoader);
 	PBRTParser _parser;
 	std::shared_ptr<PBRTScene> _currentScene;
-	SceneGraphNode* _sceneGraphRootNode;
+    //SceneGraphNode* _sceneGraphRootNode;
+    std::shared_ptr<SceneGraph> _sceneGraph;
 };

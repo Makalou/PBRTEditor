@@ -23,7 +23,7 @@ void main() {
     for (int i = -1; i <= 1; ++i) {
         for (int j = -1; j <= 1; ++j) {
             vec2 offset = vec2(i, j) * 0.001;
-            vec3 color = texture(inputTex, inUV + offset).rgb;
+            vec3 color = texture(inputTex, inUV + offset).ggg;
             gx += color.r * sobelX[i+1][j+1];
             gy += color.r * sobelY[i+1][j+1];
         }

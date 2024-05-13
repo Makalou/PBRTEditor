@@ -46,6 +46,10 @@ void SceneViewer::init(std::shared_ptr<DeviceExtended> device) {
                                                               vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore);
             gBufferPass->addOutput<PassAttachmentDescription>("albedoColor", vk::Format::eR8G8B8A8Srgb, PassAttachmentExtent::SwapchainRelative(1.0, 1.0),
                                                               vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore);
+            gBufferPass->addOutput<PassAttachmentDescription>("encodedMeshID", vk::Format::eR8G8B8A8Unorm, PassAttachmentExtent::SwapchainRelative(1.0, 1.0),
+                                                              vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore);
+            gBufferPass->addOutput<PassAttachmentDescription>("encodedInstanceID", vk::Format::eR8G8B8A8Unorm, PassAttachmentExtent::SwapchainRelative(1.0, 1.0),
+                                                              vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore);
             frameGraph.registerRasterizedGPUPass(std::move(gBufferPass));
         }
         {
@@ -54,6 +58,13 @@ void SceneViewer::init(std::shared_ptr<DeviceExtended> device) {
             selectedMaskPass->addOutput<PassAttachmentDescription>("mask",vk::Format::eR8G8B8A8Srgb, PassAttachmentExtent::SwapchainRelative(1.0, 1.0),
                                                                    vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore);
             frameGraph.registerRasterizedGPUPass(std::move(selectedMaskPass));
+        }
+        {
+            auto objectPickPass = std::make_unique<ObjectPickPass>();
+            objectPickPass->scene = this->_renderScene;
+            objectPickPass->addInput<PassTextureDescription>("GBufferPass::encodedMeshID");
+            objectPickPass->addInput<PassTextureDescription>("GBufferPass::encodedInstanceID");
+            frameGraph.registerComputeGPUPass(std::move(objectPickPass));
         }
 //        {
 //            auto shadowPass = std::make_unique<ShadowPass>();
@@ -73,7 +84,6 @@ void SceneViewer::init(std::shared_ptr<DeviceExtended> device) {
         {
             auto postProcessPass = std::make_unique<PostProcessPass>();
             postProcessPass->addInput<PassTextureDescription>("DeferredLightingPass::result");
-            postProcessPass->addInput<PassTextureDescription>("SelectedMaskPass::mask");
             postProcessPass->addInOut<PassAttachmentDescription>("SwapchainImage", "result", vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore);
             frameGraph.registerRasterizedGPUPass(std::move(postProcessPass));
         }
@@ -86,21 +96,21 @@ void SceneViewer::init(std::shared_ptr<DeviceExtended> device) {
             copyPass->addInput<PassTextureDescription>("GBufferPass::wNormal");
             copyPass->addInput<PassTextureDescription>("GBufferPass::UV");
             copyPass->addInput<PassTextureDescription>("GBufferPass::albedoColor");
-            copyPass->addInOut<PassAttachmentDescription>("SwapchainImage", "result", vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore);
+            copyPass->addInOut<PassAttachmentDescription>("PostProcessPass::result", "result", vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore);
             frameGraph.registerRasterizedGPUPass(std::move(copyPass));
         }
         {
             auto wireFramePass = std::make_unique<WireFramePass>();
             wireFramePass->scene = this->_renderScene;
             wireFramePass->addInOut<PassAttachmentDescription>("GBufferPass::depth", "depth", vk::AttachmentLoadOp::eLoad, vk::AttachmentStoreOp::eStore);
-            wireFramePass->addInOut<PassAttachmentDescription>("SwapchainImage", "result", vk::AttachmentLoadOp::eLoad, vk::AttachmentStoreOp::eStore);
+            wireFramePass->addInOut<PassAttachmentDescription>("CopyPass::result", "result", vk::AttachmentLoadOp::eLoad, vk::AttachmentStoreOp::eStore);
             frameGraph.registerRasterizedGPUPass(std::move(wireFramePass));
         }
         {
             auto outlinePass = std::make_unique<OutlinePass>();
-            outlinePass->addInput<PassTextureDescription>("SelectedMaskPass:mask");
-            outlinePass->addInOut<PassAttachmentDescription>("SwapchainImage", "result", vk::AttachmentLoadOp::eLoad, vk::AttachmentStoreOp::eStore);
-            //frameGraph.registerRasterizedGPUPass(std::move(outlinePass));
+            outlinePass->addInput<PassTextureDescription>("SelectedMaskPass::mask");
+            outlinePass->addInOut<PassAttachmentDescription>("WireFramePass::result", "result", vk::AttachmentLoadOp::eLoad, vk::AttachmentStoreOp::eStore);
+            frameGraph.registerRasterizedGPUPass(std::move(outlinePass));
         }
         _gpuFrames.push_back(std::move(frameGraph));
     }

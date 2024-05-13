@@ -233,6 +233,12 @@ struct PassReferenceDescription : PassResourceDescriptionBase
 
 };
 
+enum GPUPassType
+{
+    Graphics,
+    Compute
+};
+
 struct GPUPass
 {
     // Used when reference pass output
@@ -246,6 +252,8 @@ struct GPUPass
     }
 
     virtual ~GPUPass() = default;
+
+    virtual GPUPassType getType() const = 0;
 
     //DeviceExtended* backend_device;
     std::vector<std::unique_ptr<PassResourceDescriptionBase>> inputs;
@@ -308,6 +316,8 @@ struct GPUPass
     {
 
     }
+
+    virtual void record(vk::CommandBuffer cmdBuf, const GPUFrame* frame) = 0;
 };
 
 struct FrameExternalResourceImmutable
@@ -354,14 +364,25 @@ private:
 
 struct GPUComputePass : GPUPass
 {
+    GPUComputePass() = delete;
+    explicit GPUComputePass(const std::string& name) : GPUPass(name) {};
+
+    virtual ~GPUComputePass()
+    {
+
+    }
+
+    virtual GPUPassType getType() const override
+    {
+        return GPUPassType::Compute;
+    }
+   
+
     std::unordered_map<std::string, vk::Pipeline> computePipelines;
-    std::unordered_map<std::string, vk::PipelineLayout> pipelineLayouts;
-    std::unordered_map<std::string, vk::ShaderModule> shaders;
 };
 
 struct GPURasterizedPass : GPUPass
 {
-    virtual void record(vk::CommandBuffer cmdBuf, const GPUFrame* frame) = 0;
     void beginPass(vk::CommandBuffer cmdBuf);
 
     void endPass(vk::CommandBuffer cmdBuf);
@@ -391,6 +412,11 @@ struct GPURasterizedPass : GPUPass
     virtual ~GPURasterizedPass()
     {
 
+    }
+
+    virtual GPUPassType getType() const override
+    {
+        return GPUPassType::Graphics;
     }
 };
 
@@ -443,6 +469,15 @@ struct GPUFrame {
             }
         }
         _rasterPasses.emplace_back(std::move(pass));
+    }
+
+    void registerComputeGPUPass(std::unique_ptr<GPUComputePass>&& pass) {
+        for (const auto& compute_pass : _computePasses) {
+            if (pass->_name == compute_pass->_name) {
+                throw std::invalid_argument("Pass has been registered.");
+            }
+        }
+        _computePasses.emplace_back(std::move(pass));
     }
 
     struct PassDataDescriptorSetBaseLayout {
@@ -587,6 +622,8 @@ struct GPUFrame {
     PassAttachmentDescription* swapchainAttachment;
     std::vector<int> sortedIndices;
     std::vector<std::unique_ptr<GPURasterizedPass>> _rasterPasses;
+    std::vector<std::unique_ptr<GPUComputePass>> _computePasses;
+    std::vector<GPUPass*> _allPasses;
     std::unordered_map<std::string,vk::ImageView> backingImageViews;
     std::unordered_map<std::string,VMAImage> backingImages;
     std::vector<vk::Sampler> samplers;

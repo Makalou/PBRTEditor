@@ -176,31 +176,31 @@ namespace renderScene {
 
         uint32_t updateCurrentMask(uint32_t _mask,DeviceExtended* device)
         {
-            std::vector<uint32_t> collectMaskedIdices;
+            std::vector<uint32_t> collectMaskedIndices;
             for (int i = 0; i < mask.size(); i++)
             {
                 if (mask[i] == _mask)
                 {
-                    collectMaskedIdices.push_back(i);
+                    collectMaskedIndices.push_back(i);
                 }
             }
-            if (collectMaskedIdices.empty())
+            if (collectMaskedIndices.empty())
             {
                 collectedMaskedCache.clear();
                 return 0;
             }
 
-            if (collectMaskedIdices.size() > collectedMaskedCache.size())
+            if (collectMaskedIndices.size() > collectedMaskedCache.size())
             {
-                collectedMaskedCache = collectMaskedIdices;
+                collectedMaskedCache = collectMaskedIndices;
                 device->oneTimeUploadSync(collectedMaskedCache.data(), sizeof(uint32_t) * collectedMaskedCache.size(), instanceMaskedIdicesBuffer.buffer);
                 return collectedMaskedCache.size();
             }
 
             bool consistence = true;
-            for (int i = 0; i < collectMaskedIdices.size(); i++)
+            for (int i = 0; i < collectMaskedIndices.size(); i++)
             {
-                if (collectMaskedIdices[i] != collectedMaskedCache[i])
+                if (collectMaskedIndices[i] != collectedMaskedCache[i])
                 {
                     consistence = false;
                     break;
@@ -209,11 +209,11 @@ namespace renderScene {
 
             if (consistence)
             {
-                collectedMaskedCache.resize(collectMaskedIdices.size());
+                collectedMaskedCache.resize(collectMaskedIndices.size());
                 return collectedMaskedCache.size();
             }
 
-            collectedMaskedCache = collectMaskedIdices;
+            collectedMaskedCache = collectMaskedIndices;
             device->oneTimeUploadSync(collectedMaskedCache.data(), sizeof(uint32_t) * collectedMaskedCache.size(), instanceMaskedIdicesBuffer.buffer);
             return collectedMaskedCache.size();
         }
@@ -495,6 +495,11 @@ namespace renderScene {
 
         std::vector<AABB> aabbs{};
         RenderView mainView;
+
+        SceneGraph* m_sceneGraph;
+        std::vector<std::pair<SceneGraphNode*, std::pair<int, int>>> _sceneGraphNodeDynamicRigidMeshBatchBindingTable;
+
+        glm::uvec4 selectedDynamicRigidMeshID;
 
         /*
          * Is it a good idea to let render scene manage perInstanceData descriptorSet?

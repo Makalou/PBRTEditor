@@ -31,7 +31,7 @@ namespace renderScene
             mainView.camera.data->proj[1][1] *= -1.0f;
 
             Window::registerMouseDragCallback([this](int button, double deltaX, double deltaY){
-                if(button == GLFW_MOUSE_BUTTON_LEFT)
+                if(button == GLFW_MOUSE_BUTTON_RIGHT)
                 {
                     mainView.camera.yaw += 0.1f * deltaX;
                     mainView.camera.pitch -= 0.1f * deltaY;
@@ -71,11 +71,35 @@ namespace renderScene
                 glm::vec3 eye = mainView.camera.data->position;
                 mainView.camera.data->view = glm::lookAt(eye, eye + mainView.camera.front, { 0,1,0 });
             });
+
+            Window::registerMouseButtonCallback([this](int button, int action, int mods) {
+                static float last_click_time = glfwGetTime();
+                if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS)
+                {
+                    auto duration = glfwGetTime() - last_click_time;
+                    if (duration > 0.001 && duration < 0.1) {
+                        if (m_sceneGraph == nullptr)
+                        {
+                            return;
+                        }
+                        for (auto binding : _sceneGraphNodeDynamicRigidMeshBatchBindingTable)
+                        {
+                            if (binding.second.first == selectedDynamicRigidMeshID.x && binding.second.second == selectedDynamicRigidMeshID.y)
+                            {
+                                binding.first->toggle_select();
+                            }
+                        }
+                    }
+                }
+                last_click_time = glfwGetTime();
+            });
         }
     }
 
     void RenderScene::buildFrom(SceneGraph * sceneGraph, AssetManager &assetManager)
     {
+        m_sceneGraph = sceneGraph;
+
         static auto nodeFocusOn = [this](SceneGraphNode* node)->void
         {
             glm::vec3 target;
@@ -87,7 +111,7 @@ namespace renderScene
             mainView.camera.data->view = glm::lookAt(eye, target, { 0,1,0 });
         };
 
-        auto handleNode = [this, sceneGraph,&assetManager](SceneGraphNode* node,const glm::mat4& instanceBaseTransform )->void{
+        auto handleNode = [this,&assetManager](SceneGraphNode* node,const glm::mat4& instanceBaseTransform )->void{
             node->focusOnSignal += nodeFocusOn;
             if(!node->shapes.empty())
             {
@@ -150,14 +174,7 @@ namespace renderScene
                                 copy.dstOffset = sizeof(instData._wTransform) * instDataIdx;
                                 uploadRequests.emplace_back(copy);
                             };
-                            node->selectedSignal += [this, instIdx, instDataIdx](SceneGraphNode* node)
-                            {
-                                _dynamicRigidMeshBatch[instIdx].mask[instDataIdx] = 1;
-                            };
-                            node->unSelectedSignal += [this, instIdx, instDataIdx](SceneGraphNode* node)
-                            {
-                                _dynamicRigidMeshBatch[instIdx].mask[instDataIdx] = 0;
-                            };
+                            _sceneGraphNodeDynamicRigidMeshBatchBindingTable.emplace_back(node, std::make_pair(instIdx, instDataIdx));
                             break;
                         }
                     }
@@ -174,7 +191,7 @@ namespace renderScene
                             if(coatedDiffuse != nullptr && std::holds_alternative<texture>(coatedDiffuse->reflectance))
                             {
                                 auto reflectanceTex = std::get<texture>(coatedDiffuse->reflectance);
-                                for(auto tex : sceneGraph->namedTextures)
+                                for(auto tex : m_sceneGraph->namedTextures)
                                 {
                                     if(tex->name == reflectanceTex.name && dynamic_cast<ImageMapTexture*>(tex)!= nullptr)
                                     {
@@ -204,21 +221,14 @@ namespace renderScene
                             copy.dstOffset = 0;
                             uploadRequests.emplace_back(copy);
                         };
-                        node->selectedSignal += [this, instIdx](SceneGraphNode* node)
-                        {
-                            _dynamicRigidMeshBatch[instIdx].mask[0] = 1;
-                        };
-                        node->unSelectedSignal += [this, instIdx](SceneGraphNode* node)
-                        {
-                            _dynamicRigidMeshBatch[instIdx].mask[0] = 0;
-                        };
+                        _sceneGraphNodeDynamicRigidMeshBatchBindingTable.emplace_back(node,std::make_pair(instIdx,0));
                     }
                 }
             }
         };
 
         std::vector<SceneGraphNode *> stack;
-        stack.push_back(sceneGraph->root);
+        stack.push_back(m_sceneGraph->root);
 
         while(!stack.empty())
         {
@@ -249,7 +259,7 @@ namespace renderScene
             handleNode(node,glm::identity<glm::mat4>());
         }
 
-        for(Texture * tex : sceneGraph->namedTextures)
+        for(Texture * tex : m_sceneGraph->namedTextures)
         {
             if(dynamic_cast<ImageMapTexture*>(tex)!= nullptr)
             {
@@ -311,6 +321,34 @@ namespace renderScene
             dynamicInstance.perInstDataDescriptorLayout = perInstanceDataSetLayout;
             dynamicInstance.perInstDataDescriptorSet = descriptorSet;
         }
+
+        m_sceneGraph->nodeSelectSignal += [this](SceneGraphNode* node)
+            {
+                for (const auto binding : _sceneGraphNodeDynamicRigidMeshBatchBindingTable)
+                {
+                    if (binding.first == node)
+                    {
+                        auto instIdx = binding.second.first;
+                        auto instDataIdx = binding.second.second;
+                        _dynamicRigidMeshBatch[instIdx].mask[instDataIdx] = 1;
+                        return;
+                    }
+                }
+            };
+
+        m_sceneGraph->nodeUnSelectSignal += [this](SceneGraphNode* node)
+            {
+                for (const auto binding : _sceneGraphNodeDynamicRigidMeshBatchBindingTable)
+                {
+                    if (binding.first == node)
+                    {
+                        auto instIdx = binding.second.first;
+                        auto instDataIdx = binding.second.second;
+                        _dynamicRigidMeshBatch[instIdx].mask[instDataIdx] = 0;
+                        return;
+                    }
+                }
+            };
     }
 
     void RenderScene::update() {
