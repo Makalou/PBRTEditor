@@ -51,6 +51,7 @@
 
 #define DEF_BASECLASS_BEGIN(base) struct base :  Inspectable{ \
          virtual void parse(const std::vector<PBRTParam> & para_lists) = 0; \
+         virtual std::string getType() const = 0; 
 
 #define DEF_BASECLASS_END };
 
@@ -63,9 +64,8 @@
                                      \
                                      \
         struct sub##base : public base { \
-        static constexpr auto Type() {                       \
-            return #sub;                   \
-        }\
+        static constexpr auto Type() { return #sub; }\
+        std::string getType() const override {return #sub; } 
 
 #define DEF_SUBCLASS_END };
 

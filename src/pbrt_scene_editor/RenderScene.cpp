@@ -119,11 +119,13 @@ namespace renderScene
                 {
                     auto shape = node->shapes[i];
                     std::string shape_uuid;
-                    PLYMeshShape * plyMeshPtr = dynamic_cast<PLYMeshShape *>(shape);
-                    if(plyMeshPtr != nullptr)
+                    PLYMeshShape* plyMeshPtr = nullptr;
+                    if (shape->getType() == "PLYMesh")
                     {
-                        shape_uuid = dynamic_cast<PLYMeshShape *>(shape)->filename;
-                    }else{
+                        plyMeshPtr = static_cast<PLYMeshShape*>(shape);
+                        shape_uuid = plyMeshPtr->filename;
+                    }
+                    else {
                         break;
                         throw std::runtime_error("Only support ply mesh for now");
                     }
