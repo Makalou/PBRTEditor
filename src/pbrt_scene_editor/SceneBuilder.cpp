@@ -229,7 +229,8 @@ void PBRTSceneBuilder::Transform(const float* m){
     if(_currentVisitNode!= nullptr)
     {
         _currentVisitNode->is_empty = false;
-        _currentVisitNode->_finalTransform = glm::make_mat4x4(m);
+        _currentVisitNode->_selfTransform = glm::make_mat4x4(m);
+        _currentVisitNode->_finalTransform = _currentVisitNode->_selfTransform;
         _currentVisitNode->is_transform_detached = true;
     }
 }

@@ -74,6 +74,122 @@ void rightClickMenu2(bool selected){
 
 }
 
+void SceneGraphNode::visit(const SceneGraphVisitor& visitor)
+{
+    visitor(this);
+    for (auto* child : children) {
+        child->visit(visitor);
+    }
+}
+
+void SceneGraphNode::visit(const SceneGraphPreVisitor& pre_visitor, const SceneGraphPostVisitor& post_visitor)
+{
+    auto pair = pre_visitor(this);
+    if (pair.first) {
+        for (auto* child : children) {
+            child->visit(pre_visitor, post_visitor);
+        }
+    }
+    if (pair.second)
+        post_visitor(this);
+}
+
+void SceneGraphNode::show()
+{
+    float translate[3];
+    translate[0] = _selfTransform[3].x;
+    translate[1] = _selfTransform[3].y;
+    translate[2] = _selfTransform[3].z;
+
+    if (WATCH_FILED_FlOAT3(translate,-10.0,10.0))
+    {
+        _selfTransform[3].x = translate[0];
+        _selfTransform[3].y = translate[1];
+        _selfTransform[3].z = translate[2];
+        //printf("%s change translate to [%f, %f, %f]\n", this->name.c_str(),x0,x1,x2);
+        graph->nodeSelfTranslateChangeSignal(this);
+        updateSelfTransform();
+    }
+
+    float rotation[3];
+    glm::extractEulerAngleXYZ(_selfTransform, rotation[0], rotation[1], rotation[2]);
+    if (WATCH_FILED_FlOAT3(rotation, -10.0, 10.0))
+    {
+
+    }
+    float scale[3];
+    scale[0] = _selfTransform[0][0];
+    scale[1] = _selfTransform[1][1];
+    scale[2] = _selfTransform[2][2];
+    if (WATCH_FILED_FlOAT3(scale, -10.0, 10.0))
+    {
+        _selfTransform[0][0] = scale[0];
+        _selfTransform[1][1] = scale[1];
+        _selfTransform[2][2] = scale[2];
+        //printf("%s change scale to [%f, %f, %f]\n", this->name.c_str(),x0,x1,x2);
+        graph->nodeSelfScaleChangeSignal(this);
+        updateSelfTransform();
+    }
+        
+    if (!shapes.empty())
+    {
+        ImGui::Separator();
+        for (auto shape : shapes)
+        {
+            shape->show();
+        }
+    }
+
+    if (!materials.empty())
+    {
+        ImGui::Separator();
+        for (auto material : materials)
+        {
+            material->show();
+        }
+    }
+
+    if (!lights.empty())
+    {
+        ImGui::Separator();
+        for (auto light : lights)
+        {
+            light->show();
+        }
+    }
+
+    if (!areaLights.empty())
+    {
+        ImGui::Separator();
+        for (auto areaLight : areaLights)
+        {
+            areaLight->show();
+        }
+    }
+}
+
+void SceneGraphNode::updateSelfTransform()
+{
+    graph->selfTransformChange(this);
+    updateFinalTransform();
+}
+
+void SceneGraphNode::updateFinalTransform()
+{
+    if (parent != nullptr && !is_transform_detached)
+    {
+        _finalTransform = _selfTransform * parent->_finalTransform;
+    }
+    else {
+        _finalTransform = _selfTransform;
+    }
+    graph->finalTransformChange(this);
+    for (auto& child : children)
+    {
+        child->updateFinalTransform();
+    }
+}
+
 void SceneGraphNode::select()
 {
     m_is_selected = true;

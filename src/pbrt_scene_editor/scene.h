@@ -580,7 +580,7 @@ DEF_SUBCLASS_BEGIN(Material,CoatedDiffuse)
     void show() override
     {
         Material::show();
-        WATCH_FIELD(normalmap)
+        WATCH_FIELD(normalmap);
     }
 
 DEF_SUBCLASS_END
@@ -613,7 +613,7 @@ DEF_SUBCLASS_BEGIN(Material,CoatedConductor)
     void show() override
     {
         Material::show();
-        WATCH_FIELD(normalmap)
+        WATCH_FIELD(normalmap);
     }
 DEF_SUBCLASS_END
 

@@ -57,39 +57,39 @@ private:
     static std::vector<Inspectable*> _currentInspects;
 };
 
-static void watchField(const std::string& label,bool* field)
+static bool watchField(const std::string& label,bool* field)
 {
-    ImGui::Checkbox(label.c_str(),field);
+    return ImGui::Checkbox(label.c_str(),field);
 }
 
-static void watchField(const std::string& label, float* field)
+static bool watchField(const std::string& label, float* field)
 {
-    ImGui::SliderFloat(label.c_str(),field,-1000.0f,1000.0f);
+    return ImGui::SliderFloat(label.c_str(),field,-1000.0f,1000.0f);
 }
 
-static void watchField(const std::string& label, int* field)
+static bool watchField(const std::string& label, int* field)
 {
-    ImGui::SliderInt(label.c_str(),field,-1000.0f,1000.0f);
+    return ImGui::SliderInt(label.c_str(),field,-1000.0f,1000.0f);
 }
 
-static void watchFieldFloat2(const std::string& label, float* field)
+static bool watchFieldFloat2(const std::string& label, float* field)
 {
-    ImGui::SliderFloat2(label.c_str(),field,-1000.0f,1000.0f);
+    return ImGui::SliderFloat2(label.c_str(),field,-1000.0f,1000.0f);
 }
 
-static void watchFieldFloat3(const std::string& label, float* field)
+static bool watchFieldFloat3(const std::string& label, float* field, float vmin, float vmax)
 {
-    ImGui::SliderFloat3(label.c_str(),field,-1000.0f,1000.0f);
+    return ImGui::SliderFloat3(label.c_str(),field,vmin,vmax);
 }
 
-static void watchFieldCombo(const std::string& label, int* current,const char* const items[], int items_count)
+static bool watchFieldCombo(const std::string& label, int* current,const char* const items[], int items_count)
 {
-    ImGui::Combo(label.c_str(),current,items,items_count);
+    return ImGui::Combo(label.c_str(),current,items,items_count);
 }
 
 static void watchField(const std::string& label,std::string* str)
 {
-    ImGui::LabelText(label.c_str(),"%s", str->c_str());
+    return ImGui::LabelText(label.c_str(),"%s", str->c_str());
 }
 
 template <typename Callback>
@@ -146,14 +146,14 @@ static void watchFieldComboNotify(const std::string& label, int* current,const c
     }
 }
 
-#define WATCH_FIELD(field_name) watchField(#field_name,&field_name);
+#define WATCH_FIELD(field_name) watchField(#field_name,&field_name)
 
-#define WATCH_FILED_FlOAT2(field_name) watchFieldFloat2(#field_name,field_name);
+#define WATCH_FILED_FlOAT2(field_name) watchFieldFloat2(#field_name,field_name)
 
-#define WATCH_FILED_FlOAT3(field_name) watchFieldFloat3(#field_name,field_name);
+#define WATCH_FILED_FlOAT3(field_name,vmin,vmax) watchFieldFloat3(#field_name,field_name,vmin, vmax)
 
-#define WATCH_FIELD_NOTIFY(field_name,callback) watchFieldNotify(#field_name,&field_name,callback);
+#define WATCH_FIELD_NOTIFY(field_name,callback) watchFieldNotify(#field_name,&field_name,callback)
 
-#define WATCH_FILED_FlOAT2_NOTIFY(field_name,callback) watchFieldFloat2Notify(#field_name,field_name,callback);
+#define WATCH_FILED_FlOAT2_NOTIFY(field_name,callback) watchFieldFloat2Notify(#field_name,field_name,callback)
 
-#define WATCH_FILED_FlOAT3_NOTIFY(field_name,callback) watchFieldFloat3Notify(#field_name,field_name,callback);
+#define WATCH_FILED_FlOAT3_NOTIFY(field_name,callback) watchFieldFloat3Notify(#field_name,field_name,callback)

@@ -147,18 +147,6 @@ namespace renderScene
                     inst.perInstanceData.push_back({ node->_finalTransform * instanceBaseTransform });
                     inst.mask.push_back(0);
                     auto instDataIdx = inst.perInstanceData.size() - 1;
-                    node->finalTransformChange += [this, instIdx, instDataIdx](const glm::mat4& newTransform)
-                        {
-                            auto& inst = _dynamicRigidMeshBatch[instIdx];
-                            auto& instData = inst.perInstanceData[instDataIdx];
-                            instData._wTransform = newTransform;
-                            DeviceExtended::BufferCopy copy{};
-                            copy.data = &instData._wTransform;
-                            copy.dst = inst.perInstDataBuffer.buffer;
-                            copy.size = sizeof(instData._wTransform);
-                            copy.dstOffset = sizeof(instData._wTransform) * instDataIdx;
-                            uploadRequests.emplace_back(copy);
-                        };
                     _sceneGraphNodeDynamicRigidMeshBatchBindingTable.emplace_back(node, std::make_pair(instIdx, instDataIdx));
                     break;
                 }
@@ -197,18 +185,6 @@ namespace renderScene
 
                 _dynamicRigidMeshBatch.push_back(meshInstanceRigidDynamic);
                 auto instIdx = _dynamicRigidMeshBatch.size() - 1;
-                node->finalTransformChange += [this, instIdx](const glm::mat4& newTransform)
-                    {
-                        auto& inst = _dynamicRigidMeshBatch[instIdx];
-                        auto& instData = inst.perInstanceData[0];
-                        instData._wTransform = newTransform;
-                        DeviceExtended::BufferCopy copy{};
-                        copy.data = &instData._wTransform;
-                        copy.dst = inst.perInstDataBuffer.buffer;
-                        copy.size = sizeof(instData._wTransform);
-                        copy.dstOffset = 0;
-                        uploadRequests.emplace_back(copy);
-                    };
                 _sceneGraphNodeDynamicRigidMeshBatchBindingTable.emplace_back(node, std::make_pair(instIdx, 0));
             }
         }
@@ -284,7 +260,6 @@ namespace renderScene
         };
 
         auto handleNode = [this,&assetManager](SceneGraphNode* node,const glm::mat4& instanceBaseTransform )->void{
-            node->focusOnSignal += nodeFocusOn;
             handleNodeShapes(node, instanceBaseTransform, assetManager);
             handleNodeLights(node, instanceBaseTransform, assetManager);
         };
@@ -375,6 +350,27 @@ namespace renderScene
                     }
                 }
             };
+
+        m_sceneGraph->nodeFinalTransformChangeSignal += [this](SceneGraphNode* node){
+            for (const auto binding : _sceneGraphNodeDynamicRigidMeshBatchBindingTable)
+            {
+                if (binding.first == node)
+                {
+                    auto instIdx = binding.second.first;
+                    auto instDataIdx = binding.second.second;
+                    auto& inst = _dynamicRigidMeshBatch[instIdx];
+                    auto& instData = inst.perInstanceData[instDataIdx];
+                    instData._wTransform = node->_finalTransform;
+                    DeviceExtended::BufferCopy copy{};
+                    copy.data = &instData._wTransform;
+                    copy.dst = inst.perInstDataBuffer.buffer;
+                    copy.size = sizeof(instData._wTransform);
+                    copy.dstOffset = sizeof(instData._wTransform) * instDataIdx;
+                    uploadRequests.emplace_back(copy);
+                    return;
+                }
+            }
+        };
     }
 
     void RenderScene::update() {

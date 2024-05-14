@@ -69,10 +69,10 @@ using SceneGraphPostVisitorPayloaded = std::function<void(SceneGraphNode*,Payloa
 
 struct SceneGraphNode : Inspectable
 {
-    SceneGraph* graph;
+    SceneGraph* graph = nullptr;
     std::string name;
     std::vector<SceneGraphNode*> children;
-    SceneGraphNode* parent;
+    SceneGraphNode* parent = nullptr;
 
     std::vector<Shape*> shapes;
     std::vector<Material*> materials;
@@ -80,47 +80,22 @@ struct SceneGraphNode : Inspectable
     std::vector<AreaLight*> areaLights;
 
     bool is_empty = true;
-    bool is_transform_detached;//transform not be affected by its parent
+    bool is_transform_detached = false;//transform not be affected by its parent
     bool m_is_selected = false;
     bool is_instance = false;
 
     glm::mat4 _selfTransform;
     glm::mat4 _finalTransform;
 
-    rocket::signal<void(const glm::vec3 &)> selfTranslateChange;
-    rocket::signal<void(const glm::vec3 &)> selfRotationChange;
-    rocket::signal<void(const glm::vec3 &)> selfScaleChange;
-    rocket::signal<void(const glm::mat4 &)> selfTransformChange;
-
-    rocket::signal<void(const glm::vec3 &)> finalTranslateChange;
-    rocket::signal<void(const glm::vec3 &)> finalRotationChange;
-    rocket::signal<void(const glm::vec3 &)> finalScaleChange;
-    rocket::thread_safe_signal<void(const glm::mat4 &)> finalTransformChange;
-    rocket::signal<void(SceneGraphNode*)> focusOnSignal;
-
     SceneGraphNode()
     {
-        _selfTransform = glm::identity<glm::mat4x4>();
+        _selfTransform = glm::identity<glm::mat4>();
         _finalTransform = _selfTransform;
     }
 
-    void visit(const SceneGraphVisitor& visitor){
-        visitor(this);
-        for(auto* child : children){
-            child->visit(visitor);
-        }
-    }
+    void visit(const SceneGraphVisitor& visitor);
 
-    void visit(const SceneGraphPreVisitor& pre_visitor,const SceneGraphPostVisitor& post_visitor){
-        auto pair =  pre_visitor(this);
-        if(pair.first){
-            for(auto* child : children){
-                child->visit(pre_visitor,post_visitor);
-            }
-        }
-        if(pair.second)
-            post_visitor(this);
-    }
+    void visit(const SceneGraphPreVisitor& pre_visitor, const SceneGraphPostVisitor& post_visitor);
 
     template<class Payload>
     void visitPayload(SceneGraphVisitorPayloaded<Payload>& visitor){
@@ -164,74 +139,7 @@ struct SceneGraphNode : Inspectable
 //    {
 //
 //    }
-    void show() override
-    {
-        float translate[3];
-        translate[0] = _selfTransform[3].x;
-        translate[1] = _selfTransform[3].y;
-        translate[2] = _selfTransform[3].z;
-        WATCH_FILED_FlOAT3_NOTIFY(translate,[this](float x0, float x1, float x2){
-            _selfTransform[3].x = x0;
-            _selfTransform[3].y = x1;
-            _selfTransform[3].z = x2;
-            //printf("%s change translate to [%f, %f, %f]\n", this->name.c_str(),x0,x1,x2);
-            selfTranslateChange({x0,x1,x2});
-            updateSelfTransform();
-        });
-        float rotation[3];
-        glm::extractEulerAngleXYZ(_selfTransform,rotation[0],rotation[1],rotation[2]);
-        WATCH_FILED_FlOAT3_NOTIFY(rotation,[this](float x0, float x1, float x2){
-            //printf("%s change rotation to [%f, %f, %f]\n", this->name.c_str(),x0,x1,x2);
-        });
-        float scale[3];
-        scale[0] = _selfTransform[0][0];
-        scale[1] = _selfTransform[1][1];
-        scale[2] = _selfTransform[2][2];
-        WATCH_FILED_FlOAT3_NOTIFY(scale,[this](float x0, float x1, float x2){
-            _selfTransform[0][0] = x0;
-            _selfTransform[1][1] = x1;
-            _selfTransform[2][2] = x2;
-            //printf("%s change scale to [%f, %f, %f]\n", this->name.c_str(),x0,x1,x2);
-            selfScaleChange({x0,x1,x2});
-            updateSelfTransform();
-        });
-
-        if(!shapes.empty())
-        {
-            ImGui::Separator();
-            for(auto shape : shapes)
-            {
-                shape->show();
-            }
-        }
-
-        if(!materials.empty())
-        {
-            ImGui::Separator();
-            for(auto material : materials)
-            {
-                material->show();
-            }
-        }
-
-        if(!lights.empty())
-        {
-            ImGui::Separator();
-            for(auto light : lights)
-            {
-                light->show();
-            }
-        }
-
-        if(!areaLights.empty())
-        {
-            ImGui::Separator();
-            for(auto areaLight : areaLights)
-            {
-                areaLight->show();
-            }
-        }
-    }
+    void show() override;
     
     bool is_selected() const {
         return m_is_selected;
@@ -251,31 +159,9 @@ struct SceneGraphNode : Inspectable
         }
     }
 
-    void updateSelfTransform()
-    {
-        selfTransformChange(_selfTransform);
-        if(parent!= nullptr)
-        {
-            _finalTransform = parent->_finalTransform * _selfTransform;
-        }else{
-            _finalTransform = _selfTransform;
-        }
-        finalTransformChange(_finalTransform);
-        for(auto & child : children)
-        {
-            child->updateFinalTransform(_finalTransform);
-        }
-    }
+    void updateSelfTransform();
 
-    void updateFinalTransform(const glm::mat4 & parentTransform)
-    {
-        _finalTransform = _selfTransform * parentTransform;
-        finalTransformChange(_finalTransform);
-        for(auto & child : children)
-        {
-            child->updateFinalTransform(_finalTransform);
-        }
-    }
+    void updateFinalTransform();
 
     std::string InspectedName() override
     {
@@ -295,6 +181,16 @@ struct SceneGraph
     rocket::signal<void(SceneGraphNode*)> nodeSelectSignal;
     rocket::signal<void(SceneGraphNode*)> nodeUnSelectSignal;
 
+    rocket::signal<void(SceneGraphNode*)> nodeSelfTranslateChangeSignal;
+    rocket::signal<void(SceneGraphNode*)> nodeSelfRotationChangeSignal;
+    rocket::signal<void(SceneGraphNode*)> nodeSelfScaleChangeSignal;
+    rocket::signal<void(SceneGraphNode*)> nodeSelfTransformChangeSignal;
+
+    rocket::signal<void(SceneGraphNode*)> nodeFinalTranslateChangeSignal;
+    rocket::signal<void(SceneGraphNode*)> nodeFinalRotationChangeSignal;
+    rocket::signal<void(SceneGraphNode*)> nodeFinalScaleChangeSignal;
+    rocket::thread_safe_signal<void(SceneGraphNode*)> nodeFinalTransformChangeSignal;
+
     void selectNode(SceneGraphNode* node)
     {
         nodeSelectSignal(node);
@@ -303,6 +199,46 @@ struct SceneGraph
     void unSelectNode(SceneGraphNode* node)
     {
         nodeUnSelectSignal(node);
+    }
+
+    void selfTranslateChange(SceneGraphNode* node)
+    {
+        nodeSelfTranslateChangeSignal(node);
+    }
+
+    void selfRotationChange(SceneGraphNode* node)
+    {
+        nodeSelfRotationChangeSignal(node);
+    }
+
+    void selfScaleChange(SceneGraphNode* node)
+    {
+        nodeSelfScaleChangeSignal(node);
+    }
+
+    void finalTranslateChange(SceneGraphNode* node)
+    {
+        nodeFinalTranslateChangeSignal(node);
+    }
+
+    void finalRotationChange(SceneGraphNode* node)
+    {
+        nodeFinalRotationChangeSignal(node);
+    }
+
+    void finalScaleChange(SceneGraphNode* node)
+    {
+        nodeFinalScaleChangeSignal(node);
+    }
+
+    void selfTransformChange(SceneGraphNode* node)
+    {
+        nodeSelfTransformChangeSignal(node);
+    }
+
+    void finalTransformChange(SceneGraphNode* node)
+    {
+        nodeFinalTransformChangeSignal(node);
     }
 };
 
