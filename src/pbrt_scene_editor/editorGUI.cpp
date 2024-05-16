@@ -14,6 +14,7 @@
 #include "sceneViewer.hpp"
 #include "sceneGraphEditor.hpp"
 #include "LoggerGUI.hpp"
+#include "offlineRender.hpp"
 
 #include <iostream>
 #include <algorithm>
@@ -24,6 +25,7 @@ EditorGUI::EditorGUI()
 	_sceneGraphEditor = new SceneGraphEditor;
     _loggerWindow = new LoggerGUI;
     _inspector = new Inspector;
+	_offlineRender = new OfflineRenderGUI;
 }
 
 void EditorGUI::init(GLFWwindow* window, std::shared_ptr<DeviceExtended> device)
@@ -304,7 +306,7 @@ void EditorGUI::showMenuView()
 void EditorGUI::showMenuRender()
 {
 	if (ImGui::MenuItem("Render Current Frame")) {
-
+		_offlineRender->render(currentPBRTSceneFilePath.make_preferred().string());
 	}
 
 	if (ImGui::MenuItem("Render Interactive Session")) {
@@ -357,6 +359,7 @@ void EditorGUI::constructFrame()
 						recentOpenCache.pop_front();
 					}
 				}
+				currentPBRTSceneFilePath = fsPath;
 				auto* sceneGraph = _sceneGraphEditor->parsePBRTSceneFile(fsPath, _assetFileTree->assetManager);
                 if(viewer!= nullptr) viewer->setCurrentSceneGraph(sceneGraph,_assetFileTree->assetManager);
 				fileSelectorOpen = false;

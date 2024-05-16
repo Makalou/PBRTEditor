@@ -161,4 +161,5 @@ void PBRTParser::parseToken(PBRTSceneBuilder& builder, AssetManager& assetLoader
 {
 	static TokenParser tp;
     tp.parse(builder,token_queue,assetLoader);
+    openedMappedFile.clear();
 }

@@ -19,6 +19,7 @@ struct AssetFileTree;
 struct SceneViewer;
 struct SceneGraphEditor;
 struct LoggerGUI;
+struct OfflineRenderGUI;
 
 struct EditorGUI
 {
@@ -38,6 +39,8 @@ public:
 	AssetFileTree* _assetFileTree = nullptr;
 	SceneGraphEditor* _sceneGraphEditor = nullptr;
     LoggerGUI* _loggerWindow = nullptr;
+	OfflineRenderGUI* _offlineRender = nullptr;
+	std::filesystem::path currentPBRTSceneFilePath;
 
 private:
 	std::deque < std::pair<std::string, std::filesystem::path>> recentOpenCache;
