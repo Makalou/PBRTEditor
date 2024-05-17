@@ -12,24 +12,6 @@ namespace renderScene
         {
             mainView.camera.data = backendDevice->allocateObservedBufferPull<MainCameraData>(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT).value();
 
-            mainView.camera.data->position.x = 0;
-            mainView.camera.data->position.y = 0;
-            mainView.camera.data->position.z = 0;
-
-            mainView.camera.pitch = 0.0f;
-            mainView.camera.yaw = 0.0f;
-
-            glm::vec3 direction;
-            direction.x = cos(glm::radians(mainView.camera.yaw)) * cos(glm::radians(mainView.camera.pitch));
-            direction.y = sin(glm::radians(mainView.camera.pitch));
-            direction.z = sin(glm::radians(mainView.camera.yaw)) * cos(glm::radians(mainView.camera.pitch));
-            mainView.camera.front = glm::normalize(direction);
-            glm::vec3 eye = mainView.camera.data->position;
-            mainView.camera.data->view = glm::lookAt(eye, eye + mainView.camera.front, { 0,1,0 });
-            float aspect = 1440.0f / 810.0f;
-            mainView.camera.data->proj = glm::perspective(glm::radians(60.0f),aspect,0.1f,1000.0f);
-            mainView.camera.data->proj[1][1] *= -1.0f;
-
             Window::registerMouseDragCallback([this](int button, double deltaX, double deltaY){
                 if(button == GLFW_MOUSE_BUTTON_RIGHT)
                 {
@@ -247,6 +229,32 @@ namespace renderScene
     void RenderScene::buildFrom(SceneGraph * sceneGraph, AssetManager &assetManager)
     {
         m_sceneGraph = sceneGraph;
+
+        auto eye = m_sceneGraph->globalRenderSetting.camera.eye;
+        auto look = m_sceneGraph->globalRenderSetting.camera.look;
+        auto up = m_sceneGraph->globalRenderSetting.camera.up;
+
+        mainView.camera.data->position.x = eye.x;
+        mainView.camera.data->position.y = eye.y;
+        mainView.camera.data->position.z = eye.z;
+
+        mainView.camera.pitch = 0.0f;
+        mainView.camera.yaw = 0.0f;
+
+        glm::vec3 direction;
+        direction.x = cos(glm::radians(mainView.camera.yaw)) * cos(glm::radians(mainView.camera.pitch));
+        direction.y = sin(glm::radians(mainView.camera.pitch));
+        direction.z = sin(glm::radians(mainView.camera.yaw)) * cos(glm::radians(mainView.camera.pitch));
+
+        mainView.camera.front = glm::normalize(direction);
+        mainView.camera.data->view = glm::lookAt(eye, look, up);
+        float aspect = 1440.0f / 810.0f;
+        if (m_sceneGraph->globalRenderSetting.camera.camera->getType() == "Perspective")
+        {
+            PerspectiveCamera* perspec = static_cast<PerspectiveCamera*>(sceneGraph->globalRenderSetting.camera.camera);
+            mainView.camera.data->proj = glm::perspective(glm::radians(perspec->fov), aspect, 0.1f, 1000.0f);
+            mainView.camera.data->proj[1][1] *= -1.0f;
+        }
 
         static auto nodeFocusOn = [this](SceneGraphNode* node)->void
         {

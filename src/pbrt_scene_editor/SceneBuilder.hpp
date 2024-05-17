@@ -12,13 +12,7 @@
 struct SceneGraphNode;
 struct SceneGraph;
 
-struct GlobalRenderSetting : Inspectable
-{
-
-};
-
 struct Camera;
-
 struct Shape;
 struct Light;
 struct AreaLight;
@@ -60,13 +54,12 @@ struct PBRTSceneBuilder
     void AddMaterial(Material*);
     void AddLightSource(Light*);
     void AddAreaLight(AreaLight*);
-    void AddCamera(const Camera* );
+    void SetCamera(Camera* );
     void WorldBegin();
     void WorldEnd();
 
     SceneGraphNode* _currentVisitNode = nullptr;
     SceneGraph* sceneGraph;
-    GlobalRenderSetting _globalRenderSetting;
 };
 
 #endif //PBRTEDITOR_SCENEBUILDER_HPP

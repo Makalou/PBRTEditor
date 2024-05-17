@@ -31,6 +31,7 @@ void Inspector::constructFrame()
         ImGui::Begin(("Inspector - " + _currentInspects[0]->InspectedName()).c_str(), &is_open);
         _currentInspects[0]->show();
         ImGui::End();
+        _currentInspects.clear();
         return;
     }
     
@@ -45,6 +46,7 @@ void Inspector::constructFrame()
         ImGui::Separator();
     }
     ImGui::End();
+    _currentInspects.clear();
     return;
 }
 

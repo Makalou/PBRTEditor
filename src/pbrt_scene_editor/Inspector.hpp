@@ -31,26 +31,19 @@ struct Inspector : EditorComponentGUI
     void init();
     ~Inspector();
 
-    static void inspect(Inspectable * ins)
+    static void AddInspect(Inspectable * ins)
     {
-        _currentInspects.clear();
         _currentInspects.push_back(ins);
     }
 
     template<typename T>
     //std::enable_if_t<std::is_base_of<Inspectable,T>::value>
-    static void inspect(const std::vector<T*> & ins)
+    static void AddInspect(const std::vector<T*> & ins)
     {
-        _currentInspects.clear();
         for(auto i : ins)
         {
             _currentInspects.push_back(i);
         }
-    }
-
-    static void inspectDummy()
-    {
-        _currentInspects.clear();
     }
 
 private:

@@ -319,6 +319,7 @@ DIRECTIVE_HANDLER_DEF(Camera)
     auto para_list = convertToPBRTParamLists(para_str_list);
     auto cam =  CameraCreator::make(dequote(next.to_string()));
     cam->parse(para_list);
+    builder.SetCamera(cam.release());
 DIRECTIVE_HANDLER_DEF_END
 
 DIRECTIVE_HANDLER_DEF(Film)

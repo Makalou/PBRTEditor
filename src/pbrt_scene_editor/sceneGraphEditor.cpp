@@ -94,6 +94,27 @@ void SceneGraphNode::visit(const SceneGraphPreVisitor& pre_visitor, const SceneG
         post_visitor(this);
 }
 
+void SceneGlobalRenderSetting::show()
+{
+    if (ImGui::TreeNode("Camera"))
+    {
+        camera.camera->show();
+        ImGui::TreePop();
+    }
+    if (ImGui::TreeNode("Film"))
+    {
+        ImGui::TreePop();
+    }
+    if (ImGui::TreeNode("Sampler"))
+    {
+        ImGui::TreePop();
+    }
+    if (ImGui::TreeNode("Integrator"))
+    {
+        ImGui::TreePop();
+    }
+}
+
 void SceneGraphNode::show()
 {
     float translate[3];
@@ -215,6 +236,17 @@ void SceneGraphEditor::constructFrame()
         return;
    }
 
+   bool grs_selected = _sceneGraph->globalRenderSetting.is_selected;
+   if (ImGui::Selectable("Global Rendering Setting", &grs_selected))
+   {
+       _sceneGraph->globalRenderSetting.is_selected = grs_selected;
+   }
+
+   if (_sceneGraph->globalRenderSetting.is_selected)
+   {
+       Inspector::AddInspect(&_sceneGraph->globalRenderSetting);
+   }
+
    std::vector<SceneGraphNode*> currentInspectingNodes{};
 
    static auto singleSelectionPreVisitor = [&](SceneGraphNode* node)
@@ -279,11 +311,9 @@ void SceneGraphEditor::constructFrame()
     _sceneGraph->root->visit(singleSelectionPreVisitor,singleSelectionPostVisitor);
     _sceneGraph->root->visit(collectSelectedPreVisitor, collectSelectedPostVisitor);
 
-    if(currentInspectingNodes.empty())
+    if (!currentInspectingNodes.empty())
     {
-        Inspector::inspectDummy();
-    }else{
-        Inspector::inspect(currentInspectingNodes);
+        Inspector::AddInspect(currentInspectingNodes);
     }
 
     ImGui::End();

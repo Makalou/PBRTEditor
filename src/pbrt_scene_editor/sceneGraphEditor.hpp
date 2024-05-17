@@ -169,6 +169,29 @@ struct SceneGraphNode : Inspectable
     }
 };
 
+struct SceneRenderCamera
+{
+    Camera* camera;
+    glm::vec3 eye;
+    glm::vec3 look;
+    glm::vec3 up;
+};
+
+struct SceneGlobalRenderSetting : Inspectable
+{
+    bool is_selected = false;
+
+    SceneRenderCamera camera;
+    std::unique_ptr<Sampler> sampler;
+    std::unique_ptr<Integrator> integrator;
+
+    void show() override;
+    std::string InspectedName() override
+    {
+        return "Global Render Setting";
+    }
+};
+
 struct SceneGraph
 {
     SceneGraphNode * root;
@@ -176,7 +199,7 @@ struct SceneGraph
     std::vector<Texture*> namedTextures;
     //todo : note, when initiation node modify the data, a deep copy is preferred.
     std::vector<SceneGraphNode*> _objInstances;
-    std::unique_ptr<Camera> camera;
+    SceneGlobalRenderSetting globalRenderSetting;
 
     rocket::signal<void(SceneGraphNode*)> nodeSelectSignal;
     rocket::signal<void(SceneGraphNode*)> nodeUnSelectSignal;

@@ -121,11 +121,10 @@ void PBRTSceneBuilder::Identity(){
     }
 }
 
-void PBRTSceneBuilder::LookAt(const float*){
-    if(_currentVisitNode!= nullptr)
-    {
-        _currentVisitNode->is_empty = false;
-    }
+void PBRTSceneBuilder::LookAt(const float* lookAt){
+    sceneGraph->globalRenderSetting.camera.eye = glm::vec3{ lookAt[0],lookAt[1],lookAt[2] };
+    sceneGraph->globalRenderSetting.camera.look = glm::vec3{ lookAt[3],lookAt[4],lookAt[5] };
+    sceneGraph->globalRenderSetting.camera.up = glm::vec3{ lookAt[6],lookAt[7],lookAt[8] };
 }
 
 void PBRTSceneBuilder::AddNamedMaterial(Material * material){
@@ -296,6 +295,6 @@ void PBRTSceneBuilder::AddAreaLight(AreaLight * areaLight) {
     }
 }
 
-void PBRTSceneBuilder::AddCamera(const Camera* cam) {
-
+void PBRTSceneBuilder::SetCamera(Camera* cam) {
+    sceneGraph->globalRenderSetting.camera.camera = cam;
 }
