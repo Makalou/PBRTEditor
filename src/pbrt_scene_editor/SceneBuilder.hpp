@@ -12,6 +12,7 @@
 struct SceneGraphNode;
 struct SceneGraph;
 
+struct Film;
 struct Camera;
 struct Shape;
 struct Light;
@@ -54,6 +55,7 @@ struct PBRTSceneBuilder
     void AddMaterial(Material*);
     void AddLightSource(Light*);
     void AddAreaLight(AreaLight*);
+    void SetFilm(Film*);
     void SetCamera(Camera* );
     void WorldBegin();
     void WorldEnd();

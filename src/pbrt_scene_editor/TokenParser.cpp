@@ -325,8 +325,11 @@ DIRECTIVE_HANDLER_DEF_END
 DIRECTIVE_HANDLER_DEF(Film)
     //todo basicParamListEntrypoint(&ParserTarget::Film, tok->loc);
     auto next = tokenQueue.waitAndDequeue();
-    auto para_list = TokenParser::extractParaLists(tokenQueue);
-    convertToPBRTParamLists(para_list);
+    auto para_str_list = TokenParser::extractParaLists(tokenQueue);
+    auto para_list = convertToPBRTParamLists(para_str_list);
+    auto film = FilmCreator::make(dequote(next.to_string()));
+    film->parse(para_list);
+    builder.SetFilm(film.release());
 DIRECTIVE_HANDLER_DEF_END
 
 DIRECTIVE_HANDLER_DEF(Integrator)

@@ -96,6 +96,91 @@ struct GeneralOption : Inspectable
     }
 };
 
+DEF_BASECLASS_BEGIN(Film)
+    float xresolution = 1280;
+    float yresolution = 720;
+    float cropwindow[4] = { 0,1,0,1 };
+    int pixelbounds[4] = { 0, int(xresolution),0,int(yresolution)};
+    float diagonal = 35;
+    std::string filename = "pbrt.exr";
+    bool savefp16 = true;
+    float iso = 100;
+    float whitebalance = 0;
+    std::string sensor = "cie1931";
+    float maxcomponentvalue = std::numeric_limits<float>::infinity();
+
+    PARSE_SECTION_BEGIN_IN_BASE
+        PARSE_FOR(xresolution);
+        PARSE_FOR(yresolution);
+        PARSE_FOR_ARR(float, 4, cropwindow);
+        PARSE_FOR_ARR(int, 4, pixelbounds);
+        PARSE_FOR(diagonal);
+        PARSE_FOR(filename);
+        PARSE_FOR(savefp16);
+        PARSE_FOR(iso);
+        PARSE_FOR(whitebalance);
+        PARSE_FOR(sensor);
+        PARSE_FOR(maxcomponentvalue);
+    PARSE_SECTION_END_IN_BASE
+
+    void show() override
+    {
+        WATCH_FIELD(xresolution);
+        WATCH_FIELD(yresolution);
+        //PARSE_FOR_ARR(float, 4, cropwindow);
+        //PARSE_FOR_ARR(int, 4, pixelbounds);
+        WATCH_FIELD(diagonal);
+        WATCH_FIELD(filename);
+        WATCH_FIELD(savefp16);
+        WATCH_FIELD(iso);
+        WATCH_FIELD(whitebalance);
+        WATCH_FIELD(sensor);
+        WATCH_FIELD(maxcomponentvalue);
+    }
+
+DEF_BASECLASS_END
+
+DEF_SUBCLASS_BEGIN(Film, Rgb)
+    
+    PARSE_SECTION_CONTINUE_IN_DERIVED
+    PARSE_SECTION_END_IN_DERIVED
+DEF_SUBCLASS_END
+
+DEF_SUBCLASS_BEGIN(Film, Gbuffer)
+    std::string coordinatesystem = "camera";
+
+    PARSE_SECTION_CONTINUE_IN_DERIVED
+        PARSE_FOR(coordinatesystem);
+    PARSE_SECTION_END_IN_DERIVED
+    void show() override
+    {
+        Film::show();
+        WATCH_FIELD(coordinatesystem);
+    }
+DEF_SUBCLASS_END
+
+DEF_SUBCLASS_BEGIN(Film, Spectral)
+    int nbuckets = 16;
+    float lambdamin = 360;
+    float lambdamax = 830;
+
+    PARSE_SECTION_CONTINUE_IN_DERIVED
+        PARSE_FOR(nbuckets)
+        PARSE_FOR(lambdamin)
+        PARSE_FOR(lambdamax)
+    PARSE_SECTION_END_IN_DERIVED
+
+    void show() override
+    {
+        Film::show();
+        WATCH_FIELD(nbuckets);
+        WATCH_FIELD(lambdamin);
+        WATCH_FIELD(lambdamax);
+    }
+DEF_SUBCLASS_END
+
+using FilmCreator = GenericCreator<Film, RgbFilm, GbufferFilm, SpectralFilm>;
+
 DEF_BASECLASS_BEGIN(Camera)
     float shutteropen = 0;
     float shutterclose = 1;

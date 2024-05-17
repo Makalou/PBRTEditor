@@ -295,6 +295,10 @@ void PBRTSceneBuilder::AddAreaLight(AreaLight * areaLight) {
     }
 }
 
+void PBRTSceneBuilder::SetFilm(Film* film) {
+    sceneGraph->globalRenderSetting.film.reset(film);
+}
+
 void PBRTSceneBuilder::SetCamera(Camera* cam) {
     sceneGraph->globalRenderSetting.camera.camera = cam;
 }

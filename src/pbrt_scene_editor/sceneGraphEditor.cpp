@@ -103,6 +103,7 @@ void SceneGlobalRenderSetting::show()
     }
     if (ImGui::TreeNode("Film"))
     {
+        film->show();
         ImGui::TreePop();
     }
     if (ImGui::TreeNode("Sampler"))

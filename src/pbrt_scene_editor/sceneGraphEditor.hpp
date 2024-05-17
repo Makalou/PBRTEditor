@@ -182,6 +182,7 @@ struct SceneGlobalRenderSetting : Inspectable
     bool is_selected = false;
 
     SceneRenderCamera camera;
+    std::unique_ptr<Film> film;
     std::unique_ptr<Sampler> sampler;
     std::unique_ptr<Integrator> integrator;
 
