@@ -24,7 +24,7 @@ void SceneViewer::init(std::shared_ptr<DeviceExtended> device) {
 
         {
             auto skyBoxPass = std::make_unique<SkyBoxPass>();
-            skyBoxPass->addOutput<PassAttachment>("result",vk::Format::eR8G8B8A8Srgb,PassAttachmentExtent::SwapchainRelative(1.0,1.0),
+            skyBoxPass->addOutput<PassAttachment>("result", vk::Format::eR8G8B8A8Srgb, PassAttachmentExtent::SwapchainRelative{},
                                                              vk::AttachmentLoadOp::eDontCare,vk::AttachmentStoreOp::eStore);
             skyBoxPass->scene = this->_renderScene;
             frameGraph.registerRasterizedGPUPass(std::move(skyBoxPass));
@@ -32,30 +32,30 @@ void SceneViewer::init(std::shared_ptr<DeviceExtended> device) {
         {
             auto gBufferPass = std::make_unique<GBufferPass>();
             gBufferPass->scene = this->_renderScene;
-            gBufferPass->addOutput<PassAttachment>("depth",vk::Format::eD32Sfloat, PassAttachmentExtent::SwapchainRelative(1.0, 1.0),
+            gBufferPass->addOutput<PassAttachment>("depth", vk::Format::eD32Sfloat, PassAttachmentExtent::SwapchainRelative{},
                                                               vk::AttachmentLoadOp::eClear,vk::AttachmentStoreOp::eStore);
-            gBufferPass->addOutput<PassAttachment>("flat", vk::Format::eR8G8B8A8Srgb, PassAttachmentExtent::SwapchainRelative(1.0, 1.0),
+            gBufferPass->addOutput<PassAttachment>("flat", vk::Format::eR8G8B8A8Srgb, PassAttachmentExtent::SwapchainRelative{},
                                                               vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore);
-            gBufferPass->addOutput<PassAttachment>("meshID", vk::Format::eR8G8B8A8Srgb, PassAttachmentExtent::SwapchainRelative(1.0, 1.0),
+            gBufferPass->addOutput<PassAttachment>("meshID", vk::Format::eR8G8B8A8Srgb, PassAttachmentExtent::SwapchainRelative{},
                                                               vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore);
-            gBufferPass->addOutput<PassAttachment>("wPosition",vk::Format::eR8G8B8A8Srgb, PassAttachmentExtent::SwapchainRelative(1.0, 1.0),
+            gBufferPass->addOutput<PassAttachment>("wPosition", vk::Format::eR8G8B8A8Srgb, PassAttachmentExtent::SwapchainRelative{},
                                                               vk::AttachmentLoadOp::eClear,vk::AttachmentStoreOp::eStore);
-            gBufferPass->addOutput<PassAttachment>("wNormal", vk::Format::eR8G8B8A8Srgb, PassAttachmentExtent::SwapchainRelative(1.0, 1.0),
+            gBufferPass->addOutput<PassAttachment>("wNormal", vk::Format::eR8G8B8A8Srgb, PassAttachmentExtent::SwapchainRelative{},
                                                               vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore);
-            gBufferPass->addOutput<PassAttachment>("UV", vk::Format::eR8G8B8A8Srgb, PassAttachmentExtent::SwapchainRelative(1.0, 1.0),
+            gBufferPass->addOutput<PassAttachment>("UV", vk::Format::eR8G8B8A8Srgb, PassAttachmentExtent::SwapchainRelative{},
                                                               vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore);
-            gBufferPass->addOutput<PassAttachment>("albedoColor", vk::Format::eR8G8B8A8Srgb, PassAttachmentExtent::SwapchainRelative(1.0, 1.0),
+            gBufferPass->addOutput<PassAttachment>("albedoColor", vk::Format::eR8G8B8A8Srgb, PassAttachmentExtent::SwapchainRelative{},
                                                               vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore);
-            gBufferPass->addOutput<PassAttachment>("encodedMeshID", vk::Format::eR8G8B8A8Unorm, PassAttachmentExtent::SwapchainRelative(1.0, 1.0),
+            gBufferPass->addOutput<PassAttachment>("encodedMeshID", vk::Format::eR8G8B8A8Unorm, PassAttachmentExtent::SwapchainRelative{},
                                                               vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore);
-            gBufferPass->addOutput<PassAttachment>("encodedInstanceID", vk::Format::eR8G8B8A8Unorm, PassAttachmentExtent::SwapchainRelative(1.0, 1.0),
+            gBufferPass->addOutput<PassAttachment>("encodedInstanceID", vk::Format::eR8G8B8A8Unorm, PassAttachmentExtent::SwapchainRelative{},
                                                               vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore);
             frameGraph.registerRasterizedGPUPass(std::move(gBufferPass));
         }
         {
             auto selectedMaskPass = std::make_unique<SelectedMaskPass>();
             selectedMaskPass->scene = this->_renderScene;
-            selectedMaskPass->addOutput<PassAttachment>("mask",vk::Format::eR8G8B8A8Srgb, PassAttachmentExtent::SwapchainRelative(1.0, 1.0),
+            selectedMaskPass->addOutput<PassAttachment>("mask", vk::Format::eR8G8B8A8Srgb, PassAttachmentExtent::SwapchainRelative{},
                                                                    vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore);
             frameGraph.registerRasterizedGPUPass(std::move(selectedMaskPass));
         }
@@ -78,7 +78,7 @@ void SceneViewer::init(std::shared_ptr<DeviceExtended> device) {
             deferredLightingPass->addInput<PassTexture>("GBufferPass::wNormal");
             deferredLightingPass->addInput<PassTexture>("GBufferPass::albedoColor");
 //            deferredLightingPass->addInput<PassTextureDescription>("ShadowPass::mainShadowMap");
-            deferredLightingPass->addInOut<PassAttachmentDescription>("SkyBoxPass::result", "result", vk::AttachmentLoadOp::eLoad, vk::AttachmentStoreOp::eStore);
+            deferredLightingPass->addInOut<PassAttachment>("SkyBoxPass::result", "result", vk::AttachmentLoadOp::eLoad, vk::AttachmentStoreOp::eStore);
             frameGraph.registerRasterizedGPUPass(std::move(deferredLightingPass));
         }
         {
