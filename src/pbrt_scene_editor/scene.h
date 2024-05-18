@@ -705,8 +705,8 @@ DEF_SUBCLASS_END
 DEF_SUBCLASS_BEGIN(Material,Conductor)
     std::variant<texture,float> displacement;
     std::string normalmap;
-    std::variant<spectrum,texture> eta;
-    std::variant<spectrum,texture> k;
+    std::variant<spectrum,texture,rgb> eta;
+    std::variant<spectrum,texture,rgb> k;
     std::variant<spectrum,texture> reflectance;
     PARSE_SECTION_CONTINUE_IN_DERIVED
         PARSE_FOR_VARIANT(displacement)
