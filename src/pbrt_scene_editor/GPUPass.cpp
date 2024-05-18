@@ -15,6 +15,29 @@ bool isDepthStencilFormat(vk::Format format)
         format == vk::Format::eD32SfloatS8Uint;
 };
 
+std::pair<std::string, std::string> parseInputIdentifier(const std::string& identifier)
+{
+    size_t pos = identifier.find("::");
+    if (pos == std::string::npos)
+        throw std::invalid_argument("Input resource must using PassName as name space");
+
+    auto producerPassName = identifier.substr(0, pos);
+    auto resourceName = identifier.substr(pos + 2);
+
+    return { producerPassName, resourceName };
+}
+
+std::pair<std::string, std::string> parseInoutIdentifier(const std::string& identifier)
+{
+    size_t pos = identifier.find("->");
+    if (pos == std::string::npos)
+        throw std::invalid_argument("Failed to parse inout name");
+    auto inputName = identifier.substr(0, pos);
+    auto outputName = identifier.substr(pos + 2);
+
+    return { inputName, outputName };
+}
+
 vk::PipelineLayoutCreateInfo concatLayoutCreateInfo(vk::PipelineLayoutCreateInfo baseInfo, vk::PipelineLayoutCreateInfo derivedInfo)
 {
     std::vector<vk::DescriptorSetLayout> setLayouts;
@@ -422,36 +445,20 @@ void GPUFrame::compileAOT() {
         inputResourceTokens.reserve(pass->inputs.size() + pass->inouts.size());
         for(const auto & input : pass->inputs)
         {
-            auto inputName = input->name;
-            size_t pos = inputName.find("::");
-            if(pos == std::string::npos)
-                throw std::invalid_argument("Input resource must using PassName as name space");
-
-            auto producerPassName = inputName.substr(0, pos);
-            auto resourceName = inputName.substr(pos + 2);
-            inputResourceTokens.emplace_back(producerPassName, resourceName, input.get());
+            auto res = parseInputIdentifier(input->name);
+            inputResourceTokens.emplace_back(res.first, res.second, input.get());
         }
 
         for (const auto & inout : pass->inouts)
         {
-            auto inoutName = inout->name;
-            size_t pos = inoutName.find("->");
-            if (pos == std::string::npos)
-                throw std::invalid_argument("Failed to parse inout name");
-            auto inputName = inoutName.substr(0, pos);
-            if(inputName == "SwapchainImage")
+            auto res = parseInoutIdentifier(inout->name);
+            if(res.first == "SwapchainImage")
             {
                 inout->outputHandle = swapchainAttachment;
                 continue;
             }
-
-            pos = inputName.find("::");
-            if (pos == std::string::npos)
-                throw std::invalid_argument("Input resource must using PassName as name space");
-
-            auto producerPassName = inputName.substr(0, pos);
-            auto resourceName = inputName.substr(pos + 2);
-            inputResourceTokens.emplace_back(producerPassName, resourceName, inout.get());
+            auto res2 = parseInputIdentifier(res.first);
+            inputResourceTokens.emplace_back(res2.first,res2.second,inout.get());
         }
 
         // Find producer pass for each input resource
@@ -493,12 +500,8 @@ void GPUFrame::compileAOT() {
                 for (const auto & producer_inout : producerPass->inouts)
                 {
                     //todo : check concurrent usage to avoid RW or WW
-                    auto inoutName = producer_inout->name;
-                    size_t pos = inoutName.find("->");
-                    if (pos == std::string::npos)
-                        throw std::invalid_argument("Failed to parse inout name");
-                    auto outputName = inoutName.substr(pos+2);
-                    if (outputName == resourceName)
+                    auto res = parseInoutIdentifier(producer_inout->name);
+                    if (res.second == resourceName)
                     {
                         output = producer_inout.get();
                         std::get<2>(token)->outputHandle = output;
@@ -616,14 +619,9 @@ void GPUFrame::compileAOT() {
             connectResources(inout->outputHandle.pointer, inout.get());
             if (inout->getType() == Attachment)
             {
-                auto inoutName = inout->name;
-                size_t pos = inoutName.find("->");
-                if (pos == std::string::npos)
-                    throw std::invalid_argument("Failed to parse inout name");
-                auto inputName = inoutName.substr(0, pos);
-                auto outputName = inoutName.substr(pos + 2);
-                auto name = pass->_name + "::" + outputName;
-                backingImageViews.emplace(name, backingImageViews[inputName]);
+                auto res = parseInoutIdentifier(inout->name);
+                auto name = pass->_name + "::" + res.second;
+                backingImageViews.emplace(name, backingImageViews[res.first]);
             }
         }
     }
