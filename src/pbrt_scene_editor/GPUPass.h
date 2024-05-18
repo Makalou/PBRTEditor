@@ -233,6 +233,10 @@ struct PassReferenceDescription : PassResourceDescriptionBase
 
 };
 
+using PassAttachment = PassAttachmentDescription;
+using PassTexture = PassTextureDescription;
+using PassBuffer = PassBufferDescription;
+
 enum GPUPassType
 {
     Graphics,
