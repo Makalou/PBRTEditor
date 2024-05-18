@@ -44,11 +44,25 @@ void GPURasterizedPass::beginPass(vk::CommandBuffer cmdBuf) {
     renderArea.extent.height = framebufferCreateInfo.height;
     beginInfo.setRenderArea(renderArea);
     //todo hard-code for now
-    beginInfo.setClearValueCount(3);
-    auto clearValue = vk::ClearValue{};
-    clearValue.setColor(vk::ClearColorValue{});
-    clearValue.depthStencil.depth = 1.0f;
-    beginInfo.setClearValues(clearValue);
+    std::vector<vk::ClearValue> clearValues;
+    for (const auto& attachmentDesc : attachmentDescriptions)
+    {
+        vk::ClearValue clearValue;
+        if (isDepthStencilFormat(attachmentDesc.format))
+        {
+            vk::ClearDepthStencilValue value{};
+            value.depth = 1.0;
+            value.stencil = 0.0;
+            clearValue.setDepthStencil(value);
+        }
+        else {
+            vk::ClearColorValue value{};
+            value.setFloat32({0.0,0.0,0.0,1.0});
+            clearValue.setColor(value);
+        }
+        clearValues.emplace_back(clearValue);
+    }
+    beginInfo.setClearValues(clearValues);
     cmdBuf.beginRenderPass(beginInfo,vk::SubpassContents::eInline);
 }
 
@@ -97,6 +111,7 @@ void GPURasterizedPass::buildRenderPass(const DeviceExtended &device, GPUFrame *
         attachment.setFinalLayout(passAttachment->finalLayout);
         attachment.setLoadOp(passAttachment->loadOp);
         attachment.setStoreOp(passAttachment->storeOp);
+        // We assume currently we don't use stencil attachment
         attachment.setStencilLoadOp(vk::AttachmentLoadOp::eDontCare);
         attachment.setStencilStoreOp(vk::AttachmentStoreOp::eDontCare);
         attachmentDescriptions.emplace_back(attachment);
