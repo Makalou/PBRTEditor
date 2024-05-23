@@ -63,12 +63,40 @@ enum PassResourceType
 
 bool isDepthStencilFormat(vk::Format format);
 
+namespace PassResourceAccess
+{
+    struct Write
+    {
+
+    };
+
+    struct RenderTarget
+    {
+        vk::AttachmentLoadOp loadOp;
+        vk::AttachmentStoreOp storeOp;
+    };
+
+    struct Read
+    {
+
+    };
+
+    struct Sample
+    {
+        bool need_mimap;
+    };
+
+    using Access = std::variant<Write, RenderTarget, Read, Sample>;
+}
+
+struct PassResourceAccessInfo
+{
+    GPUPass* pass;
+    PassResourceAccess::Access accessType;
+};
+
 struct PassResourceDescriptionBase
 {
-    int ref_count = 0;
-    GPUPassHandle producer{};
-    //used to link an input to its output resource
-    PassResourceHandle outputHandle{};
     // uuid
     std::string name;
 
@@ -80,15 +108,19 @@ struct PassResourceDescriptionBase
     }
 
     virtual ~PassResourceDescriptionBase()= default;
+
+    virtual void resolveBarriers(GPUFrame*) = 0;
+
+    std::vector<PassResourceAccessInfo> accessList;
 };
 
-namespace PassAttachmentExtent
+namespace PassTextureExtent
 {
     struct SwapchainRelative
     {
         SwapchainRelative() = default;
 
-        SwapchainRelative(float width_scale, float height_scale) : wScale(width_scale), hScale(height_scale){}
+        SwapchainRelative(float width_scale, float height_scale) : wScale(width_scale), hScale(height_scale) {}
 
         float wScale = 1.0f;
         float hScale = 1.0f;
@@ -103,91 +135,10 @@ namespace PassAttachmentExtent
     };
 }
 
-using PassAttachmentExtentType = std::variant<PassAttachmentExtent::SwapchainRelative,PassAttachmentExtent::Absolute>;
+using PassTextureExtentType = std::variant<PassTextureExtent::SwapchainRelative, PassTextureExtent::Absolute>;
 
-/* Used to determine the render pass and framebuffer composition of a given node.
- * attachments can be defined both for inputs and outputs.
- * This is needed to continue working on a resource in multiple nodes.
- * When we specific an attachment as the input, we are actually saying that we want to continuously work
- * on that attachment. Implicitly, it implies that we want to preserve the content in the attachment.
- *
- * For example, after we run a depth prepass, we want to load the depth data and use it
- * during the g-buffer pass to avoid shading pixels for objects that are hidden behind other objects.
- * We achieve this by declaring the depth map as the input attachment of g-buffer pass and set the depth state
- * of g-buffer pass's pipeline.
- * */
-struct PassAttachmentDescription : PassResourceDescriptionBase
-{
-    vk::Format format = vk::Format::eUndefined;
-    //int width = 0;
-    //int height = 0;
-    PassAttachmentExtentType extent;
-    vk::AttachmentLoadOp loadOp{};
-    vk::AttachmentStoreOp storeOp{};
-    //If the format has depth and/or stencil components,
-    // loadOp and storeOp apply only to the depth data,
-    // while stencilLoadOp and stencilStoreOp define how the stencil data is handled.
-    vk::AttachmentLoadOp stencilLoadOp{};
-    vk::AttachmentStoreOp stencilStoreOp{};
-    vk::ImageLayout initialLayout = vk::ImageLayout::eUndefined;
-    vk::ImageLayout finalLayout = vk::ImageLayout::eUndefined;
-
-    PassAttachmentDescription(const std::string& name, vk::Format format, int width, int height, vk::AttachmentLoadOp loadOp, vk::AttachmentStoreOp storeOp)
-    : PassResourceDescriptionBase(name)
-    {
-        this->format = format;
-        //this->width = width;
-        //this->height = height;
-        this->extent = PassAttachmentExtent::Absolute(width, height);
-        this->loadOp = loadOp;
-        this->storeOp = storeOp;
-    }
-
-    PassAttachmentDescription(const std::string& name, vk::Format format,PassAttachmentExtentType && size, vk::AttachmentLoadOp loadOp, vk::AttachmentStoreOp storeOp)
-        : PassResourceDescriptionBase(name)
-    {
-        this->format = format;
-        //this->width = width;
-        //this->height = height;
-        this->extent = size;
-        this->loadOp = loadOp;
-        this->storeOp = storeOp;
-    }
-
-    PassAttachmentDescription(const std::string& name,vk::AttachmentLoadOp loadOp, vk::AttachmentStoreOp storeOp)
-            : PassResourceDescriptionBase(name)
-    {
-        this->loadOp = loadOp;
-        this->storeOp = storeOp;
-        this->extent = PassAttachmentExtent::Absolute(0,0);
-    }
-
-    PassResourceType getType() const override
-    {
-        return Attachment;
-    }
-    
-    vk::Extent2D getExtent(const vkb::Swapchain& swapchain)
-    {
-        vk::Extent2D size;
-        std::visit([&](auto&& arg) {
-            using T = std::decay_t<decltype(arg)>;
-
-            if constexpr (std::is_same_v<T, PassAttachmentExtent::SwapchainRelative>) {
-                size.width = swapchain.extent.width * arg.wScale;
-                size.height = swapchain.extent.height * arg.hScale;
-            }
-            else if constexpr (std::is_same_v<T, PassAttachmentExtent::Absolute>) {
-                size.width = arg.w;
-                size.height = arg.h;
-            }
-        }, extent);
-
-        return size;
-    }
-};
-
-/* Used to distinguish images from attachments.
+/* Deprecated:
+ * Used to distinguish images from attachments.
  * An attachment has to be part of the definition of the render pass and framebuffer for a node,
  * while a texture is read during the pass and is part of a shader data definition.
  * This distinction is also important to determine which images need to be transitioned to a
@@ -199,12 +150,22 @@ struct PassTextureDescription : PassResourceDescriptionBase
     vk::Format format = vk::Format::eUndefined;
     int width = 0;
     int height = 0;
+    PassTextureExtentType extent;
 
     PassTextureDescription(const std::string& name, vk::Format format, int width, int height) : PassResourceDescriptionBase(name)
     {
         this->format = format;
         this->width = width;
         this->height = height;
+        this->extent = PassTextureExtent::Absolute(width, height);
+    }
+
+    PassTextureDescription(const std::string& name, vk::Format format, PassTextureExtentType&& ext) : PassResourceDescriptionBase(name)
+    {
+        this->format = format;
+        this->width = width;
+        this->height = height;
+        this->extent = ext;
     }
 
     explicit PassTextureDescription(const std::string& name) : PassResourceDescriptionBase(name)
@@ -216,6 +177,67 @@ struct PassTextureDescription : PassResourceDescriptionBase
     {
         return Texture;
     }
+
+    vk::Extent2D getExtent(const vkb::Swapchain& swapchain)
+    {
+        vk::Extent2D size;
+        std::visit([&](auto&& ext) {
+            using T = std::decay_t<decltype(ext)>;
+
+            if constexpr (std::is_same_v<T, PassTextureExtent::SwapchainRelative>) {
+                size.width = swapchain.extent.width * ext.wScale;
+                size.height = swapchain.extent.height * ext.hScale;
+            }
+            else if constexpr (std::is_same_v<T, PassTextureExtent::Absolute>) {
+                size.width = ext.w;
+                size.height = ext.h;
+            }
+            }, extent);
+
+        return size;
+    }
+
+    bool need_sample() const
+    {
+        for (auto& access : accessList)
+        {
+            if (std::holds_alternative<PassResourceAccess::Sample>(access.accessType))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool use_as_attachment() const
+    {
+        for (auto& access : accessList)
+        {
+            if (std::holds_alternative<PassResourceAccess::RenderTarget>(access.accessType))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool need_mipmap() const
+    {
+        for (auto& access : accessList)
+        {
+            if (std::holds_alternative<PassResourceAccess::Sample>(access.accessType))
+            {
+                auto sample = std::get<PassResourceAccess::Sample>(access.accessType);
+                if (sample.need_mimap)
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    void resolveBarriers(GPUFrame* frame) override;
 };
 
 /* This type represents a storage buffer that we can write to or read from. As with
@@ -223,17 +245,9 @@ struct PassTextureDescription : PassResourceDescriptionBase
  * completed before accessing the buffer data in another pass.*/
 struct PassBufferDescription : PassResourceDescriptionBase
 {
-
+    void resolveBarriers(GPUFrame* frame) override;
 };
 
-/*This type is used exclusively to ensure the right edges between nodes are computed
- * without creating a new resource.*/
-struct PassReferenceDescription : PassResourceDescriptionBase
-{
-
-};
-
-using PassAttachment = PassAttachmentDescription;
 using PassTexture = PassTextureDescription;
 using PassBuffer = PassBufferDescription;
 
@@ -250,7 +264,7 @@ struct GPUPass
     // as the name space.
     std::string _name;
 
-    explicit GPUPass(std::string  name) : _name(std::move(name))
+    explicit GPUPass(std::string name) : _name(std::move(name))
     {
 
     }
@@ -259,10 +273,10 @@ struct GPUPass
 
     virtual GPUPassType getType() const = 0;
 
-    //DeviceExtended* backend_device;
-    std::vector<std::unique_ptr<PassResourceDescriptionBase>> inputs;
-    std::vector<std::unique_ptr<PassResourceDescriptionBase>> outputs;
-    std::vector<std::unique_ptr<PassResourceDescriptionBase>> inouts;
+    std::vector<PassResourceDescriptionBase*> reads;
+    std::vector<PassResourceDescriptionBase*> writes;
+    std::vector<PassTextureDescription*> samples;
+
     std::vector<GPUPassHandle> edges;
     vk::DescriptorSetLayout passInputDescriptorSetLayout;
     bool enabled = true;
@@ -282,46 +296,90 @@ struct GPUPass
      * */
     virtual void prepareIncremental(const GPUFrame* frame){};
 
-    void addInput(std::unique_ptr<PassResourceDescriptionBase> resource)
+    //void addInput(std::unique_ptr<PassResourceDescriptionBase> resource)
+    //{
+    //    inputs.push_back(std::move(resource));
+    //}
+
+    //void addOutput(std::unique_ptr<PassResourceDescriptionBase> resource)
+    //{
+    //    outputs.push_back(std::move(resource));
+    //}
+
+    //void addInOut(std::unique_ptr<PassResourceDescriptionBase> resource)
+    //{
+
+    //}
+
+    //template<typename T,class... Args>
+    //void addInput(Args&& ... args)
+    //{
+    //    //static_assert(!std::is_same_v<T, PassAttachmentDescription>);
+    //    inputs.emplace_back(std::make_unique<T>(args...));
+    //}
+
+    //template<typename T,class... Args>
+    //void addOutput(Args&& ... args)
+    //{
+    //    outputs.emplace_back(std::make_unique<T>(args...));
+    //}
+
+    //template<typename T, class... Args>
+    //void addInOut(const std::string& inputName, const std::string& outputName,Args&& ... args)
+    //{
+    //    inouts.emplace_back(std::make_unique<T>(inputName + "->" + outputName,args...));
+    //}
+
+    void read(PassTextureDescription* texture)
     {
-        inputs.push_back(std::move(resource));
+
     }
 
-    void addOutput(std::unique_ptr<PassResourceDescriptionBase> resource)
-    {
-        outputs.push_back(std::move(resource));
-    }
-
-    void addInOut(std::unique_ptr<PassResourceDescriptionBase> resource)
+    void write(PassTextureDescription* texture)
     {
 
     }
 
-    template<typename T,class... Args>
-    void addInput(Args&& ... args)
-    {
-        //static_assert(!std::is_same_v<T, PassAttachmentDescription>);
-        inputs.emplace_back(std::make_unique<T>(args...));
-    }
-
-    template<typename T,class... Args>
-    void addOutput(Args&& ... args)
-    {
-        outputs.emplace_back(std::make_unique<T>(args...));
-    }
-
-    template<typename T, class... Args>
-    void addInOut(const std::string& inputName, const std::string& outputName,Args&& ... args)
-    {
-        inouts.emplace_back(std::make_unique<T>(inputName + "->" + outputName,args...));
-    }
-
-    void addInputVariant()
+    void readwrite(PassTextureDescription* texture)
     {
 
     }
+
+    void sample(PassTextureDescription* texture, bool mipmap = false)
+    {
+        PassResourceAccessInfo accessInfo{};
+        accessInfo.pass = this;
+        accessInfo.accessType = PassResourceAccess::Sample{ mipmap };
+        texture->accessList.emplace_back(std::move(accessInfo));
+        this->samples.emplace_back(texture);
+    }
+
+    virtual bool checkWrite(PassResourceDescriptionBase* res) = 0;
+    virtual bool checkRead(PassResourceDescriptionBase* res) = 0;
+
+    virtual bool fillMemBarrierInfo(PassResourceAccess::Access accessType, PassBufferDescription* buffer,vk::MemoryBarrier2& barrier) = 0;
+    virtual bool fillImgBarrierInfo(PassResourceAccess::Access accessType, PassTextureDescription* texture,
+        vk::PipelineStageFlags2& stageMask, vk::AccessFlags2& accessMask, vk::ImageLayout& layout) = 0;
 
     virtual void record(vk::CommandBuffer cmdBuf, const GPUFrame* frame) = 0;
+
+    std::vector<vk::MemoryBarrier2> memoryBarriers;
+    std::vector<vk::BufferMemoryBarrier2> bufferMemoryBarriers;
+    std::vector<vk::ImageMemoryBarrier2> imageMemoryBarriers;
+
+    // Insert the pipline barrier **Before** the command is record
+    void insertPipelineBarrier(vk::CommandBuffer cmdBuf)
+    {
+        if (!memoryBarriers.empty() || !bufferMemoryBarriers.empty() || !imageMemoryBarriers.empty())
+        {
+            vk::DependencyInfo dependencyInfo{};
+            dependencyInfo.setDependencyFlags(vk::DependencyFlagBits::eByRegion);
+            dependencyInfo.setMemoryBarriers(memoryBarriers);
+            dependencyInfo.setBufferMemoryBarriers(bufferMemoryBarriers);
+            dependencyInfo.setImageMemoryBarriers(imageMemoryBarriers);
+            cmdBuf.pipelineBarrier2(dependencyInfo);
+        }
+    }
 };
 
 struct FrameExternalResourceImmutable
@@ -380,9 +438,59 @@ struct GPUComputePass : GPUPass
     {
         return GPUPassType::Compute;
     }
-   
+
+    bool checkWrite(PassResourceDescriptionBase* res) override
+    {
+        return false;
+    }
+
+    bool checkRead(PassResourceDescriptionBase* res) override
+    {
+        return false;
+    }
+
+    bool fillMemBarrierInfo(PassResourceAccess::Access accessType, PassBufferDescription* buffer, vk::MemoryBarrier2& barrier) override
+    {
+        return false;
+    }
+    bool fillImgBarrierInfo(PassResourceAccess::Access accessType, PassTextureDescription* texture,
+        vk::PipelineStageFlags2& stageMask, vk::AccessFlags2& accessMask, vk::ImageLayout& layout) override
+    {
+        assert(std::holds_alternative<PassResourceAccess::Read>(accessType) || 
+            std::holds_alternative<PassResourceAccess::Sample>(accessType) || 
+            std::holds_alternative<PassResourceAccess::Write>(accessType));
+
+        stageMask = vk::PipelineStageFlagBits2::eComputeShader;
+        if(std::holds_alternative<PassResourceAccess::Read>(accessType))
+        {
+            accessMask = vk::AccessFlagBits2::eShaderRead;
+            layout = vk::ImageLayout::eShaderReadOnlyOptimal;
+            return true;
+        }
+        if (std::holds_alternative<PassResourceAccess::Sample>(accessType))
+        {
+            accessMask = vk::AccessFlagBits2::eShaderSampledRead;
+            layout = vk::ImageLayout::eShaderReadOnlyOptimal;
+            return true;
+        }
+        if (std::holds_alternative<PassResourceAccess::Write>(accessType))
+        {
+            accessMask = vk::AccessFlagBits2::eShaderWrite;
+            layout = vk::ImageLayout::eGeneral;
+            return true;
+        }
+
+        return false;
+    }
 
     std::unordered_map<std::string, vk::Pipeline> computePipelines;
+};
+
+struct RenderTarget
+{
+    vk::AttachmentLoadOp loadOp;
+    vk::AttachmentStoreOp storeOp;
+    PassTexture* texture;
 };
 
 struct GPURasterizedPass : GPUPass
@@ -391,9 +499,11 @@ struct GPURasterizedPass : GPUPass
 
     void endPass(vk::CommandBuffer cmdBuf);
 
-    void buildRenderPass(const DeviceExtended& device, GPUFrame* frame);
+    void buildRenderPass(GPUFrame* frame);
 
     void buildFrameBuffer(GPUFrame* frame);
+
+    std::vector<RenderTarget> renderTargets;
 
     vk::RenderPass renderPass;
     vk::Framebuffer frameBuffer;
@@ -421,6 +531,84 @@ struct GPURasterizedPass : GPUPass
     virtual GPUPassType getType() const override
     {
         return GPUPassType::Graphics;
+    }
+
+    void renderTo(PassTextureDescription* texture, vk::AttachmentLoadOp loadOp = vk::AttachmentLoadOp::eDontCare)
+    {
+        PassResourceAccessInfo accessInfo;
+        accessInfo.accessType = PassResourceAccess::RenderTarget{ loadOp,vk::AttachmentStoreOp::eStore };
+        accessInfo.pass = this;
+        texture->accessList.emplace_back(std::move(accessInfo));
+        this->renderTargets.emplace_back(RenderTarget{loadOp, vk::AttachmentStoreOp::eStore, texture});
+    }
+
+    bool checkWrite(PassResourceDescriptionBase* res) override
+    {
+        return false;
+    }
+
+    bool checkRead(PassResourceDescriptionBase* res) override
+    {
+        return false;
+    }
+
+    bool fillMemBarrierInfo(PassResourceAccess::Access accessType, PassBufferDescription* buffer, vk::MemoryBarrier2& barrier) override
+    {
+        return false;
+    }
+    bool fillImgBarrierInfo(PassResourceAccess::Access accessType, PassTextureDescription* texture,
+        vk::PipelineStageFlags2& stageMask, vk::AccessFlags2& accessMask, vk::ImageLayout& layout) override
+    {
+        if (std::holds_alternative<PassResourceAccess::Read>(accessType))
+        {
+            stageMask = vk::PipelineStageFlagBits2::eFragmentShader;
+            accessMask = vk::AccessFlagBits2::eShaderRead;
+            if (isDepthStencilFormat(texture->format))
+            {
+                layout = vk::ImageLayout::eDepthStencilReadOnlyOptimal;
+            }
+            else {
+                layout = vk::ImageLayout::eShaderReadOnlyOptimal;
+            }
+            return true;
+        }
+        if (std::holds_alternative<PassResourceAccess::Write>(accessType))
+        {
+            stageMask = vk::PipelineStageFlagBits2::eFragmentShader;
+            accessMask = vk::AccessFlagBits2::eShaderRead;
+            layout = vk::ImageLayout::eGeneral;
+            return true;
+        }
+        if (std::holds_alternative<PassResourceAccess::Sample>(accessType))
+        {
+            stageMask = vk::PipelineStageFlagBits2::eFragmentShader;
+            accessMask = vk::AccessFlagBits2::eShaderSampledRead;
+            if (isDepthStencilFormat(texture->format))
+            {
+                layout = vk::ImageLayout::eDepthStencilReadOnlyOptimal;
+            }
+            else {
+                layout = vk::ImageLayout::eShaderReadOnlyOptimal;
+            }
+            return true;
+        }
+        if (std::holds_alternative<PassResourceAccess::RenderTarget>(accessType))
+        {
+            if (isDepthStencilFormat(texture->format))
+            {
+                stageMask = vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests;
+                accessMask = vk::AccessFlagBits2::eDepthStencilAttachmentWrite;
+                layout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+            }
+            else {
+                stageMask = vk::PipelineStageFlagBits2::eColorAttachmentOutput;
+                accessMask = vk::AccessFlagBits2::eColorAttachmentWrite;
+                layout = vk::ImageLayout::eColorAttachmentOptimal;
+            }
+            return true;
+        }
+
+        return false;
     }
 };
 
@@ -466,22 +654,22 @@ struct GPUFrame {
 
     vk::CommandBuffer recordMainQueueCommands();
 
-    void registerRasterizedGPUPass(std::unique_ptr<GPURasterizedPass> &&pass) {
-        for (const auto &reg_pass: _rasterPasses) {
-            if (pass->_name == reg_pass->_name) {
-                throw std::invalid_argument("Pass has been registered.");
-            }
-        }
-        _rasterPasses.emplace_back(std::move(pass));
+    PassTextureDescription* createTexture(const std::string& name, vk::Format format, PassTextureExtentType extentType = PassTextureExtent::SwapchainRelative{})
+    {
+        auto tex = std::make_unique<PassTexture>(name, format, std::move(extentType));
+        auto* tex_ptr = tex.get();
+        this->textureDescriptions.emplace_back(std::move(tex));
+        return tex_ptr;
     }
 
-    void registerComputeGPUPass(std::unique_ptr<GPUComputePass>&& pass) {
-        for (const auto& compute_pass : _computePasses) {
-            if (pass->_name == compute_pass->_name) {
-                throw std::invalid_argument("Pass has been registered.");
-            }
-        }
-        _computePasses.emplace_back(std::move(pass));
+    PassTextureDescription* getSwapchainTexture()
+    {
+        return swapchainTextureDesc.get();
+    }
+
+    void executePass(std::unique_ptr<GPUPass>&& pass)
+    {
+        _allPasses.emplace_back(std::move(pass));
     }
 
     struct PassDataDescriptorSetBaseLayout {
@@ -493,27 +681,6 @@ struct GPUFrame {
         std::vector<vk::WriteDescriptorSet> writes;
         std::shared_ptr<vk::DescriptorImageInfo[]> imgInfos{};
         std::shared_ptr<vk::DescriptorBufferInfo[]> bufInfos{};
-
-        //PassDataDescriptorSetBaseLayout(const PassDataDescriptorSetBaseLayout &other) = delete;
-
-        //PassDataDescriptorSetBaseLayout &operator=(const PassDataDescriptorSetBaseLayout &other) = delete;
-
-        /*PassDataDescriptorSetBaseLayout(PassDataDescriptorSetBaseLayout &&other) noexcept {
-            bindings = std::move(other.bindings);
-            writes = std::move(other.writes);
-            imgInfos = std::move(other.imgInfos);
-            bufInfos = std::move(other.bufInfos);
-        }
-
-        PassDataDescriptorSetBaseLayout &operator=(PassDataDescriptorSetBaseLayout &&other) noexcept {
-            if (this != &other) {
-                bindings = std::move(other.bindings);
-                writes = std::move(other.writes);
-                imgInfos = std::move(other.imgInfos);
-                bufInfos = std::move(other.bufInfos);
-            }
-            return *this;
-        }*/
     };
 
     /*
@@ -521,10 +688,13 @@ struct GPUFrame {
      * Note that writeDescriptorSets cannot be directly used : caller must
      * manually set the dstSet.
      * */
-    PassDataDescriptorSetBaseLayout getPassDataDescriptorSetBaseLayout(GPUPass *pass) const;
 
     //https://app.diagrams.net/#G1gIpgDwpK7Vyhzypl7A_RbQFETWhS1_1q
     void compileAOT();
+
+    void allocateResources();
+
+    void buildBarriers();
 
     enum class Event
     {
@@ -533,33 +703,54 @@ struct GPUFrame {
 
     void update(Event event);
 
-    auto createBackingImage(PassAttachmentDescription* attachmentDesc)
+    void disablePass(const std::string& passName);
+
+    void enablePass(const std::string& passName);
+
+    auto createBackingImage(PassTextureDescription* textureDesc)
     {
-        VMAImage image;
-        /*todo frame graph should some how determine whether an attachment need to create with sample bit or not.
-         * For color attachment, it seems that every attachment need to be sampled by further passes, except swapchainimage
-         * For depth attachment, it might not be the case.*/
-        bool sampled_need = true;
-        auto attachmentExtent = attachmentDesc->getExtent(backendDevice->_swapchain);
-        if (isDepthStencilFormat(attachmentDesc->format))
+        auto textureExtent = textureDesc->getExtent(backendDevice->_swapchain);
+        VkImageCreateInfo imageInfo{};
+        imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        imageInfo.imageType = VK_IMAGE_TYPE_2D;
+        imageInfo.format = static_cast<VkFormat>(textureDesc->format);
+        imageInfo.extent = VkExtent3D{ textureExtent.width,textureExtent.height,1};
+        if (textureDesc->need_mipmap())
         {
-            image = backendDevice->allocateVMAImageForDepthStencilAttachment(
-                    static_cast<VkFormat>(attachmentDesc->format), attachmentExtent.width, attachmentExtent.height, sampled_need).value();
+            imageInfo.mipLevels = 1;
         }
         else {
-            image = backendDevice->allocateVMAImageForColorAttachment(
-                    static_cast<VkFormat>(attachmentDesc->format), attachmentExtent.width, attachmentExtent.height, sampled_need).value();
+            imageInfo.mipLevels = 1;
         }
+        imageInfo.arrayLayers = 1;
+        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+        imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+        if (textureDesc->need_sample())
+        {
+            imageInfo.usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
+        }
+        if (textureDesc->use_as_attachment())
+        {
+            if (isDepthStencilFormat(textureDesc->format))
+            {
+                imageInfo.usage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+            }
+            else {
+                imageInfo.usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+            }
+        }
+        imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-        return image;
+        return backendDevice->allocateVMAImage(imageInfo);
     }
 
-    auto createBackingImageView(PassAttachmentDescription* attachmentDesc, vk::Image image)
+    auto createBackingImageView(PassTextureDescription* textureDesc, const PassResourceAccess::Access & accessType, vk::Image image)
     {
         vk::ImageViewCreateInfo imageViewInfo{};
         imageViewInfo.image = image;
         imageViewInfo.viewType = vk::ImageViewType::e2D;
-        imageViewInfo.format = attachmentDesc->format;
+        imageViewInfo.format = textureDesc->format;
         vk::ComponentMapping componentMapping{};
         componentMapping.a = vk::ComponentSwizzle::eA;
         componentMapping.r = vk::ComponentSwizzle::eR;
@@ -567,23 +758,41 @@ struct GPUFrame {
         componentMapping.b = vk::ComponentSwizzle::eB;
         imageViewInfo.components = componentMapping;
         vk::ImageSubresourceRange subresourceRange;
-        if (isDepthStencilFormat(attachmentDesc->format))
+        subresourceRange.baseArrayLayer = 0;
+        subresourceRange.layerCount = 1;
+        if (isDepthStencilFormat(textureDesc->format))
         {
             subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth;
         }
         else {
             subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
         }
-        subresourceRange.baseMipLevel = 0;
-        subresourceRange.levelCount = 1;
-        subresourceRange.baseArrayLayer = 0;
-        subresourceRange.layerCount = 1;
+        if (std::holds_alternative<PassResourceAccess::Sample>(accessType))
+        {
+            subresourceRange.baseMipLevel = 0;
+            subresourceRange.levelCount = 1;
+        }
+        else if (std::holds_alternative<PassResourceAccess::RenderTarget>(accessType))
+        {
+            subresourceRange.baseMipLevel = 0;
+            subresourceRange.levelCount = 1;
+        }
+        else
+        {
+            subresourceRange.baseMipLevel = 0;
+            subresourceRange.levelCount = 1;
+        }
+       
         imageViewInfo.subresourceRange = subresourceRange;
         return backendDevice->createImageView(imageViewInfo);
     }
 
     vk::ImageView getBackingImageView(const std::string &name) const {
         return backingImageViews.find(name)->second;
+    }
+
+    vk::Image getBackingImage(const std::string& name) const {
+        return backingImages.find(name)->second.image;
     }
 
     int allocateSingleDescriptorSet(vk::DescriptorSetLayout layout) const {
@@ -596,7 +805,7 @@ struct GPUFrame {
 
     GPUPass* getPass(const std::string & name)
     {
-        for (auto & pass  : this->_rasterPasses)
+        for (auto & pass  : this->_allPasses)
         {
             if (pass->_name == name)
             {
@@ -605,8 +814,6 @@ struct GPUFrame {
         }
         return nullptr;
     }
-
-    void connectResources(PassResourceDescriptionBase *output, PassResourceDescriptionBase *input);
 
     using DescriptorSetRecord = std::pair<std::string,vk::DescriptorSet>;
     using DescriptorSetRecordList = std::vector<DescriptorSetRecord>;
@@ -621,13 +828,15 @@ struct GPUFrame {
 
     vk::DescriptorSet getManagedDescriptorSet(std::string && name) const;
 
-    void managePassInputDescriptorSet(GPUPass * pass);
+    void managePassInputDescriptorSet(GPUPass* pass);
 
-    PassAttachmentDescription* swapchainAttachment;
+    std::unique_ptr<PassTextureDescription> swapchainTextureDesc;
     std::vector<int> sortedIndices;
-    std::vector<std::unique_ptr<GPURasterizedPass>> _rasterPasses;
-    std::vector<std::unique_ptr<GPUComputePass>> _computePasses;
-    std::vector<GPUPass*> _allPasses;
+    std::vector<std::unique_ptr<GPUPass>> _allPasses;
+
+    std::vector<std::unique_ptr<PassTexture>> textureDescriptions;
+    std::vector<std::unique_ptr<PassBuffer>> bufferDescriptions;
+
     std::unordered_map<std::string,vk::ImageView> backingImageViews;
     std::unordered_map<std::string,VMAImage> backingImages;
     std::vector<vk::Sampler> samplers;
@@ -645,6 +854,8 @@ struct GPUFrame {
     float x = 0;
     float y = 0;
     int frameIdx{};
+
+    bool needToRebuildBarriers = false;
 };
 
 #endif //PBRTEDITOR_GPUPASS_H

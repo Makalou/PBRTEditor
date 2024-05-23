@@ -162,7 +162,8 @@ int main( int /*argc*/, char ** /*argv*/ )
 
         auto required_device_extension = {VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
                                           VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
-                                          VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME};
+                                          VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME,
+                                            VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME};
 
         VkPhysicalDeviceBufferDeviceAddressFeaturesKHR deviceAddressFeaturesKhr{};
         deviceAddressFeaturesKhr.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_KHR;
@@ -177,6 +178,10 @@ int main( int /*argc*/, char ** /*argv*/ )
         extendedDynamicStateFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT;
         extendedDynamicStateFeatures.extendedDynamicState = VK_TRUE;
 
+        VkPhysicalDeviceSynchronization2FeaturesKHR synchronization2Features{};
+        synchronization2Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES_KHR;
+        synchronization2Features.synchronization2 = true;
+
         auto phy_dev = phyDevSelector
             .set_surface(surface)
             .set_minimum_version(1, 2)
@@ -185,6 +190,7 @@ int main( int /*argc*/, char ** /*argv*/ )
             .add_required_extension_features(deviceAddressFeaturesKhr)
             .add_required_extension_features(descriptorIndexingFeatures)
             .add_required_extension_features(extendedDynamicStateFeatures)
+            .add_required_extension_features(synchronization2Features)
             .select();
 
             if(!phy_dev)

@@ -15,27 +15,98 @@ bool isDepthStencilFormat(vk::Format format)
         format == vk::Format::eD32SfloatS8Uint;
 };
 
-std::pair<std::string, std::string> parseInputIdentifier(const std::string& identifier)
+void PassTextureDescription::resolveBarriers(GPUFrame* frame)
 {
-    size_t pos = identifier.find("::");
-    if (pos == std::string::npos)
-        throw std::invalid_argument("Input resource must using PassName as name space");
+    // For the pass who firstly attach an image, we don't need sync but we may need to transition the layout
+    std::vector<PassResourceAccessInfo> activeAccessList;
+    activeAccessList.reserve(accessList.size());
+    for (const auto & access : accessList)
+    {
+        if (access.pass->enabled)
+        {
+            activeAccessList.push_back(access);
+        }
+    }
 
-    auto producerPassName = identifier.substr(0, pos);
-    auto resourceName = identifier.substr(pos + 2);
+    for (int i = 1; i < activeAccessList.size(); i++)
+    {
+        auto preAccessType = activeAccessList[i - 1].accessType;
+        auto postAccessType = activeAccessList[i].accessType;
 
-    return { producerPassName, resourceName };
+        bool has_hazard = false;
+        
+        has_hazard |= (std::holds_alternative<PassResourceAccess::Read>(preAccessType) && std::holds_alternative<PassResourceAccess::Write>(postAccessType));
+        has_hazard |= (std::holds_alternative<PassResourceAccess::Read>(preAccessType) && std::holds_alternative<PassResourceAccess::RenderTarget>(postAccessType));
+        has_hazard |= (std::holds_alternative<PassResourceAccess::Read>(preAccessType) && std::holds_alternative<PassResourceAccess::Sample>(postAccessType)); // layout transition need
+
+        has_hazard |= (std::holds_alternative<PassResourceAccess::Sample>(preAccessType) && std::holds_alternative<PassResourceAccess::Write>(postAccessType));
+        has_hazard |= (std::holds_alternative<PassResourceAccess::Sample>(preAccessType) && std::holds_alternative<PassResourceAccess::RenderTarget>(postAccessType));
+        has_hazard |= (std::holds_alternative<PassResourceAccess::Sample>(preAccessType) && std::holds_alternative<PassResourceAccess::Read>(postAccessType)); // layout transition need
+
+        has_hazard |= (std::holds_alternative<PassResourceAccess::Write>(preAccessType) && std::holds_alternative<PassResourceAccess::Write>(postAccessType));
+        has_hazard |= (std::holds_alternative<PassResourceAccess::Write>(preAccessType) && std::holds_alternative<PassResourceAccess::RenderTarget>(postAccessType));
+        has_hazard |= (std::holds_alternative<PassResourceAccess::Write>(preAccessType) && std::holds_alternative<PassResourceAccess::Read>(postAccessType));
+        has_hazard |= (std::holds_alternative<PassResourceAccess::Write>(preAccessType) && std::holds_alternative<PassResourceAccess::Sample>(postAccessType));
+
+        has_hazard |= (std::holds_alternative<PassResourceAccess::RenderTarget>(preAccessType) && std::holds_alternative<PassResourceAccess::Write>(postAccessType));
+        has_hazard |= (std::holds_alternative<PassResourceAccess::RenderTarget>(preAccessType) && std::holds_alternative<PassResourceAccess::RenderTarget>(postAccessType));
+        has_hazard |= (std::holds_alternative<PassResourceAccess::RenderTarget>(preAccessType) && std::holds_alternative<PassResourceAccess::Read>(postAccessType));
+        has_hazard |= (std::holds_alternative<PassResourceAccess::RenderTarget>(preAccessType) && std::holds_alternative<PassResourceAccess::Sample>(postAccessType));
+
+        if (has_hazard)
+        {
+            vk::ImageMemoryBarrier2 imb{};
+            imb.setImage(frame->getBackingImage(name));
+            vk::ImageSubresourceRange subresourceRange{};
+            subresourceRange.setBaseMipLevel(0);
+            subresourceRange.setLevelCount(1);
+            subresourceRange.setBaseArrayLayer(0);
+            subresourceRange.setLayerCount(1);
+            if (isDepthStencilFormat(format))
+            {
+                subresourceRange.setAspectMask(vk::ImageAspectFlagBits::eDepth);
+            }
+            else {
+                subresourceRange.setAspectMask(vk::ImageAspectFlagBits::eColor);
+            }
+            imb.setSubresourceRange(subresourceRange);
+            imb.setSrcQueueFamilyIndex(vk::QueueFamilyIgnored);
+            imb.setDstQueueFamilyIndex(vk::QueueFamilyIgnored);
+            activeAccessList[i - 1].pass->fillImgBarrierInfo(preAccessType, this, imb.srcStageMask, imb.srcAccessMask, imb.oldLayout);
+            activeAccessList[i].pass->fillImgBarrierInfo(postAccessType, this, imb.dstStageMask, imb.dstAccessMask, imb.newLayout);
+            activeAccessList[i].pass->imageMemoryBarriers.emplace_back(imb);
+        }
+    }
 }
 
-std::pair<std::string, std::string> parseInoutIdentifier(const std::string& identifier)
+void PassBufferDescription::resolveBarriers(GPUFrame* frame)
 {
-    size_t pos = identifier.find("->");
-    if (pos == std::string::npos)
-        throw std::invalid_argument("Failed to parse inout name");
-    auto inputName = identifier.substr(0, pos);
-    auto outputName = identifier.substr(pos + 2);
+    std::vector<PassResourceAccessInfo> activeAccessList;
+    activeAccessList.reserve(accessList.size());
+    for (const auto & access : accessList)
+    {
+        if (access.pass->enabled)
+        {
+            activeAccessList.push_back(access);
+        }
+    }
+    for (int i = 1; i < activeAccessList.size(); i++)
+    {
+        auto preAccessType = activeAccessList[i - 1].accessType;
+        auto postAccessType = activeAccessList[i].accessType;
 
-    return { inputName, outputName };
+        bool has_hazard = false;
+
+        has_hazard |= (std::holds_alternative<PassResourceAccess::Read>(preAccessType) && std::holds_alternative<PassResourceAccess::Write>(postAccessType));
+
+        has_hazard |= (std::holds_alternative<PassResourceAccess::Write>(preAccessType) && std::holds_alternative<PassResourceAccess::Write>(postAccessType));
+        has_hazard |= (std::holds_alternative<PassResourceAccess::Write>(preAccessType) && std::holds_alternative<PassResourceAccess::Read>(postAccessType));
+
+        if (has_hazard)
+        {
+            
+        }
+    }
 }
 
 vk::PipelineLayoutCreateInfo concatLayoutCreateInfo(vk::PipelineLayoutCreateInfo baseInfo, vk::PipelineLayoutCreateInfo derivedInfo)
@@ -93,47 +164,25 @@ void GPURasterizedPass::endPass(vk::CommandBuffer cmdBuf) {
     cmdBuf.endRenderPass();
 }
 
-void GPURasterizedPass::buildRenderPass(const DeviceExtended &device, GPUFrame *frame) {
+void GPURasterizedPass::buildRenderPass(GPUFrame* frame) {
 
     attachmentDescriptions.clear();
-    std::vector<PassAttachmentDescription*> passAttachmentDescriptions;
-    passAttachmentDescriptions.reserve(outputs.size() + inouts.size());
-    for(auto & output : outputs)
-    {
-        if(output->getType() == Attachment)
-        {
-            passAttachmentDescriptions.push_back(dynamic_cast<PassAttachmentDescription*>(output.get()));
-        }
-    }
-
-    for (auto& inout : inouts)
-    {
-        if (inout->getType() == Attachment)
-        {
-            passAttachmentDescriptions.push_back(dynamic_cast<PassAttachmentDescription*>(inout.get()));
-        }
-    }
-    
-    for (PassAttachmentDescription* passAttachment : passAttachmentDescriptions)
+    for (const auto& renderTarget : renderTargets)
     {
         vk::AttachmentDescription attachment{};
-        attachment.setFormat(passAttachment->format);
+        attachment.setFormat(renderTarget.texture->format);
         attachment.setSamples(vk::SampleCountFlagBits::e1);
-        //todo how to deduce attachment layout and load/store OP?
-        attachment.setInitialLayout(passAttachment->initialLayout);
-        if (passAttachment->finalLayout == vk::ImageLayout::eUndefined)
+        if (isDepthStencilFormat(attachment.format))
         {
-            if (isDepthStencilFormat(passAttachment->format))
-            {
-                passAttachment->finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-            }
-            else {
-                passAttachment->finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
-            }
+            attachment.setInitialLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal);
+            attachment.setFinalLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal);
         }
-        attachment.setFinalLayout(passAttachment->finalLayout);
-        attachment.setLoadOp(passAttachment->loadOp);
-        attachment.setStoreOp(passAttachment->storeOp);
+        else {
+            attachment.setInitialLayout(vk::ImageLayout::eColorAttachmentOptimal);
+            attachment.setFinalLayout(vk::ImageLayout::eColorAttachmentOptimal);
+        }
+        attachment.setLoadOp(renderTarget.loadOp);
+        attachment.setStoreOp(renderTarget.storeOp);
         // We assume currently we don't use stencil attachment
         attachment.setStencilLoadOp(vk::AttachmentLoadOp::eDontCare);
         attachment.setStencilStoreOp(vk::AttachmentStoreOp::eDontCare);
@@ -149,14 +198,15 @@ void GPURasterizedPass::buildRenderPass(const DeviceExtended &device, GPUFrame *
     colorAttachmentRefs.reserve(attachmentDescriptions.size());
     depthStencilAttachmentRef = vk::AttachmentReference{};
 
-    for(int i = 0; i < attachmentDescriptions.size(); i ++)
+    for (int i = 0; i < attachmentDescriptions.size(); i++)
     {
-        if(isDepthStencilFormat(attachmentDescriptions[i].format))
+        if (isDepthStencilFormat(attachmentDescriptions[i].format))
         {
             depthStencilAttachmentRef.attachment = i;
             //the layout the attachment uses during the subpass.
             depthStencilAttachmentRef.layout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-        }else{
+        }
+        else {
             vk::AttachmentReference colorRef{};
             colorRef.attachment = i;
             colorRef.layout = vk::ImageLayout::eColorAttachmentOptimal;
@@ -165,7 +215,7 @@ void GPURasterizedPass::buildRenderPass(const DeviceExtended &device, GPUFrame *
     }
 
     subpassInfo.setColorAttachments(colorAttachmentRefs);
-    if(depthStencilAttachmentRef.layout != vk::ImageLayout::eUndefined)
+    if (depthStencilAttachmentRef.layout != vk::ImageLayout::eUndefined)
     {
         subpassInfo.setPDepthStencilAttachment(&depthStencilAttachmentRef);
     }
@@ -175,16 +225,15 @@ void GPURasterizedPass::buildRenderPass(const DeviceExtended &device, GPUFrame *
     // Since we only have one subpass, we don't care about the dependency ...
     // todo or do we?
     renderPassCreateInfo.setDependencies({});
-    renderPass = device.createRenderPass(renderPassCreateInfo);
+    renderPass = frame->backendDevice->createRenderPass(renderPassCreateInfo);
     auto passName = this->_name + "RenderPass";
-    device.setObjectDebugName(renderPass, passName.c_str());
+    frame->backendDevice->setObjectDebugName(renderPass, passName.c_str());
 }
-
 /*
  * May need recreate when swapChain invalid
  */
 void GPURasterizedPass::buildFrameBuffer(GPUFrame* frame) {
-    assert(renderPass!=VK_NULL_HANDLE);
+    assert(renderPass != VK_NULL_HANDLE);
     framebufferCreateInfo.setRenderPass(renderPass);
     //For now, we assume each attachment has same size
     int width = 0;
@@ -192,64 +241,23 @@ void GPURasterizedPass::buildFrameBuffer(GPUFrame* frame) {
 
     std::vector<vk::ImageView> imageViews{};
 
-    std::vector<PassAttachmentDescription*> passAttachmentDescriptions;
-    passAttachmentDescriptions.reserve(outputs.size() + inouts.size());
-
-    for (auto& output : outputs)
+    for (const auto& renderTarget : renderTargets)
     {
-        if (output->getType() == Attachment)
-        {
-            auto passAttachment = dynamic_cast<PassAttachmentDescription*>(output.get());
-            auto passAttachmentExtent = passAttachment->getExtent(frame->backendDevice->_swapchain);
-            if (width == 0) {
-                width = passAttachmentExtent.width;
-            }
-            else {
-                assert(width == passAttachmentExtent.width);
-            }
-
-            if (height == 0) {
-                height = passAttachmentExtent.height;
-            }
-            else {
-                assert(height == passAttachmentExtent.height);
-            }
-            // The most interesting thing in frame buffer creation
-            // is we need the frame graph to provide the underlying
-            // memory of each attachment.
-            //auto imgViewIdentifier = (outputs[i]->name == "SwapChainImage") ? "SwapChainImage" : _name+"::"+outputs[i]->name;
-            auto imgViewIdentifier = _name + "::" + output->name;
-            imageViews.push_back(frame->getBackingImageView(imgViewIdentifier));
+        auto attachmentExtent = renderTarget.texture->getExtent(frame->backendDevice->_swapchain);
+        if (width == 0) {
+            width = attachmentExtent.width;
         }
-    }
-
-    for (auto& inout : inouts)
-    {
-        if (inout->getType() == Attachment)
-        {
-            auto passAttachment = dynamic_cast<PassAttachmentDescription*>(inout.get());
-            auto passAttachmentExtent = passAttachment->getExtent(frame->backendDevice->_swapchain);
-            if (width == 0) {
-                width = passAttachmentExtent.width;
-            }
-            else {
-                assert(width == passAttachmentExtent.width);
-            }
-
-            if (height == 0) {
-                height = passAttachmentExtent.height;
-            }
-            else {
-                assert(height == passAttachmentExtent.height);
-            }
-            // The most interesting thing in frame buffer creation
-            // is we need the frame graph to provide the underlying
-            // memory of each attachment.
-            //auto imgViewIdentifier = (outputs[i]->name == "SwapChainImage") ? "SwapChainImage" : _name+"::"+outputs[i]->name;
-            size_t pos = inout->name.find("->");
-            auto imgViewIdentifier = inout->name.substr(0, pos);
-            imageViews.push_back(frame->getBackingImageView(imgViewIdentifier));
+        else {
+            assert(width == attachmentExtent.width);
         }
+
+        if (height == 0) {
+            height = attachmentExtent.height;
+        }
+        else {
+            assert(height == attachmentExtent.height);
+        }
+        imageViews.push_back(frame->getBackingImageView(this->_name + "::" + renderTarget.texture->name));
     }
 
     framebufferCreateInfo.setWidth(width);
@@ -259,89 +267,6 @@ void GPURasterizedPass::buildFrameBuffer(GPUFrame* frame) {
     frameBuffer = frame->backendDevice->createFramebuffer(framebufferCreateInfo);
     auto fbName = this->_name + "FrameBuffer";
     frame->backendDevice->setObjectDebugName(frameBuffer, fbName.c_str());
-}
-
-bool isResourceTypeCompatible(PassResourceType outputType, PassResourceType inputType)
-{
-    return outputType == inputType ||
-            (outputType == Attachment && inputType == Texture);
-}
-
-/*
- * Deduce information for input and output
- */
-void GPUFrame::connectResources(PassResourceDescriptionBase* output, PassResourceDescriptionBase* input)
-{
-    if(!isResourceTypeCompatible(output->getType(),input->getType()))
-    {
-        throw std::invalid_argument("output and input type not compatible");
-    }
-    if(output->getType() == Attachment)
-    {
-        auto outputAttachment = dynamic_cast<PassAttachmentDescription*>(output);
-        if(input->getType() == Attachment)
-        {
-            auto inputAttachment = dynamic_cast<PassAttachmentDescription*>(input);
-            auto inputAttachmentExtent = inputAttachment->getExtent(backendDevice->_swapchain);
-            if(inputAttachment->format == vk::Format::eUndefined)
-            {
-                inputAttachment->format = outputAttachment->format;
-            }
-            if (inputAttachmentExtent.width == 0 || inputAttachmentExtent.height == 0)
-            {
-                inputAttachment->extent = outputAttachment->extent;
-            }
-
-            if(isDepthStencilFormat(inputAttachment->format))
-            {
-                outputAttachment->finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-                inputAttachment->initialLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-            }else{
-                outputAttachment->finalLayout = vk::ImageLayout::eColorAttachmentOptimal;
-                inputAttachment->initialLayout = vk::ImageLayout::eColorAttachmentOptimal;
-            }
-        }else{
-            auto inputTexture = dynamic_cast<PassTextureDescription*>(input);
-            if(inputTexture->format == vk::Format::eUndefined)
-            {
-                inputTexture->format = outputAttachment->format;
-            }
-            auto outputAttachmentExtent = outputAttachment->getExtent(backendDevice->_swapchain);
-            if(inputTexture->width == 0 || inputTexture->height == 0)
-            {
-                inputTexture->width = outputAttachmentExtent.width;
-                inputTexture->height = outputAttachmentExtent.height;
-            }
-
-            if(isDepthStencilFormat(outputAttachment->format))
-            {
-                outputAttachment->finalLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal;
-            }else{
-                outputAttachment->finalLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-            }
-        }
-    }else if(output->getType() == Texture)
-    {
-        auto outputTexture = dynamic_cast<PassTextureDescription*>(output);
-        auto inputTexture = dynamic_cast<PassTextureDescription*>(output);
-
-        if(inputTexture->format == vk::Format::eUndefined)
-        {
-            inputTexture->format = outputTexture->format;
-        }
-        if(inputTexture->width == 0)
-        {
-            inputTexture->width = outputTexture->width;
-        }
-        if(inputTexture->height == 0)
-        {
-            inputTexture->height = outputTexture->height;
-        }
-
-    }else{
-        auto outputBuffer = dynamic_cast<PassAttachmentDescription*>(output);
-        auto inputBuffer = dynamic_cast<PassAttachmentDescription*>(output);
-    }
 }
 
 GPUFrame::GPUFrame(int threadsNum, const std::shared_ptr<DeviceExtended> &backendDevice) : workThreadsNum(threadsNum),backendDevice(backendDevice)
@@ -359,8 +284,8 @@ GPUFrame::GPUFrame(int threadsNum, const std::shared_ptr<DeviceExtended> &backen
 
     auto swapChainFormat = static_cast<vk::Format>(backendDevice->_swapchain.image_format);
     auto swapChainExtent = backendDevice->_swapchain.extent;
-    swapchainAttachment = new PassAttachmentDescription("SwapchainImage",swapChainFormat,PassAttachmentExtent::SwapchainRelative(1,1),
-                                                        vk::AttachmentLoadOp::eDontCare,vk::AttachmentStoreOp::eDontCare);
+
+    swapchainTextureDesc = std::make_unique<PassTexture>("SwapchainImage", swapChainFormat, PassTextureExtent::SwapchainRelative(1, 1));
 
     //todo multiple queues stuffs ...
     std::array<vk::DescriptorSetLayoutBinding,1> bindings;
@@ -376,7 +301,7 @@ GPUFrame::GPUFrame(int threadsNum, const std::shared_ptr<DeviceExtended> &backen
     vk::DescriptorSetLayoutCreateInfo layoutCreateInfo;
     layoutCreateInfo.setBindings(bindings);
     _frameGlobalDescriptorSetLayout = backendDevice->createDescriptorSetLayout(layoutCreateInfo);
-    backendDevice->setObjectDebugName(_frameGlobalDescriptorSetLayout,"FrameGlobalDesciptorSetLayout");
+    backendDevice->setObjectDebugName(_frameGlobalDescriptorSetLayout,"FrameGlobalDescriptorSetLayout");
 
     vk::PipelineLayoutCreateInfo pipelineLayoutCreateInfo{};
     pipelineLayoutCreateInfo.setSetLayouts(_frameGlobalDescriptorSetLayout);
@@ -422,153 +347,24 @@ GPUFrame::GPUFrame(int threadsNum, const std::shared_ptr<DeviceExtended> &backen
     backendDevice->updateDescriptorSets(write,{});
 }
 
-void GPUFrame::compileAOT() {
-    // Add pass dependencies
-    // After this process we guarantee that every input
-    // has a valid producer.
-    // And we only allow concurrent read to the same resource.
-
-    // Zip all types of passes
-    for (int i = 0; i < _rasterPasses.size(); i++)
+void GPUFrame::allocateResources()
+{
+    for (auto& texture : textureDescriptions)
     {
-        _allPasses.push_back(_rasterPasses[i].get());
-    }
-    for (int i = 0; i < _computePasses.size(); i++)
-    {
-        _allPasses.push_back(_computePasses[i].get());
-    }
-    
-    for(auto & pass : _allPasses)
-    {
-        // Get pass inputs
-        std::vector<std::tuple<std::string, std::string, PassResourceDescriptionBase*>> inputResourceTokens;
-        inputResourceTokens.reserve(pass->inputs.size() + pass->inouts.size());
-        for(const auto & input : pass->inputs)
+        auto backingImage = createBackingImage(texture.get());
+        assert(backingImage.has_value());
+        backingImages.emplace(texture->name, backingImage.value());
+
+        for (auto & accessInfo : texture->accessList)
         {
-            auto res = parseInputIdentifier(input->name);
-            inputResourceTokens.emplace_back(res.first, res.second, input.get());
-        }
-
-        for (const auto & inout : pass->inouts)
-        {
-            auto res = parseInoutIdentifier(inout->name);
-            if(res.first == "SwapchainImage")
-            {
-                inout->outputHandle = swapchainAttachment;
-                continue;
-            }
-            auto res2 = parseInputIdentifier(res.first);
-            inputResourceTokens.emplace_back(res2.first,res2.second,inout.get());
-        }
-
-        // Find producer pass for each input resource
-
-        for (const auto& token : inputResourceTokens)
-        {
-            auto producerPassName = std::get<0>(token);
-            auto resourceName = std::get<1>(token);
-
-            GPUPass* producerPass = nullptr;
-            for (int k = 0; k < _allPasses.size(); k++)
-            {
-                if (_allPasses[k]->_name == producerPassName)
-                {
-                    producerPass = _allPasses[k];
-                    break;
-                }
-            }
-
-            if (producerPass == nullptr)
-            {
-                throw std::invalid_argument("Can not find pass : " + producerPassName);
-            }
-
-            PassResourceDescriptionBase* output = nullptr;
-            for (const auto & producer_output : producerPass->outputs)
-            {
-                //todo : check concurrent usage to avoid RW or WW
-                if (producer_output->name == resourceName)
-                {
-                    output = producer_output.get();
-                    std::get<2>(token)->outputHandle = output;
-                    break;
-                }
-            }
-
-            if (output == nullptr)
-            {
-                for (const auto & producer_inout : producerPass->inouts)
-                {
-                    //todo : check concurrent usage to avoid RW or WW
-                    auto res = parseInoutIdentifier(producer_inout->name);
-                    if (res.second == resourceName)
-                    {
-                        output = producer_inout.get();
-                        std::get<2>(token)->outputHandle = output;
-                        break;
-                    }
-                }
-            }
-
-            if (output == nullptr)
-            {
-                throw std::invalid_argument(producerPassName.append(" doesn't have output ").append(resourceName));
-            }
-
-            producerPass->edges.push_back(pass);
+           backingImageViews.emplace(accessInfo.pass->_name+"::"+texture->name, createBackingImageView(texture.get(), accessInfo.accessType, getBackingImage(texture->name)));
         }
     }
 
-    // Topological sorting
-    std::stack<int> pass_idx_stk;
-    std::vector<bool> visitedMasks(_allPasses.size());
-    std::unordered_set<int> visited;
-    sortedIndices.reserve(_allPasses.size());
-
-    auto getPassIdx = [&](const std::string& name) ->int
+    for (auto& accessInfo : swapchainTextureDesc->accessList)
     {
-        for(int i = 0; i < _allPasses.size();i++)
-        {
-            if(_allPasses[i]->_name == name)
-                return i;
-        }
-        return -1;
-    };
-
-    for(int i = 0; i < _allPasses.size(); i ++)
-    {
-        if(!visitedMasks[i])
-        {
-            pass_idx_stk.push(i);
-            while(!pass_idx_stk.empty()){
-                auto current = pass_idx_stk.top();
-                bool allChildrenVisited = true;
-
-                for(auto child : _allPasses[current]->edges)
-                {
-                    int child_idx = getPassIdx(child->_name);
-                    if(!visitedMasks[child_idx]){
-                        pass_idx_stk.push(child_idx);
-                        allChildrenVisited = false;
-                    }
-                }
-
-                if(allChildrenVisited){
-                    pass_idx_stk.pop();
-                    if(visited.find(current) == visited.end())
-                    {
-                        sortedIndices.push_back(current);
-                        visited.insert(current);
-                    }
-                    visitedMasks[current] = true;
-                }
-            }
-        }
+        backingImageViews.emplace(accessInfo.pass->_name + "::" + swapchainTextureDesc->name, backendDevice->_swapchain.get_image_views().value()[frameIdx]);
     }
-
-    std::reverse(sortedIndices.begin(), sortedIndices.end());
-
-    backingImageViews.emplace("SwapchainImage",backendDevice->_swapchain.get_image_views().value()[frameIdx]);
 
     //create default sampler
     vk::SamplerCreateInfo defaultSamplerInfo{};
@@ -589,194 +385,245 @@ void GPUFrame::compileAOT() {
 
     samplers.emplace_back(backendDevice->createSampler(defaultSamplerInfo));
 
-    // After topological sorting, we know how to assign and connect resources for each pass
-    for(int idx = 0; idx < sortedIndices.size(); idx++)
+    for (auto& buffer : bufferDescriptions)
     {
-        auto & pass = _allPasses[sortedIndices[idx]];
-        //std::cout << pass->_name << std::endl;
-        for (auto& input : pass->inputs)
-        {
-            assert(input->outputHandle);
-            connectResources(input->outputHandle.pointer, input.get());
-        }
-        for (auto& output : pass->outputs)
-        {
-            if (output->getType() == Attachment)
-            {
-                // Need to create new image
-                auto attachmentDesc = dynamic_cast<PassAttachmentDescription*>(output.get());
-                VMAImage image = createBackingImage(attachmentDesc);
-                auto name = pass->_name + "::" + output->name;
-                backingImages.emplace(name, image);
-                // create image view
-                auto imageView = createBackingImageView(attachmentDesc,image.image);
-                backingImageViews.emplace(name, imageView);
-            }
-        }
-        for (auto& inout : pass->inouts)
-        {
-            assert(inout->outputHandle);
-            connectResources(inout->outputHandle.pointer, inout.get());
-            if (inout->getType() == Attachment)
-            {
-                auto res = parseInoutIdentifier(inout->name);
-                auto name = pass->_name + "::" + res.second;
-                backingImageViews.emplace(name, backingImageViews[res.first]);
-            }
-        }
+        
+    }
+}
+
+void GPUFrame::buildBarriers()
+{
+    for (auto & pass : _allPasses)
+    {
+        pass->memoryBarriers.clear();
+        pass->bufferMemoryBarriers.clear();
+        pass->imageMemoryBarriers.clear();
     }
 
-    // Build RenderPass
-    for(auto & pass : _rasterPasses)
+    for (auto& texture : textureDescriptions)
     {
-        // In theory, if multiple frame in flight is allowed,
-        // We need to build frame buffers for each gpu frame,
-        // but we only need to build render pass once.
-        pass->buildRenderPass(*backendDevice,this);
-        pass->buildFrameBuffer(this);
+        texture->resolveBarriers(this);
     }
 
+    for (auto& buffer : bufferDescriptions)
+    {
+        buffer->resolveBarriers(this);
+    }
+}
+
+void GPUFrame::compileAOT()
+{
+    sortedIndices.reserve(_allPasses.size());
+    for (int i = 0; i < _allPasses.size(); i++)
+    {
+        sortedIndices.push_back(i);
+    }
+    allocateResources();
+    for (auto& pass : _allPasses)
+    {
+        if (pass->getType() == GPUPassType::Graphics)
+        {
+            auto* graphicsPass = static_cast<GPURasterizedPass*>(pass.get());
+            graphicsPass->buildRenderPass(this);
+            graphicsPass->buildFrameBuffer(this);
+        }
+    }
+    buildBarriers();
     // Manage pass input descriptorSet
-    for(auto & pass : _allPasses)
+    for (auto& pass : _allPasses)
     {
-        managePassInputDescriptorSet(pass);
+        managePassInputDescriptorSet(pass.get());
     }
 
     // Pass ahead of time preparation
-    for(auto & pass : _allPasses)
+    for (auto& pass : _allPasses)
     {
         pass->prepareAOT(this);
     }
 
     prepareDescriptorSetsAOT();
 
-    Window::registerCursorPosCallback([this](double xPos, double yPos){
+    Window::registerCursorPosCallback([this](double xPos, double yPos) {
         this->x = xPos;
         this->y = yPos;
-    });
+        });
 
-    backendDevice->_swapchain.registerRecreateCallback([this](auto){
+    backendDevice->_swapchain.registerRecreateCallback([this](auto) {
         this->update(Event::SWAPCHAIN_RESIZE);
-    });
+        });
+}
+
+void GPUFrame::disablePass(const std::string& passName)
+{
+    auto* pass = getPass(passName);
+    if (pass->enabled)
+    {
+        pass->enabled = false;
+        needToRebuildBarriers = true;
+    }
+}
+
+void GPUFrame::enablePass(const std::string& passName)
+{
+    auto* pass = getPass(passName);
+    if (!pass->enabled)
+    {
+        pass->enabled = true;
+        needToRebuildBarriers = true;
+    }
 }
 
 void GPUFrame::update(GPUFrame::Event event) {
-    if(event == Event::SWAPCHAIN_RESIZE)
+    if (event == Event::SWAPCHAIN_RESIZE)
     {
-        backingImageViews["SwapchainImage"] = backendDevice->_swapchain.get_image_views().value()[frameIdx];
         // We need to rebuild all passes whose framebuffer's size changes
-        std::vector<GPURasterizedPass *> needRebuilds;
-        for(int idx = 0; idx < sortedIndices.size(); idx ++)
+        std::vector<GPURasterizedPass*> needRebuilds;
+        for (const auto& access : swapchainTextureDesc->accessList)
         {
-            auto passIdx = sortedIndices[idx];
-            auto & pass = _allPasses[passIdx];
-
-            if (pass->getType() != GPUPassType::Graphics)
+            backingImageViews[access.pass->_name + "::" + swapchainTextureDesc->name] = backendDevice->_swapchain.get_image_views().value()[frameIdx];
+            if (std::holds_alternative<PassResourceAccess::RenderTarget>(access.accessType))
             {
-                continue;
+                assert(access.pass->getType() == GPUPassType::Graphics);
+                needRebuilds.push_back(static_cast<GPURasterizedPass*>(access.pass));
             }
-
-            for(auto& output : pass->outputs)
+        }
+        for (const auto& texture : textureDescriptions)
+        {
+            if (std::holds_alternative<PassTextureExtent::SwapchainRelative>(texture->extent))
             {
-                if(output->getType() == Attachment)
+                auto newImg = createBackingImage(texture.get());
+                assert(newImg.has_value());
+                auto oldImg = backingImages[texture->name];
+                backingImages[texture->name] = newImg.value();
+                backendDevice->deAllocateImage(oldImg.image, oldImg.allocation);
+                for (const auto& access : texture->accessList)
                 {
-                    auto attachmentDesc = static_cast<PassAttachmentDescription*>(output.get());
-                    if (std::holds_alternative<PassAttachmentExtent::SwapchainRelative>(attachmentDesc->extent)) {
-                        needRebuilds.push_back(static_cast<GPURasterizedPass*>(pass));
-                        VMAImage newImg = createBackingImage(attachmentDesc);
-                        auto name = pass->_name + "::" + output->name;
-                        auto oldImg = backingImages[name];
-                        backingImages[name] = newImg;
-                        backendDevice->deAllocateImage(oldImg.image,oldImg.allocation);
-                        auto newImgView = createBackingImageView(attachmentDesc, newImg.image);
-                        auto oldImgView = backingImageViews[name];
-                        backendDevice->destroy(oldImgView);
-                        backingImageViews[name] = newImgView;
-                    }
-                }
-            }
-
-            for(auto& inout : pass->inouts)
-            {
-                if(inout->outputHandle->getType() == Attachment)
-                {
-                    if(inout->outputHandle->name == "SwapchainImage")
+                    auto newImgView = createBackingImageView(texture.get(), access.accessType, getBackingImage(texture->name));
+                    auto oldImgView = backingImageViews[access.pass->_name + "::" + texture->name];
+                    backendDevice->destroy(oldImgView);
+                    backingImageViews[access.pass->_name + "::" + texture->name] = newImgView;
+                    if (std::holds_alternative<PassResourceAccess::RenderTarget>(access.accessType))
                     {
-                        needRebuilds.push_back(static_cast<GPURasterizedPass*>(pass));
-                        auto inoutName = inout->name;
-                        size_t pos = inoutName.find("->");
-                        if (pos == std::string::npos)
-                            throw std::invalid_argument("Failed to parse inout name");
-                        auto outputName = inoutName.substr(pos + 2);
-                        auto name = pass->_name + "::" + outputName;
-                        backingImageViews[name] = backingImageViews["SwapchainImage"];
-                    }
-                    auto desc = static_cast<PassAttachmentDescription*>(inout->outputHandle.pointer);
-                    if (std::holds_alternative<PassAttachmentExtent::SwapchainRelative>(desc->extent)) {
-                        needRebuilds.push_back(static_cast<GPURasterizedPass*>(pass));
-                        auto inoutName = inout->name;
-                        size_t pos = inoutName.find("->");
-                        if (pos == std::string::npos)
-                            throw std::invalid_argument("Failed to parse inout name");
-                        auto inputName = inoutName.substr(0, pos);
-                        auto outputName = inoutName.substr(pos + 2);
-                        auto name = pass->_name + "::" + outputName;
-                        backingImageViews[name] = backingImageViews[inputName];
+                        assert(access.pass->getType() == GPUPassType::Graphics);
+                        needRebuilds.push_back(static_cast<GPURasterizedPass*>(access.pass));
                     }
                 }
             }
         }
-
         // Remove duplicate elements
         std::sort(needRebuilds.begin(), needRebuilds.end());
         auto last = std::unique(needRebuilds.begin(), needRebuilds.end());
         needRebuilds.erase(last, needRebuilds.end());
 
-        for(int i = 0; i < needRebuilds.size(); i++)
+        for (int i = 0; i < needRebuilds.size(); i++)
         {
             backendDevice->destroy(needRebuilds[i]->frameBuffer);
             needRebuilds[i]->buildFrameBuffer(this);
         }
 
-        // Update all descriptorsets which ref to a updated attachement/texture
+        // Update all descriptorsets which ref to an updated attachment/texture
         std::vector<vk::DescriptorImageInfo> imgInfos;
         std::vector<vk::WriteDescriptorSet> writes;
-        for(int idx = 0; idx < sortedIndices.size(); idx ++)
+
+        for (const auto& texture : textureDescriptions)
         {
-            auto passIdx = sortedIndices[idx];
-            auto & pass = _allPasses[passIdx];
-            uint32_t dstImgBinding = 0;
-            for(auto & input : pass->inputs)
+            if (std::holds_alternative<PassTextureExtent::SwapchainRelative>(texture->extent))
             {
-                if(input->getType() == Texture && input->outputHandle->getType() == Attachment)
+                for (const auto& access : texture->accessList)
                 {
-                    auto desc = static_cast<PassAttachmentDescription*>(input->outputHandle.pointer);
-                    if (std::holds_alternative<PassAttachmentExtent::SwapchainRelative>(desc->extent)) {
+                    auto* pass = access.pass;
+                    auto textureId = pass->_name + "::" + texture->name;
+                    if (std::holds_alternative<PassResourceAccess::Read>(access.accessType))
+                    {
                         vk::WriteDescriptorSet write;
                         write.setDstSet(getManagedDescriptorSet(pass->_name + "InputDescriptorSet"));
-                        write.setDstBinding(dstImgBinding++);
+                        auto dstBinding = 0;
+                        for (const auto input : pass->reads)
+                        {
+                            if (input->name == texture->name)
+                            {
+                                break;
+                            }
+                            dstBinding++;
+                        }
+                        write.setDstBinding(dstBinding);
+                        write.setDescriptorType(vk::DescriptorType::eStorageImage);
+                        write.setDescriptorCount(1);
+                        vk::DescriptorImageInfo imgInfo{};
+                        imgInfo.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+                        imgInfo.setImageView(getBackingImageView(textureId));
+                        imgInfos.push_back(imgInfo);
+                        writes.push_back(write);
+                    }
+
+                    if (std::holds_alternative<PassResourceAccess::Write>(access.accessType))
+                    {
+                        vk::WriteDescriptorSet write;
+                        write.setDstSet(getManagedDescriptorSet(pass->_name + "InputDescriptorSet"));
+                        auto dstBinding = pass->reads.size();
+                        for (const auto input : pass->writes)
+                        {
+                            if (input->name == texture->name)
+                            {
+                                break;
+                            }
+                            dstBinding++;
+                        }
+                        write.setDstBinding(dstBinding++);
+                        write.setDescriptorType(vk::DescriptorType::eStorageImage);
+                        write.setDescriptorCount(1);
+                        vk::DescriptorImageInfo imgInfo{};
+                        imgInfo.setImageLayout(vk::ImageLayout::eGeneral);
+                        imgInfo.setImageView(getBackingImageView(textureId));
+                        imgInfos.push_back(imgInfo);
+                        writes.push_back(write);
+                    }
+
+                    if (std::holds_alternative<PassResourceAccess::Sample>(access.accessType))
+                    {
+                        vk::WriteDescriptorSet write;
+                        write.setDstSet(getManagedDescriptorSet(access.pass->_name + "InputDescriptorSet"));
+                        auto dstBinding = pass->reads.size() + pass->writes.size();
+                        for (const auto input : pass->samples)
+                        {
+                            if (input->name == texture->name)
+                            {
+                                break;
+                            }
+                            dstBinding++;
+                        }
+                        write.setDstBinding(dstBinding);
                         write.setDescriptorType(vk::DescriptorType::eCombinedImageSampler);
                         write.setDescriptorCount(1);
                         vk::DescriptorImageInfo imgInfo{};
                         imgInfo.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
                         imgInfo.setSampler(samplers[0]);
-                        imgInfo.setImageView(getBackingImageView(input->name));
+                        imgInfo.setImageView(getBackingImageView(textureId));
                         imgInfos.push_back(imgInfo);
                         writes.push_back(write);
                     }
                 }
             }
         }
+
         for (int i = 0; i < writes.size(); i++)
         {
             writes[i].setPImageInfo(&imgInfos[i]);
         }
 
-        backendDevice->updateDescriptorSets(writes,{});
+        backendDevice->updateDescriptorSets(writes, {});
+        needToRebuildBarriers = true;
     }
 }
 
 vk::CommandBuffer GPUFrame::recordMainQueueCommands() {
+
+    if (needToRebuildBarriers)
+    {
+        buildBarriers();
+        needToRebuildBarriers = false;
+    }
+
     _frameGlobalDataBuffer->time.x = static_cast<float>(glfwGetTime());
     _frameGlobalDataBuffer->cursorPos.x = this->x;
     _frameGlobalDataBuffer->cursorPos.y = this->y;
@@ -836,6 +683,7 @@ vk::CommandBuffer GPUFrame::recordMainQueueCommands() {
             cmdPrimary.bindDescriptorSets(vk::PipelineBindPoint::eCompute, _frameLevelPipelineLayout, 0, _frameGlobalDescriptorSet, nullptr);
         }
         pass->prepareIncremental(this);
+        pass->insertPipelineBarrier(cmdPrimary);
         vk::DebugUtilsLabelEXT passLabel{};
         passLabel.setPLabelName(pass->_name.c_str());
         cmdPrimary.beginDebugUtilsLabelEXT(passLabel,backendDevice->getDLD());
@@ -847,167 +695,146 @@ vk::CommandBuffer GPUFrame::recordMainQueueCommands() {
     return cmdPrimary;
 }
 
-GPUFrame::PassDataDescriptorSetBaseLayout GPUFrame::getPassDataDescriptorSetBaseLayout(GPUPass *pass) const
-{
-    PassDataDescriptorSetBaseLayout baseLayout{};
-    int bindingCount = 0;
-    int imgInfoCount = 0;
-    int bufInfoCount = 0;
-
-    for(auto & input : pass->inputs)
-    {
-        if(input->getType() == PassResourceType::Texture || input->getType() == PassResourceType::Buffer) {
-            bindingCount ++;
-            if(input->getType() == PassResourceType::Texture)
-            {
-                imgInfoCount ++;
-            }
-            if(input->getType() == PassResourceType::Buffer)
-            {
-                bufInfoCount ++;
-            }
-        }
-    }
-
-    baseLayout.bindings.reserve(bindingCount);
-    baseLayout.writes.reserve(bindingCount);
-
-    if(imgInfoCount > 0)
-    {
-        std::shared_ptr<vk::DescriptorImageInfo[]> s(new vk::DescriptorImageInfo[imgInfoCount]);
-        baseLayout.imgInfos.swap(s);
-    }
-    if(bufInfoCount > 0)
-    {
-        std::shared_ptr<vk::DescriptorBufferInfo[]> s(new vk::DescriptorBufferInfo[bufInfoCount]);
-        baseLayout.bufInfos.swap(s);
-    }
-
-    int imgInfoBackIdx = 0;
-    int bufInfoBackIdx = 0;
-
-    for(auto & input : pass->inputs)
-    {
-        if(input->getType() == PassResourceType::Texture || input->getType() == PassResourceType::Buffer)
-        {
-            vk::DescriptorSetLayoutBinding binding;
-            binding.setBinding(baseLayout.bindings.size());
-            binding.setDescriptorCount(1);
-            binding.setStageFlags(vk::ShaderStageFlagBits::eAllGraphics);
-            vk::WriteDescriptorSet write{};
-            write.setDescriptorCount(binding.descriptorCount);
-            write.setDstBinding(binding.binding);
-
-            if(input->getType() == PassResourceType::Texture)
-            {
-                binding.setDescriptorType(vk::DescriptorType::eCombinedImageSampler);
-                write.setDescriptorType(binding.descriptorType);
-                vk::DescriptorImageInfo imgInfo{};
-                imgInfo.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
-                imgInfo.setSampler(samplers[0]); // use default sampler
-                auto imgView = getBackingImageView(input->name);
-                imgInfo.setImageView(imgView);
-                baseLayout.imgInfos[imgInfoBackIdx] = imgInfo;
-                write.setPImageInfo(&baseLayout.imgInfos[imgInfoBackIdx]);
-                imgInfoBackIdx ++;
-            }
-            if(input->getType() == PassResourceType::Buffer)
-            {
-                binding.setDescriptorType(vk::DescriptorType::eStorageBuffer);
-                write.setDescriptorType(binding.descriptorType);
-                //todo
-            }
-            baseLayout.bindings.push_back(binding);
-            baseLayout.writes.push_back(write);
-        }
-    }
-
-    return baseLayout;
-}
-
-void GPUFrame::managePassInputDescriptorSet(GPUPass *pass) {
-    if(pass->inputs.empty()) return;
+void GPUFrame::managePassInputDescriptorSet(GPUPass* pass) {
+    std::vector<PassResourceDescriptionBase*> readwrites;
+    readwrites.reserve(pass->reads.size() + pass->writes.size());
+    readwrites.insert(readwrites.end(), pass->reads.begin(), pass->reads.end());
+    readwrites.insert(readwrites.end(), pass->writes.begin(), pass->writes.end());
+    if (readwrites.empty() && pass->samples.empty()) return;
     std::vector<vk::DescriptorSetLayoutBinding> inputBindings;
-    inputBindings.reserve(pass->inputs.size());
+    inputBindings.reserve(readwrites.size() + pass->samples.size());
     int imgCount = 0;
     int bufferCount = 0;
-    for(int i = 0; i < pass->inputs.size(); i++)
+    vk::DescriptorSetLayoutBinding binding;
+    switch (pass->getType())
     {
-        auto & input = pass->inputs[i];
-        assert(input->getType() == PassResourceType::Texture || input->getType() == PassResourceType::Buffer);
-        vk::DescriptorSetLayoutBinding binding;
-        if (pass->getType() == GPUPassType::Graphics)
-        {
-            binding.setStageFlags(vk::ShaderStageFlagBits::eAllGraphics);
-        }
-        else if (pass->getType() == GPUPassType::Compute)
-        {
-            binding.setStageFlags(vk::ShaderStageFlagBits::eCompute);
-        }
-        
-        binding.setBinding(i);
+    case GPUPassType::Graphics:
+        binding.setStageFlags(vk::ShaderStageFlagBits::eAllGraphics);
+        break;
+    case GPUPassType::Compute:
+        binding.setStageFlags(vk::ShaderStageFlagBits::eCompute);
+        break;
+    default:
+        break;
+    }
+    for (auto * input : readwrites)
+    {
+        binding.setBinding(inputBindings.size());
         binding.setDescriptorCount(1);
         switch (input->getType()) {
-            case PassResourceType::Texture :
-                binding.setDescriptorType(vk::DescriptorType::eCombinedImageSampler);
-                imgCount++;
-                break;
-            case PassResourceType::Buffer :
-                binding.setDescriptorType(vk::DescriptorType::eStorageBuffer);
-                bufferCount++;
-                break;
-            default:
-                break;
+        case PassResourceType::Texture:
+            binding.setDescriptorType(vk::DescriptorType::eCombinedImageSampler);
+            imgCount++;
+            break;
+        case PassResourceType::Buffer:
+            binding.setDescriptorType(vk::DescriptorType::eStorageBuffer);
+            bufferCount++;
+            break;
+        default:
+            break;
         }
         inputBindings.emplace_back(binding);
     }
 
-    pass->passInputDescriptorSetLayout = manageDescriptorSet(pass->_name + "InputDescriptorSet",inputBindings);
-
-    getManagedDescriptorSet(pass->_name + "InputDescriptorSet",[this,pass,imgCount,bufferCount](const vk::DescriptorSet& set)
+    for (auto* input : pass->samples)
     {
-        std::vector<vk::WriteDescriptorSet> writes;
-        std::vector<vk::DescriptorImageInfo> imgInfos;
-        std::vector<vk::DescriptorBufferInfo> bufferInfos;
-        writes.reserve(pass->inputs.size());
-        imgInfos.reserve(imgCount);
-        bufferInfos.reserve(bufferCount);
+        binding.setBinding(inputBindings.size());
+        binding.setDescriptorCount(1);
+        binding.setDescriptorType(vk::DescriptorType::eCombinedImageSampler);
+        imgCount++;
+        inputBindings.emplace_back(binding);
+    }
 
-        for(int i = 0; i < pass->inputs.size(); i++)
+    pass->passInputDescriptorSetLayout = manageDescriptorSet(pass->_name + "InputDescriptorSet", inputBindings);
+
+    getManagedDescriptorSet(pass->_name + "InputDescriptorSet", [this, pass, imgCount, bufferCount](const vk::DescriptorSet& set)
         {
-            auto & input = pass->inputs[i];
-            assert(input->getType() == PassResourceType::Texture || input->getType() == PassResourceType::Buffer);
-            vk::WriteDescriptorSet write;
-            write.setDstSet(set);
-            write.setDstBinding(i);
-            write.setDescriptorCount(1);
-            switch (input->getType()) {
-                case PassResourceType::Texture :
+            std::vector<vk::WriteDescriptorSet> writeDescriptorSets;
+            std::vector<vk::DescriptorImageInfo> imgInfos;
+            std::vector<vk::DescriptorBufferInfo> bufferInfos;
+            writeDescriptorSets.reserve(pass->reads.size() + pass->writes.size() + pass->samples.size());
+            imgInfos.reserve(imgCount);
+            bufferInfos.reserve(bufferCount);
+
+            for (auto * input : pass->reads)
+            {
+                vk::WriteDescriptorSet write;
+                write.setDstSet(set);
+                write.setDstBinding(writeDescriptorSets.size());
+                write.setDescriptorCount(1);
+                switch (input->getType()) {
+                case PassResourceType::Texture:
                 {
-                    write.setDescriptorType(vk::DescriptorType::eCombinedImageSampler);
+                    write.setDescriptorType(vk::DescriptorType::eStorageImage);
                     vk::DescriptorImageInfo imgInfo{};
                     imgInfo.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
-                    imgInfo.setSampler(samplers[0]);
-                    imgInfo.setImageView(getBackingImageView(input->name));
+                    imgInfo.setImageView(getBackingImageView(pass->_name + "::" + input->name));
                     imgInfos.push_back(imgInfo);
-                    write.setPImageInfo(&imgInfos[imgInfos.size()-1]);
+                    write.setPImageInfo(&imgInfos[imgInfos.size() - 1]);
                     break;
                 }
-                case PassResourceType::Buffer : {
+                case PassResourceType::Buffer: {
                     write.setDescriptorType(vk::DescriptorType::eStorageBuffer);
                     vk::DescriptorBufferInfo bufInfo{};
                     //todo
                     bufferInfos.push_back(bufInfo);
-                    write.setPBufferInfo(&bufferInfos[bufferInfos.size()-1]);
+                    write.setPBufferInfo(&bufferInfos[bufferInfos.size() - 1]);
                     break;
                 }
                 default:
                     break;
+                }
+                writeDescriptorSets.emplace_back(write);
             }
-            writes.emplace_back(write);
-        }
-        backendDevice->updateDescriptorSets(writes,{});
-    });
+
+            for (auto* input : pass->writes)
+            {
+                vk::WriteDescriptorSet write;
+                write.setDstSet(set);
+                write.setDstBinding(writeDescriptorSets.size());
+                write.setDescriptorCount(1);
+                switch (input->getType()) {
+                case PassResourceType::Texture:
+                {
+                    write.setDescriptorType(vk::DescriptorType::eStorageImage);
+                    vk::DescriptorImageInfo imgInfo{};
+                    imgInfo.setImageLayout(vk::ImageLayout::eGeneral);
+                    imgInfo.setImageView(getBackingImageView(pass->_name + "::" + input->name));
+                    imgInfos.push_back(imgInfo);
+                    write.setPImageInfo(&imgInfos[imgInfos.size() - 1]);
+                    break;
+                }
+                case PassResourceType::Buffer: {
+                    write.setDescriptorType(vk::DescriptorType::eStorageBuffer);
+                    vk::DescriptorBufferInfo bufInfo{};
+                    //todo
+                    bufferInfos.push_back(bufInfo);
+                    write.setPBufferInfo(&bufferInfos[bufferInfos.size() - 1]);
+                    break;
+                }
+                default:
+                    break;
+                }
+                writeDescriptorSets.emplace_back(write);
+            }
+
+            for (auto * input : pass->samples)
+            {
+                vk::WriteDescriptorSet write;
+                write.setDstSet(set);
+                write.setDstBinding(writeDescriptorSets.size());
+                write.setDescriptorCount(1);
+                write.setDescriptorType(vk::DescriptorType::eCombinedImageSampler);
+                vk::DescriptorImageInfo imgInfo{};
+                imgInfo.setImageLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
+                imgInfo.setSampler(samplers[0]);
+                imgInfo.setImageView(getBackingImageView(pass->_name + "::" + input->name));
+                imgInfos.push_back(imgInfo);
+                write.setPImageInfo(&imgInfos[imgInfos.size() - 1]);
+                writeDescriptorSets.emplace_back(write);
+            }
+            backendDevice->updateDescriptorSets(writeDescriptorSets, {});
+        });
 }
 
 vk::DescriptorSetLayout GPUFrame::manageDescriptorSet(std::string &&name, const std::vector<vk::DescriptorSetLayoutBinding> &bindings) {
