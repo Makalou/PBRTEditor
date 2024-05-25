@@ -56,7 +56,6 @@ using PassResourceHandle = pointer_view<PassResourceDescriptionBase>;
 
 enum PassResourceType
 {
-    Attachment,
     Texture,
     Buffer
 };
@@ -296,40 +295,6 @@ struct GPUPass
      * */
     virtual void prepareIncremental(const GPUFrame* frame){};
 
-    //void addInput(std::unique_ptr<PassResourceDescriptionBase> resource)
-    //{
-    //    inputs.push_back(std::move(resource));
-    //}
-
-    //void addOutput(std::unique_ptr<PassResourceDescriptionBase> resource)
-    //{
-    //    outputs.push_back(std::move(resource));
-    //}
-
-    //void addInOut(std::unique_ptr<PassResourceDescriptionBase> resource)
-    //{
-
-    //}
-
-    //template<typename T,class... Args>
-    //void addInput(Args&& ... args)
-    //{
-    //    //static_assert(!std::is_same_v<T, PassAttachmentDescription>);
-    //    inputs.emplace_back(std::make_unique<T>(args...));
-    //}
-
-    //template<typename T,class... Args>
-    //void addOutput(Args&& ... args)
-    //{
-    //    outputs.emplace_back(std::make_unique<T>(args...));
-    //}
-
-    //template<typename T, class... Args>
-    //void addInOut(const std::string& inputName, const std::string& outputName,Args&& ... args)
-    //{
-    //    inouts.emplace_back(std::make_unique<T>(inputName + "->" + outputName,args...));
-    //}
-
     void read(PassTextureDescription* texture)
     {
 
@@ -367,7 +332,7 @@ struct GPUPass
     std::vector<vk::BufferMemoryBarrier2> bufferMemoryBarriers;
     std::vector<vk::ImageMemoryBarrier2> imageMemoryBarriers;
 
-    // Insert the pipline barrier **Before** the command is record
+    // Insert the pipeline barrier **Before** the command is record
     void insertPipelineBarrier(vk::CommandBuffer cmdBuf)
     {
         if (!memoryBarriers.empty() || !bufferMemoryBarriers.empty() || !imageMemoryBarriers.empty())
@@ -610,11 +575,6 @@ struct GPURasterizedPass : GPUPass
 
         return false;
     }
-};
-
-struct TransferPass : GPUPass
-{
-
 };
 
 struct GPURayTracingPass : GPUPass

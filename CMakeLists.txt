@@ -90,8 +90,9 @@ add_executable(editor_exe src/pbrt_scene_editor/main.cpp
         src/pbrt_scene_editor/VulkanExtension.cpp
         src/pbrt_scene_editor/ApplicationConfig.h
         src/pbrt_scene_editor/ThreadPool.h
-	    "src/pbrt_scene_editor/offlineRender.hpp"
-	    src/pbrt_scene_editor/offlineRender.cpp)
+	    src/pbrt_scene_editor/offlineRender.hpp
+	    src/pbrt_scene_editor/offlineRender.cpp
+        src/pbrt_scene_editor/PassDefinition.cpp)
 
 target_compile_definitions(editor_exe PRIVATE EDITOR_PROJECT_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 
