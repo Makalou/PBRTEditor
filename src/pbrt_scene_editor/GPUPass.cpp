@@ -151,7 +151,7 @@ void GPURasterizedPass::beginPass(vk::CommandBuffer cmdBuf) {
         }
         else {
             vk::ClearColorValue value{};
-            value.setFloat32({0.0,0.0,0.0,1.0});
+            value.setFloat32({0.0,0.0,0.0,0.0});
             clearValue.setColor(value);
         }
         clearValues.emplace_back(clearValue);
