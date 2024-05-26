@@ -13,13 +13,13 @@ void SkyBoxPass::prepareAOT(GPUFrame* frame)
     camBinding.setStageFlags(vk::ShaderStageFlagBits::eAllGraphics);
     bindings.push_back(camBinding);
 
-    passDataDescriptorLayout = frame->manageDescriptorSet("SkyBoxPassDataDescriptorSet", bindings);
+    auto passDataDescriptorLayout = frame->manageDescriptorSet("SkyBoxPassDataDescriptorSet", bindings);
 
     frame->getManagedDescriptorSet("SkyBoxPassDataDescriptorSet", [frame, this](const vk::DescriptorSet& passDataDescriptorSet) mutable {
         frame->backendDevice->updateDescriptorSetUniformBuffer(passDataDescriptorSet, 0, scene->mainView.camera.data.getBuffer());
         });
 
-    pipelineLayout = frame->backendDevice->createPipelineLayout2({ frame->_frameGlobalDescriptorSetLayout,passDataDescriptorLayout });
+    auto pipelineLayout = frame->backendDevice->createPipelineLayout2({ frame->_frameGlobalDescriptorSetLayout,passDataDescriptorLayout });
     frame->backendDevice->setObjectDebugName(pipelineLayout, "SkyBoxPassPipelineLayout");
 
     VulkanGraphicsPipelineBuilder builder(frame->backendDevice->device, vs, fs,
@@ -27,25 +27,16 @@ void SkyBoxPass::prepareAOT(GPUFrame* frame)
         pipelineLayout);
     auto pipeline = builder.build();
     frame->backendDevice->setObjectDebugName(pipeline.getPipeline(), "SkyBoxPassPipeline");
-    this->graphicsPipelines.push_back(pipeline);
-}
-
-void SkyBoxPass::record(vk::CommandBuffer cmdBuf, const GPUFrame* frame)
-{
-    beginPass(cmdBuf);
-    cmdBuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 1, frame->getManagedDescriptorSet("SkyBoxPassDataDescriptorSet"),
-        nullptr);
-    cmdBuf.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipelines[0].getPipeline());
-    FullScreenQuadDrawer::draw(cmdBuf);
-    endPass(cmdBuf);
+    graphicsPipelines.push_back(pipeline);
+    PassActionContext actionContext{};
+    actionContext.pipelineIdx = 0;
+    actionContext.firstSet = 1;
+    actionContext.descriptorSets = { "SkyBoxPassDataDescriptorSet" };
+    actionContext.action = [](vk::CommandBuffer cmd, uint32_t pipelineIdx) {FullScreenQuadDrawer::draw(cmd); };
+    actionContextQueue.push_back(actionContext);
 }
 
 void ShadowPass::prepareAOT(GPUFrame* frame)
-{
-
-}
-
-void ShadowPass::record(vk::CommandBuffer cmdBuf, const GPUFrame* frame)
 {
 
 }
@@ -101,15 +92,10 @@ void GBufferPass::prepareAOT(GPUFrame* frame)
     colorBlendInfo.setBlendConstants({ 1.0,1.0,1.0,1.0 });
 }
 
-void GBufferPass::record(vk::CommandBuffer cmdBuf, const GPUFrame* frame)
+void GBufferPass::prepareIncremental(GPUFrame* frame)
 {
-    cmdBuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, passLevelPipelineLayout, 1, frame->getManagedDescriptorSet("GBufferPassDataDescriptorSet"),
-        nullptr);
-    beginPass(cmdBuf);
-
-    currentPipelineIdx = -1;
+    actionContextQueue.clear();
     currentInstanceDescriptorSetIdx = -1;
-
     if (scene != nullptr && !scene->_dynamicRigidMeshBatch.empty())
     {
         auto view = scene->mainView.camera.data->view;
@@ -123,43 +109,48 @@ void GBufferPass::record(vk::CommandBuffer cmdBuf, const GPUFrame* frame)
             auto& instanceRigidDynamic = scene->_dynamicRigidMeshBatch[i];
             // renderState = vertex input state + pipeline layout + shader + pipeline
             // todo : Here is a big problem. The performance is unpredictable.
-            bindRenderState(cmdBuf, frame, instanceRigidDynamic);
-            glm::uvec4 meshIdx;
-            meshIdx.x = i;
-            meshIdx.y = scene->_dynamicRigidMeshBatch.size();
-            cmdBuf.pushConstants(graphicsPipelines[currentPipelineIdx].getPipelineLayout(), vk::ShaderStageFlagBits::eFragment, 0, sizeof(glm::uvec4), &meshIdx);
-            //mesh instance know how to bind the geometry buffer, how to draw
-            instanceRigidDynamic.drawAll(cmdBuf);
-            //instanceRigidDynamic.drawOne(cmdBuf);
-           /* visibleCount += instanceRigidDynamic.drawCulled(cmdBuf,[&](auto meshHandle, const auto & perInstanceData) -> bool {
-                auto aabb = scene->aabbs[meshHandle.idx];
-                glm::vec3 corners[8]{};
-                corners[0] = {aabb.minX, -aabb.minY, aabb.minZ};
-                corners[1] = {aabb.maxX, -aabb.minY, aabb.minZ};
-                corners[2] = {aabb.minX, -aabb.maxY, aabb.minZ};
-                corners[3] = {aabb.minX, -aabb.minY, aabb.maxZ};
-                corners[4] = {aabb.maxX, -aabb.maxY, aabb.minZ};
-                corners[5] = {aabb.maxX, -aabb.minY, aabb.maxZ};
-                corners[6] = {aabb.minX, -aabb.maxY, aabb.maxZ};
-                corners[7] = {aabb.maxX, -aabb.maxY, aabb.maxZ};
+            PassActionContext actionContext{};
+            actionContext.firstSet = 1;
+            actionContext.descriptorSets.push_back("GBufferPassDataDescriptorSet");
+            bindRenderState(actionContext, frame, instanceRigidDynamic);
+            actionContext.action = [this,i,instanceRigidDynamic](vk::CommandBuffer cmd, uint32_t pipelineIdx) {
+                glm::uvec4 meshIdx;
+                meshIdx.x = i;
+                meshIdx.y = scene->_dynamicRigidMeshBatch.size();
+                cmd.pushConstants(graphicsPipelines[pipelineIdx].getPipelineLayout(), vk::ShaderStageFlagBits::eFragment, 0, sizeof(glm::uvec4), &meshIdx);
+                //mesh instance know how to bind the geometry buffer, how to draw
+                instanceRigidDynamic.drawAll(cmd);
+                //instanceRigidDynamic.drawOne(cmdBuf);
+               /* visibleCount += instanceRigidDynamic.drawCulled(cmdBuf,[&](auto meshHandle, const auto & perInstanceData) -> bool {
+                    auto aabb = scene->aabbs[meshHandle.idx];
+                    glm::vec3 corners[8]{};
+                    corners[0] = {aabb.minX, -aabb.minY, aabb.minZ};
+                    corners[1] = {aabb.maxX, -aabb.minY, aabb.minZ};
+                    corners[2] = {aabb.minX, -aabb.maxY, aabb.minZ};
+                    corners[3] = {aabb.minX, -aabb.minY, aabb.maxZ};
+                    corners[4] = {aabb.maxX, -aabb.maxY, aabb.minZ};
+                    corners[5] = {aabb.maxX, -aabb.minY, aabb.maxZ};
+                    corners[6] = {aabb.minX, -aabb.maxY, aabb.maxZ};
+                    corners[7] = {aabb.maxX, -aabb.maxY, aabb.maxZ};
 
-                for(int i = 0; i < 8; i ++)
-                {
-                    auto clip_space_corner = vp * glm::vec4(corners[i],1.0);
-                    auto x = clip_space_corner.x;
-                    auto y = clip_space_corner.y;
-                    auto z = clip_space_corner.z;
-                    auto w = clip_space_corner.w;
+                    for(int i = 0; i < 8; i ++)
+                    {
+                        auto clip_space_corner = vp * glm::vec4(corners[i],1.0);
+                        auto x = clip_space_corner.x;
+                        auto y = clip_space_corner.y;
+                        auto z = clip_space_corner.z;
+                        auto w = clip_space_corner.w;
 
-                    if((x >= -w) && (x <= w) && (y>=-w) && (y<=w) && (z >= 0) && (z <= w))
-                        return true;
-                }
+                        if((x >= -w) && (x <= w) && (y>=-w) && (y<=w) && (z >= 0) && (z <= w))
+                            return true;
+                    }
 
-                return false;
-            });*/
+                    return false;
+                });*/
+            };
+            actionContextQueue.push_back(actionContext);
         }
     }
-    endPass(cmdBuf);
 }
 
 void DeferredLightingPass::prepareAOT(GPUFrame* frame)
@@ -167,7 +158,7 @@ void DeferredLightingPass::prepareAOT(GPUFrame* frame)
     auto vs = FullScreenQuadDrawer::getVertexShader(frame->backendDevice.get());
     auto fs = ShaderManager::getInstance().createFragmentShader(frame->backendDevice.get(), "deferred.frag");
 
-    pipelineLayout = frame->backendDevice->createPipelineLayout2({ frame->_frameGlobalDescriptorSetLayout,passInputDescriptorSetLayout });
+    auto pipelineLayout = frame->backendDevice->createPipelineLayout2({ frame->_frameGlobalDescriptorSetLayout,passInputDescriptorSetLayout });
     frame->backendDevice->setObjectDebugName(pipelineLayout, "DeferredLightingPassPipelineLayout");
     VulkanGraphicsPipelineBuilder builder(frame->backendDevice->device, vs, fs,
         FullScreenQuadDrawer::getVertexInputStateInfo(), renderPass,
@@ -175,16 +166,12 @@ void DeferredLightingPass::prepareAOT(GPUFrame* frame)
     auto pipeline = builder.build();
     frame->backendDevice->setObjectDebugName(pipeline.getPipeline(), "DeferredLightingPassPipeline");
     graphicsPipelines.push_back(pipeline);
-}
-
-void DeferredLightingPass::record(vk::CommandBuffer cmdBuf, const GPUFrame* frame)
-{
-    beginPass(cmdBuf);
-    auto passInputDescriptorSet = frame->getManagedDescriptorSet("DeferredLightingPassInputDescriptorSet");
-    cmdBuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 1, passInputDescriptorSet, nullptr);
-    cmdBuf.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipelines[0].getPipeline());
-    FullScreenQuadDrawer::draw(cmdBuf);
-    endPass(cmdBuf);
+    PassActionContext actionContext{};
+    actionContext.pipelineIdx = 0;
+    actionContext.firstSet = 1;
+    actionContext.descriptorSets = { "DeferredLightingPassInputDescriptorSet" };
+    actionContext.action = [](vk::CommandBuffer cmd, uint32_t pipelineIdx) {FullScreenQuadDrawer::draw(cmd); };
+    actionContextQueue.push_back(actionContext);
 }
 
 void PostProcessPass::prepareAOT(GPUFrame* frame)
@@ -192,7 +179,7 @@ void PostProcessPass::prepareAOT(GPUFrame* frame)
     auto vs = FullScreenQuadDrawer::getVertexShader(frame->backendDevice.get());
     auto fs = ShaderManager::getInstance().createFragmentShader(frame->backendDevice.get(), "postProcess.frag");
 
-    pipelineLayout = frame->backendDevice->createPipelineLayout2({ frame->_frameGlobalDescriptorSetLayout,passInputDescriptorSetLayout });
+    auto pipelineLayout = frame->backendDevice->createPipelineLayout2({ frame->_frameGlobalDescriptorSetLayout,passInputDescriptorSetLayout });
     frame->backendDevice->setObjectDebugName(pipelineLayout, "PostProcessPassPipelineLayout");
 
     VulkanGraphicsPipelineBuilder builder(frame->backendDevice->device, vs, fs,
@@ -201,16 +188,12 @@ void PostProcessPass::prepareAOT(GPUFrame* frame)
     auto pipeline = builder.build();
     frame->backendDevice->setObjectDebugName(pipeline.getPipeline(), "PostProcessPassPipeline");
     graphicsPipelines.push_back(pipeline);
-}
-
-void PostProcessPass::record(vk::CommandBuffer cmdBuf, const GPUFrame* frame)
-{
-    beginPass(cmdBuf);
-    auto passInputDescriptorSet = frame->getManagedDescriptorSet("PostProcessPassInputDescriptorSet");
-    cmdBuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 1, passInputDescriptorSet, nullptr);
-    cmdBuf.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipelines[0].getPipeline());
-    FullScreenQuadDrawer::draw(cmdBuf);
-    endPass(cmdBuf);
+    PassActionContext actionContext{};
+    actionContext.pipelineIdx = 0;
+    actionContext.firstSet = 1;
+    actionContext.descriptorSets = { "PostProcessPassInputDescriptorSet" };
+    actionContext.action = [](vk::CommandBuffer cmd, uint32_t pipelineIdx) {FullScreenQuadDrawer::draw(cmd); };
+    actionContextQueue.push_back(actionContext);
 }
 
 void CopyPass::prepareAOT(GPUFrame* frame)
@@ -223,7 +206,7 @@ void CopyPass::prepareAOT(GPUFrame* frame)
     pushConstant.setSize(sizeof(glm::uvec4));
     pushConstant.setStageFlags(vk::ShaderStageFlagBits::eFragment);
 
-    pipelineLayout = frame->backendDevice->createPipelineLayout2({ frame->_frameGlobalDescriptorSetLayout,
+    auto pipelineLayout = frame->backendDevice->createPipelineLayout2({ frame->_frameGlobalDescriptorSetLayout,
                                                                             passInputDescriptorSetLayout }, { pushConstant });
 
     frame->backendDevice->setObjectDebugName(pipelineLayout, "CopyPassPipelineLayout");
@@ -234,17 +217,15 @@ void CopyPass::prepareAOT(GPUFrame* frame)
     auto pipeline = builder.build();
     frame->backendDevice->setObjectDebugName(pipeline.getPipeline(), "CopyPassPipeline");
     graphicsPipelines.push_back(pipeline);
-}
-
-void CopyPass::record(vk::CommandBuffer cmdBuf, const GPUFrame* frame)
-{
-    beginPass(cmdBuf);
-    auto passInputDescriptorSet = frame->getManagedDescriptorSet("CopyPassInputDescriptorSet");
-    cmdBuf.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipelines[0].getPipeline());
-    cmdBuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 1, passInputDescriptorSet, nullptr);
-    cmdBuf.pushConstants(pipelineLayout, vk::ShaderStageFlagBits::eFragment, 0, sizeof(glm::uvec4), &currentTexIdx);
-    FullScreenQuadDrawer::draw(cmdBuf);
-    endPass(cmdBuf);
+    PassActionContext actionContext{};
+    actionContext.pipelineIdx = 0;
+    actionContext.firstSet = 1;
+    actionContext.descriptorSets = { "CopyPassInputDescriptorSet" };
+    actionContext.action = [this](vk::CommandBuffer cmd, uint32_t pipelineIdx) { 
+        cmd.pushConstants(this->graphicsPipelines[pipelineIdx].getPipelineLayout(), vk::ShaderStageFlagBits::eFragment, 0, sizeof(glm::uvec4), &this->currentTexIdx);
+        FullScreenQuadDrawer::draw(cmd); 
+    };
+    actionContextQueue.push_back(actionContext);
 }
 
 void SelectedMaskPass::prepareAOT(GPUFrame* frame)
@@ -264,10 +245,9 @@ void SelectedMaskPass::prepareAOT(GPUFrame* frame)
         });
 }
 
-void SelectedMaskPass::record(vk::CommandBuffer cmdBuf, const GPUFrame* frame)
+void SelectedMaskPass::prepareIncremental(GPUFrame* frame)
 {
-    beginPass(cmdBuf);
-    auto passDataDescriptorSet = frame->getManagedDescriptorSet("SelectedMaskPassDataDescriptorSet");
+    actionContextQueue.clear();
     for (int i = 0; i < scene->_dynamicRigidMeshBatch.size(); i++)
     {
         auto& instanceRigidDynamic = scene->_dynamicRigidMeshBatch[i];
@@ -287,13 +267,16 @@ void SelectedMaskPass::record(vk::CommandBuffer cmdBuf, const GPUFrame* frame)
         }
         if (instanceRigidDynamic.updateCurrentMask(1, frame->backendDevice.get()) > 0)
         {
-            cmdBuf.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipelines[0].getPipeline());
-            cmdBuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 1, passDataDescriptorSet, nullptr);
-            cmdBuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 2, instanceRigidDynamic.getDescriptorSet(), nullptr);
-            instanceRigidDynamic.drawAllPosOnlyMasked(cmdBuf, frame->backendDevice->getDLD());
+            PassActionContext actionContext{};
+            actionContext.pipelineIdx = 0;
+            actionContext.firstSet = 1;
+            actionContext.descriptorSets = { "SelectedMaskPassDataDescriptorSet" , instanceRigidDynamic.getDescriptorSet() };
+            actionContext.action = [instanceRigidDynamic, frame](vk::CommandBuffer cmd, uint32_t pipelineIdx){
+                instanceRigidDynamic.drawAllPosOnlyMasked(cmd, frame->backendDevice->getDLD());
+            };
+            actionContextQueue.push_back(actionContext);
         }
     }
-    endPass(cmdBuf);
 }
 
 void WireFramePass::prepareAOT(GPUFrame* frame)
@@ -313,10 +296,9 @@ void WireFramePass::prepareAOT(GPUFrame* frame)
         });
 }
 
-void WireFramePass::record(vk::CommandBuffer cmdBuf, const GPUFrame* frame)
+void WireFramePass::prepareIncremental(GPUFrame* frame)
 {
-    beginPass(cmdBuf);
-    auto passDataDescriptorSet = frame->getManagedDescriptorSet("WireFramePassDataDescriptorSet");
+    actionContextQueue.clear();
     for (int i = 0; i < scene->_dynamicRigidMeshBatch.size(); i++)
     {
         auto& instanceRigidDynamic = scene->_dynamicRigidMeshBatch[i];
@@ -351,12 +333,15 @@ void WireFramePass::record(vk::CommandBuffer cmdBuf, const GPUFrame* frame)
             frame->backendDevice->setObjectDebugName(pipeline.getPipeline(), "WireFramePassPipeline");
             graphicsPipelines.push_back(pipeline);
         }
-        cmdBuf.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipelines[0].getPipeline());
-        cmdBuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 1, { passDataDescriptorSet,instanceRigidDynamic.getDescriptorSet() }, nullptr);
-        instanceRigidDynamic.drawAllPosOnly(cmdBuf, frame->backendDevice->getDLD());
+        PassActionContext actionContext{};
+        actionContext.pipelineIdx = 0;
+        actionContext.firstSet = 1;
+        actionContext.descriptorSets = { "WireFramePassDataDescriptorSet" , instanceRigidDynamic.getDescriptorSet() };
+        actionContext.action = [instanceRigidDynamic, frame](vk::CommandBuffer cmd, uint32_t pipelineIdx) {
+            instanceRigidDynamic.drawAllPosOnly(cmd, frame->backendDevice->getDLD());
+         };
+        actionContextQueue.push_back(actionContext);
     }
-
-    endPass(cmdBuf);
 }
 
 void OutlinePass::prepareAOT(GPUFrame* frame)
@@ -364,7 +349,7 @@ void OutlinePass::prepareAOT(GPUFrame* frame)
     auto vs = FullScreenQuadDrawer::getVertexShader(frame->backendDevice.get());
     auto fs = ShaderManager::getInstance().createFragmentShader(frame->backendDevice.get(), "outline.frag");
 
-    pipelineLayout = frame->backendDevice->createPipelineLayout2({ frame->_frameGlobalDescriptorSetLayout,passInputDescriptorSetLayout });
+    auto pipelineLayout = frame->backendDevice->createPipelineLayout2({ frame->_frameGlobalDescriptorSetLayout,passInputDescriptorSetLayout });
     frame->backendDevice->setObjectDebugName(pipelineLayout, "OutlinePassPipelineLayout");
 
     vk::PipelineColorBlendAttachmentState attachmentState{};
@@ -386,16 +371,12 @@ void OutlinePass::prepareAOT(GPUFrame* frame)
     auto pipeline = builder.build();
     frame->backendDevice->setObjectDebugName(pipeline.getPipeline(), "OutlinePassPipeline");
     graphicsPipelines.push_back(pipeline);
-}
-
-void OutlinePass::record(vk::CommandBuffer cmdBuf, const GPUFrame* frame)
-{
-    beginPass(cmdBuf);
-    auto passInputDescriptorSet = frame->getManagedDescriptorSet("OutlinePassInputDescriptorSet");
-    cmdBuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 1, passInputDescriptorSet, nullptr);
-    cmdBuf.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipelines[0].getPipeline());
-    FullScreenQuadDrawer::draw(cmdBuf);
-    endPass(cmdBuf);
+    PassActionContext actionContext{};
+    actionContext.pipelineIdx = 0;
+    actionContext.firstSet = 1;
+    actionContext.descriptorSets = { "OutlinePassInputDescriptorSet" };
+    actionContext.action = [](vk::CommandBuffer cmd, uint32_t pipelineIdx) {FullScreenQuadDrawer::draw(cmd); };
+    actionContextQueue.push_back(actionContext);
 }
 
 void ObjectPickPass::prepareAOT(GPUFrame* frame)
@@ -432,16 +413,19 @@ void ObjectPickPass::prepareAOT(GPUFrame* frame)
     pipeline = newPipeline.value;
     frame->backendDevice->setObjectDebugName(pipelineLayout, "ObjectPickPassPipelineLayout");
     frame->backendDevice->setObjectDebugName(pipeline, "ObjectPickPassPipeline");
-}
 
-void ObjectPickPass::record(vk::CommandBuffer cmdBuf, const GPUFrame* frame)
-{
-    auto passInputDescriptorSet = frame->getManagedDescriptorSet("ObjectPickPassInputDescriptorSet");
-    cmdBuf.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipelineLayout, 1, passInputDescriptorSet, nullptr);
-    auto passDataDescriptorSet = frame->getManagedDescriptorSet("ObjectPickPassDataDescriptorSet");
-    cmdBuf.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipelineLayout, 2, passDataDescriptorSet, nullptr);
-    cmdBuf.bindPipeline(vk::PipelineBindPoint::eCompute, pipeline);
-    cmdBuf.dispatch(1, 1, 1);
-    scene->selectedDynamicRigidMeshID.x = objectIDBuffer->x;
-    scene->selectedDynamicRigidMeshID.y = objectIDBuffer->y;
+    PassActionContext actionContext{};
+    actionContext.pipelineIdx = 0;
+    actionContext.firstSet = 1;
+    actionContext.descriptorSets = { };
+    actionContext.action = [this,frame](vk::CommandBuffer cmd, uint32_t pipelineIdx) {
+        auto passInputDescriptorSet = frame->getManagedDescriptorSet("ObjectPickPassInputDescriptorSet");
+        auto passDataDescriptorSet = frame->getManagedDescriptorSet("ObjectPickPassDataDescriptorSet");
+        cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipelineLayout, 1, { passInputDescriptorSet,passDataDescriptorSet }, nullptr);
+        cmd.bindPipeline(vk::PipelineBindPoint::eCompute, pipeline);
+        cmd.dispatch(1, 1, 1);
+        scene->selectedDynamicRigidMeshID.x = objectIDBuffer->x;
+        scene->selectedDynamicRigidMeshID.y = objectIDBuffer->y;
+    };
+    actionContextQueue.push_back(actionContext);
 }

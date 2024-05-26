@@ -269,6 +269,38 @@ void GPURasterizedPass::buildFrameBuffer(GPUFrame* frame) {
     frame->backendDevice->setObjectDebugName(frameBuffer, fbName.c_str());
 }
 
+void GPUComputePass::record2(vk::CommandBuffer cmd, GPUFrame* frame)
+{
+    for (const auto& ctx : actionContextQueue)
+    {
+        ctx.action(cmd,ctx.pipelineIdx);
+    }
+}
+
+void GPURasterizedPass::record2(vk::CommandBuffer cmd, GPUFrame* frame)
+{
+    beginPass(cmd);
+    for (const auto& ctx : actionContextQueue)
+    {
+        std::vector<vk::DescriptorSet> vkDescriptorSets;
+        vkDescriptorSets.reserve(ctx.descriptorSets.size());
+        for (const auto& descriptorSet : ctx.descriptorSets)
+        {
+            if (std::holds_alternative<std::string>(descriptorSet))
+            {
+                vkDescriptorSets.push_back(frame->getManagedDescriptorSet(std::get<std::string>(descriptorSet).c_str()));
+            }
+            else {
+                vkDescriptorSets.push_back(std::get<vk::DescriptorSet>(descriptorSet));
+            }
+        }
+        cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, graphicsPipelines[ctx.pipelineIdx].getLayout(), ctx.firstSet, vkDescriptorSets, nullptr);
+        cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipelines[ctx.pipelineIdx].getPipeline());
+        ctx.action(cmd,ctx.pipelineIdx);
+    }
+    endPass(cmd);
+}
+
 GPUFrame::GPUFrame(int threadsNum, const std::shared_ptr<DeviceExtended> &backendDevice) : workThreadsNum(threadsNum),backendDevice(backendDevice)
 {
     uint32_t mainQueueFamilyIdx = backendDevice->get_queue_index(vkb::QueueType::graphics).value();
@@ -687,7 +719,7 @@ vk::CommandBuffer GPUFrame::recordMainQueueCommands() {
         vk::DebugUtilsLabelEXT passLabel{};
         passLabel.setPLabelName(pass->_name.c_str());
         cmdPrimary.beginDebugUtilsLabelEXT(passLabel,backendDevice->getDLD());
-        pass->record(cmdPrimary,this);
+        pass->record2(cmdPrimary,this);
         cmdPrimary.endDebugUtilsLabelEXT(backendDevice->getDLD());
     }
     cmdPrimary.endDebugUtilsLabelEXT(backendDevice->getDLD());

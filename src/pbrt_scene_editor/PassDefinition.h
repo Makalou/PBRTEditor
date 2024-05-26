@@ -38,17 +38,13 @@ namespace FullScreenQuadDrawer
 };
 
 RASTERIZEDPASS_DEF_BEGIN(SkyBoxPass)
-    vk::DescriptorSetLayout passDataDescriptorLayout;
-    vk::PipelineLayout pipelineLayout;
     void prepareAOT(GPUFrame* frame) override;
-    void record(vk::CommandBuffer cmdBuf, const GPUFrame* frame) override;
 
     renderScene::RenderScene* scene{};
 RASTERIZEDPASS_DEF_END(SkyBoxPass)
 
 RASTERIZEDPASS_DEF_BEGIN(ShadowPass)
     void prepareAOT(GPUFrame* frame) override;
-    void record(vk::CommandBuffer cmdBuf, const GPUFrame* frame) override;
 RASTERIZEDPASS_DEF_END(ShadowPass)
 
 RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
@@ -60,12 +56,12 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
     vk::DescriptorSetLayout passDataDescriptorLayout;
 
     void prepareAOT(GPUFrame* frame) override;
+    void prepareIncremental(GPUFrame* frame) override;
 
     using InstanceUUIDMap = std::unordered_map<renderScene::InstanceUUID,int,renderScene::InstanceUUIDHash>;
     InstanceUUIDMap pipelineLayoutMap;
     InstanceUUIDMap pipelineMap;
     InstanceUUIDMap instanceDescriptorSetMap;
-    int currentPipelineIdx = -1;
     int currentInstanceDescriptorSetIdx = -1;
     std::vector<vk::PipelineLayout> instancePipelineLayouts;
     std::vector<vk::DescriptorSet> instanceDescriptorSets;
@@ -155,37 +151,15 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
         return 0;
     }
 
-    void bindCurrentPipeline(vk::CommandBuffer cmdBuf, int pipelineIdx)
-    {
-        if(pipelineIdx!=currentPipelineIdx)
-        {
-            currentPipelineIdx = pipelineIdx;
-            auto currentPipeline = graphicsPipelines[currentPipelineIdx];
-            cmdBuf.bindPipeline(vk::PipelineBindPoint::eGraphics,currentPipeline.getPipeline());
-        }
-    }
-
-    void bindCurrentInstanceDescriptorSet(vk::CommandBuffer cmdBuf, int descriptorSetIdx)
-    {
-        if(descriptorSetIdx!=currentInstanceDescriptorSetIdx)
-        {
-            currentInstanceDescriptorSetIdx = descriptorSetIdx;
-            auto descriptorSet = instanceDescriptorSets[currentInstanceDescriptorSetIdx];
-            cmdBuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,graphicsPipelines[currentPipelineIdx].getLayout(),3,
-                                      descriptorSet,nullptr);
-        }
-    }
-
-    void bindRenderState(vk::CommandBuffer cmdBuf, const GPUFrame* frame, const renderScene::InstanceBatchRigidDynamicType & instanceRigidDynamic)
+    void bindRenderState(PassActionContext& actionCtx, const GPUFrame* frame, const renderScene::InstanceBatchRigidDynamicType & instanceRigidDynamic)
     {
         auto instUUID = instanceRigidDynamic.getUUID();
         auto pipelineIdx = pipelineMap.find(instUUID);
         if(pipelineIdx!=pipelineMap.end())
         {
-            bindCurrentPipeline(cmdBuf,pipelineIdx->second);
+            actionCtx.pipelineIdx = pipelineIdx->second;
         }else{
-            auto idx = getOrCreatePipeline(frame,instanceRigidDynamic);
-            bindCurrentPipeline(cmdBuf,idx);
+            actionCtx.pipelineIdx = getOrCreatePipeline(frame,instanceRigidDynamic);
         }
         /*auto descriptorSetIdx = instanceDescriptorSetMap.find(instUUID);
         if (descriptorSetIdx != instanceDescriptorSetMap.end())
@@ -196,37 +170,26 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
             auto idx = allocateDescriptorSet(frame, instanceRigidDynamic);
             bindCurrentInstanceDescriptorSet(cmdBuf, idx);
         }*/
-        cmdBuf.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,graphicsPipelines[currentPipelineIdx].getPipelineLayout(),
-                                  2,
-                                  instanceRigidDynamic.getDescriptorSet(),
-                                  nullptr);
+        actionCtx.descriptorSets.push_back(instanceRigidDynamic.getDescriptorSet());
     }
-
-    void record(vk::CommandBuffer cmdBuf, const GPUFrame* frame) override;
 
     renderScene::RenderScene* scene{};
     std::vector<std::pair<int,int>> pipelinesMap;
 RASTERIZEDPASS_DEF_END(GBufferPass)
 
 RASTERIZEDPASS_DEF_BEGIN(DeferredLightingPass)
-    vk::PipelineLayout pipelineLayout;
     void prepareAOT(GPUFrame* frame) override;
-    void record(vk::CommandBuffer cmdBuf, const GPUFrame* frame) override;
 RASTERIZEDPASS_DEF_END(DefereredLightingPass)
 
 RASTERIZEDPASS_DEF_BEGIN(PostProcessPass)
-    vk::PipelineLayout pipelineLayout;
     void prepareAOT(GPUFrame* frame) override;
-    void record(vk::CommandBuffer cmdBuf, const GPUFrame* frame) override;
 
 RASTERIZEDPASS_DEF_END(PostProcessPass)
 
 RASTERIZEDPASS_DEF_BEGIN(CopyPass)
-    vk::PipelineLayout pipelineLayout;
     glm::uvec4 currentTexIdx{};
 
     void prepareAOT(GPUFrame* frame) override;
-    void record(vk::CommandBuffer cmdBuf, const GPUFrame* frame) override;
 RASTERIZEDPASS_DEF_END(CopyPass)
 
 RASTERIZEDPASS_DEF_BEGIN(SelectedMaskPass)
@@ -235,7 +198,7 @@ RASTERIZEDPASS_DEF_BEGIN(SelectedMaskPass)
     vk::DescriptorSetLayout passDataDescriptorLayout;
 
     void prepareAOT(GPUFrame* frame) override;
-    void record(vk::CommandBuffer cmdBuf, const GPUFrame* frame) override;
+    void prepareIncremental(GPUFrame* frame) override;
 RASTERIZEDPASS_DEF_END(SelectedMaskPass)
 
 RASTERIZEDPASS_DEF_BEGIN(BoundingBoxPass)
@@ -247,13 +210,11 @@ RASTERIZEDPASS_DEF_BEGIN(WireFramePass)
     vk::PipelineLayout pipelineLayout = VK_NULL_HANDLE;
     vk::DescriptorSetLayout passDataDescriptorLayout;
     void prepareAOT(GPUFrame* frame) override;
-    void record(vk::CommandBuffer cmdBuf, const GPUFrame* frame) override;
+    void prepareIncremental(GPUFrame* frame) override;
 RASTERIZEDPASS_DEF_END(WireFramePass)
 
 RASTERIZEDPASS_DEF_BEGIN(OutlinePass)
-    vk::PipelineLayout pipelineLayout;
     void prepareAOT(GPUFrame* frame) override;
-    void record(vk::CommandBuffer cmdBuf, const GPUFrame* frame) override;
 RASTERIZEDPASS_DEF_END(OutlinePass)
 
 COMPUTEPASS_DEF_BEGIN(ObjectPickPass)
@@ -264,6 +225,5 @@ COMPUTEPASS_DEF_BEGIN(ObjectPickPass)
     renderScene::RenderScene* scene{};
 
     void prepareAOT(GPUFrame* frame) override;
-    void record(vk::CommandBuffer cmdBuf, const GPUFrame* frame) override;
 COMPUTEPASS_DEF_END(ObjectPickPass)
 #endif //PBRTEDITOR_PASSDEFINITION_H

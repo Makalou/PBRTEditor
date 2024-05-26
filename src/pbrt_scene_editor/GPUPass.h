@@ -256,6 +256,14 @@ enum GPUPassType
     Compute
 };
 
+struct PassActionContext
+{
+    uint32_t pipelineIdx;
+    std::vector < std::variant<std::string, vk::DescriptorSet>> descriptorSets;
+    uint32_t firstSet;
+    std::function<void(vk::CommandBuffer, uint32_t)> action;
+};
+
 struct GPUPass
 {
     // Used when reference pass output
@@ -293,7 +301,7 @@ struct GPUPass
      * And maybe new shader variants can appear at every frame.
      * Also per pass data can change every frame, so this function also plays the role of 'Prepare'
      * */
-    virtual void prepareIncremental(const GPUFrame* frame){};
+    virtual void prepareIncremental(GPUFrame* frame){};
 
     void read(PassTextureDescription* texture)
     {
@@ -326,8 +334,6 @@ struct GPUPass
     virtual bool fillImgBarrierInfo(PassResourceAccess::Access accessType, PassTextureDescription* texture,
         vk::PipelineStageFlags2& stageMask, vk::AccessFlags2& accessMask, vk::ImageLayout& layout) = 0;
 
-    virtual void record(vk::CommandBuffer cmdBuf, const GPUFrame* frame) = 0;
-
     std::vector<vk::MemoryBarrier2> memoryBarriers;
     std::vector<vk::BufferMemoryBarrier2> bufferMemoryBarriers;
     std::vector<vk::ImageMemoryBarrier2> imageMemoryBarriers;
@@ -345,6 +351,10 @@ struct GPUPass
             cmdBuf.pipelineBarrier2(dependencyInfo);
         }
     }
+
+    std::vector<PassActionContext> actionContextQueue;
+
+    void virtual record2(vk::CommandBuffer cmd, GPUFrame* frame) = 0;
 };
 
 struct FrameExternalResourceImmutable
@@ -447,6 +457,8 @@ struct GPUComputePass : GPUPass
 
         return false;
     }
+
+    void record2(vk::CommandBuffer cmd, GPUFrame* frame) override;
 
     std::unordered_map<std::string, vk::Pipeline> computePipelines;
 };
@@ -575,6 +587,8 @@ struct GPURasterizedPass : GPUPass
 
         return false;
     }
+
+    void record2(vk::CommandBuffer cmd, GPUFrame* frame) override;
 };
 
 struct GPURayTracingPass : GPUPass
