@@ -275,7 +275,11 @@ TextureDeviceHandle AssetManager::create1x1ImgDevice(const std::string& identifi
 
         textureDevice.image = img.value();
         backendDevice->setObjectDebugName(static_cast<vk::Image>(textureDevice.image.image), identifier.c_str());
-        float color[4] = { r,g,b,a };
+        char color[4];
+        color[0] = static_cast<char>(static_cast<int>(r * 255));
+        color[1] = static_cast<char>(static_cast<int>(g * 255));
+        color[2] = static_cast<char>(static_cast<int>(b * 255));
+        color[3] = static_cast<char>(255);
         backendDevice->oneTimeUploadSync(color, textureDevice.image.image,4, textureDevice.imgInfo);
 
         textureDevice.imgViewInfo.setViewType(vk::ImageViewType::e2D);

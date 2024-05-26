@@ -94,9 +94,9 @@ void main() {
     #if HAS_VERTEX_UV
     outFragUV = vec4(inFragUV,0.0,1.0);
     vec4 reflectance = texture(reflectanceMap,inFragUV);
-    outFragAlbedo = vec4(reflectance.rgb,1.0);
     #else
     outFragUV = vec4(0.0,0.0,1.0,1.0);
-    outFragAlbedo = vec4(1.0,0.0,1.0,1.0);
+    vec4 reflectance = texture(reflectanceMap,vec2(0.0));
     #endif
+    outFragAlbedo = vec4(reflectance.rgb,1.0);
 }
