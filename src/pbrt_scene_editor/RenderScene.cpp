@@ -4,6 +4,7 @@
 
 #include "RenderScene.h"
 #include "SceneBuilder.hpp"
+#include "visitor_helper.hpp"
 
 namespace renderScene
 {
@@ -141,29 +142,34 @@ namespace renderScene
                 meshInstanceRigidDynamic.perInstanceData.push_back({ node->_finalTransform * instanceBaseTransform });
                 meshInstanceRigidDynamic.materialName = mat->name;
                 meshInstanceRigidDynamic.mask.push_back(0);
-                do {
-                    if (mat->getType() == "CoatedDiffuse")
-                    {
-                        auto* coatedDiffuse = static_cast<CoatedDiffuseMaterial*>(mat);
-                        if (std::holds_alternative<texture>(coatedDiffuse->reflectance))
-                        {
-                            auto reflectanceTex = std::get<texture>(coatedDiffuse->reflectance);
+                if (mat->getType() == "CoatedDiffuse")
+                {
+                    auto* coatedDiffuse = static_cast<CoatedDiffuseMaterial*>(mat);
+                    std::visit(overloaded{
+                        [](auto arg) {},
+                        [&](const texture& arg) {
                             for (auto tex : m_sceneGraph->namedTextures)
                             {
-                                if (tex->name == reflectanceTex.name && tex->getType() == "ImageMap")
+                                if (tex->name == arg.name && tex->getType() == "ImageMap")
                                 {
                                     ImageMapTexture* imageMap = static_cast<ImageMapTexture*>(tex);
                                     meshInstanceRigidDynamic.texture = assetManager.getOrLoadImgDevice(imageMap->filename,
-                                        imageMap->encoding,
-                                        imageMap->wrap,
-                                        imageMap->maxanisotropy);
-                                    break;
+                                    imageMap->encoding,
+                                    imageMap->wrap,
+                                    imageMap->maxanisotropy);
+                                    return;
                                 }
                             }
-                            break;
+                        },
+                        [&](const rgb& arg) {
+                            //create 1x1 texture
+                            meshInstanceRigidDynamic.texture = assetManager.create1x1ImgDevice(mat->name + ".reflectance",arg.r,arg.g,arg.b,1.0);
+                        },
+                        [](const spectrum& arg) {
+
                         }
-                    }
-                } while (0);
+                        }, coatedDiffuse->reflectance);
+                }
 
                 _dynamicRigidMeshBatch.push_back(meshInstanceRigidDynamic);
                 auto instIdx = _dynamicRigidMeshBatch.size() - 1;

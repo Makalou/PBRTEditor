@@ -237,6 +237,88 @@ TextureDeviceHandle AssetManager::getOrLoadImgDevice(const std::string &relative
     return handle;
 }
 
+TextureDeviceHandle AssetManager::create1x1ImgDevice(const std::string& identifier, float r, float g, float b, float a)
+{
+    TextureDeviceHandle handle;
+    for (int i = 0; i < device_textures.size(); i++)
+    {
+        if (device_textures[i].first == identifier)
+        {
+            handle.manager = this;
+            handle.idx = i;
+            break;
+        }
+    }
+
+    if (handle.manager == nullptr)
+    {
+        TextureDeviceObject textureDevice;
+        textureDevice.imgInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        textureDevice.imgInfo.extent.width = 1;
+        textureDevice.imgInfo.extent.height = 1;
+        textureDevice.imgInfo.extent.depth = 1;
+        textureDevice.imgInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+        textureDevice.imgInfo.imageType = VK_IMAGE_TYPE_2D;
+        textureDevice.imgInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+        textureDevice.imgInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+        textureDevice.imgInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
+        textureDevice.imgInfo.arrayLayers = 1;
+        textureDevice.imgInfo.mipLevels = 1;
+        textureDevice.imgInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        textureDevice.imgInfo.sharingMode = VkSharingMode::VK_SHARING_MODE_EXCLUSIVE;
+        textureDevice.imgInfo.pQueueFamilyIndices = nullptr;
+        textureDevice.imgInfo.queueFamilyIndexCount = 0;
+
+        auto img = backendDevice->allocateVMAImage(textureDevice.imgInfo);
+        if (!img.has_value())
+            throw std::runtime_error("Failed to allocate VKImage for " + identifier);
+
+        textureDevice.image = img.value();
+        backendDevice->setObjectDebugName(static_cast<vk::Image>(textureDevice.image.image), identifier.c_str());
+        float color[4] = { r,g,b,a };
+        backendDevice->oneTimeUploadSync(color, textureDevice.image.image,4, textureDevice.imgInfo);
+
+        textureDevice.imgViewInfo.setViewType(vk::ImageViewType::e2D);
+        textureDevice.imgViewInfo.setImage(textureDevice.image.image);
+        textureDevice.imgViewInfo.setFormat(static_cast<vk::Format>(textureDevice.imgInfo.format));
+        vk::ComponentMapping mapping;
+        mapping.r = vk::ComponentSwizzle::eIdentity;
+        mapping.g = vk::ComponentSwizzle::eIdentity;
+        mapping.b = vk::ComponentSwizzle::eIdentity;
+        mapping.a = vk::ComponentSwizzle::eIdentity;
+        textureDevice.imgViewInfo.setComponents(mapping);
+        vk::ImageSubresourceRange subresourceRange{};
+        subresourceRange.setAspectMask(vk::ImageAspectFlagBits::eColor);
+        subresourceRange.setLevelCount(textureDevice.imgInfo.mipLevels);
+        subresourceRange.setBaseMipLevel(0);
+        subresourceRange.setLayerCount(1);
+        subresourceRange.setBaseArrayLayer(0);
+        textureDevice.imgViewInfo.setSubresourceRange(subresourceRange);
+        textureDevice.imageView = backendDevice->createImageView(textureDevice.imgViewInfo);
+        backendDevice->setObjectDebugName(textureDevice.imageView, identifier.c_str());
+
+        vk::SamplerCreateInfo samplerInfo{};
+        samplerInfo.setMipmapMode(vk::SamplerMipmapMode::eLinear);
+        samplerInfo.setMinFilter(vk::Filter::eLinear);
+        samplerInfo.setMagFilter(vk::Filter::eLinear);
+        samplerInfo.setBorderColor(vk::BorderColor::eFloatOpaqueBlack);
+        samplerInfo.setMinLod(textureDevice.imgInfo.mipLevels);
+        samplerInfo.setMaxLod(textureDevice.imgInfo.mipLevels);
+        samplerInfo.setMipLodBias(0.0);
+        samplerInfo.setCompareEnable(vk::False);
+        samplerInfo.setAnisotropyEnable(vk::False);
+        samplerInfo.setAddressModeU(vk::SamplerAddressMode::eRepeat);
+        samplerInfo.setAddressModeV(vk::SamplerAddressMode::eRepeat);
+        samplerInfo.setAddressModeW(vk::SamplerAddressMode::eRepeat);
+        textureDevice.sampler = backendDevice->createSampler(samplerInfo);
+        device_textures.emplace_back(identifier, textureDevice);
+        handle.manager = this;
+        handle.idx = device_textures.size() - 1;
+    }
+
+    return handle;
+}
+
 MeshHostObject parseAssimpMesh(aiMesh* mesh)
 {
     MeshHostObject meshHostObj;

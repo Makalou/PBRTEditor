@@ -309,6 +309,7 @@ struct AssetManager
                                            const std::string & warp,
                                            float maxAnisotropy,
                                            bool genMipmap = true);
+    TextureDeviceHandle create1x1ImgDevice(const std::string& identifier,float r, float g, float b, float a);
 
     /*
     *  For PBRT PLY file we assume that each file only contain single mesh
