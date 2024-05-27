@@ -794,7 +794,8 @@ struct GPUFrame {
     using DescriptorSetLayoutRecord = std::pair<DescriptorSetLayoutExtended,DescriptorSetRecordList>;
     using DescriptorSetCallback = std::function<void(const vk::DescriptorSet &)>;
 
-    vk::DescriptorSetLayout manageDescriptorSet(std::string && name, const std::vector<vk::DescriptorSetLayoutBinding> & bindings);
+    vk::DescriptorSetLayout manageDescriptorSet(std::string&& name, const std::vector<vk::DescriptorSetLayoutBinding>& bindings);
+    vk::DescriptorSetLayout manageDescriptorSet(std::string && name, std::vector<std::tuple<vk::DescriptorType,uint32_t,vk::ShaderStageFlags>> && bindings);
 
     void getManagedDescriptorSet(std::string && setName, const std::function<void(vk::DescriptorSet)>& cb);
 

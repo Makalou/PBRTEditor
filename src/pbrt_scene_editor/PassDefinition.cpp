@@ -5,15 +5,7 @@ void SkyBoxPass::prepareAOT(GPUFrame* frame)
     auto vs = FullScreenQuadDrawer::getVertexShader(frame->backendDevice.get());
     auto fs = ShaderManager::getInstance().createFragmentShader(frame->backendDevice.get(), "proceduralSkyBox.frag");
 
-    std::vector<vk::DescriptorSetLayoutBinding> bindings;
-    vk::DescriptorSetLayoutBinding camBinding;
-    camBinding.setBinding(0);
-    camBinding.setDescriptorType(vk::DescriptorType::eUniformBuffer);
-    camBinding.setDescriptorCount(1);
-    camBinding.setStageFlags(vk::ShaderStageFlagBits::eAllGraphics);
-    bindings.push_back(camBinding);
-
-    auto passDataDescriptorLayout = frame->manageDescriptorSet("SkyBoxPassDataDescriptorSet", bindings);
+    auto passDataDescriptorLayout = frame->manageDescriptorSet("SkyBoxPassDataDescriptorSet", { {vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eAllGraphics } });
 
     frame->getManagedDescriptorSet("SkyBoxPassDataDescriptorSet", [frame, this](const vk::DescriptorSet& passDataDescriptorSet) mutable {
         frame->backendDevice->updateDescriptorSetUniformBuffer(passDataDescriptorSet, 0, scene->mainView.camera.data.getBuffer());
@@ -46,15 +38,7 @@ void SSAOPass::prepareAOT(GPUFrame* frame)
     auto vs = FullScreenQuadDrawer::getVertexShader(frame->backendDevice.get());
     auto fs = ShaderManager::getInstance().createFragmentShader(frame->backendDevice.get(), "ssao.frag");
 
-    std::vector<vk::DescriptorSetLayoutBinding> bindings;
-    vk::DescriptorSetLayoutBinding camBinding;
-    camBinding.setBinding(0);
-    camBinding.setDescriptorType(vk::DescriptorType::eUniformBuffer);
-    camBinding.setDescriptorCount(1);
-    camBinding.setStageFlags(vk::ShaderStageFlagBits::eAllGraphics);
-    bindings.push_back(camBinding);
-
-    auto passDataDescriptorLayout = frame->manageDescriptorSet("SSAOPassDataDescriptorSet", bindings);
+    auto passDataDescriptorLayout = frame->manageDescriptorSet("SSAOPassDataDescriptorSet", { {vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eAllGraphics } });
 
     frame->getManagedDescriptorSet("SSAOPassDataDescriptorSet", [frame, this](const vk::DescriptorSet& passDataDescriptorSet) mutable {
         frame->backendDevice->updateDescriptorSetUniformBuffer(passDataDescriptorSet, 0, scene->mainView.camera.data.getBuffer());
@@ -79,15 +63,7 @@ void SSAOPass::prepareAOT(GPUFrame* frame)
 
 void GBufferPass::prepareAOT(GPUFrame* frame)
 {
-    std::vector<vk::DescriptorSetLayoutBinding> bindings;
-    vk::DescriptorSetLayoutBinding camBinding;
-    camBinding.setBinding(0);
-    camBinding.setDescriptorType(vk::DescriptorType::eUniformBuffer);
-    camBinding.setDescriptorCount(1);
-    camBinding.setStageFlags(vk::ShaderStageFlagBits::eAllGraphics);
-    bindings.push_back(camBinding);
-
-    passDataDescriptorLayout = frame->manageDescriptorSet("GBufferPassDataDescriptorSet", bindings);
+    passDataDescriptorLayout = frame->manageDescriptorSet("GBufferPassDataDescriptorSet", { {vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eAllGraphics } });
 
     frame->getManagedDescriptorSet("GBufferPassDataDescriptorSet", [frame, this](const vk::DescriptorSet& passDataDescriptorSet) mutable {
         frame->backendDevice->updateDescriptorSetUniformBuffer(passDataDescriptorSet, 0, scene->mainView.camera.data.getBuffer());
@@ -266,15 +242,7 @@ void CopyPass::prepareAOT(GPUFrame* frame)
 
 void SelectedMaskPass::prepareAOT(GPUFrame* frame)
 {
-    std::vector<vk::DescriptorSetLayoutBinding> bindings;
-    vk::DescriptorSetLayoutBinding camBinding;
-    camBinding.setBinding(0);
-    camBinding.setDescriptorType(vk::DescriptorType::eUniformBuffer);
-    camBinding.setDescriptorCount(1);
-    camBinding.setStageFlags(vk::ShaderStageFlagBits::eAllGraphics);
-    bindings.push_back(camBinding);
-
-    passDataDescriptorLayout = frame->manageDescriptorSet("SelectedMaskPassDataDescriptorSet", bindings);
+    passDataDescriptorLayout = frame->manageDescriptorSet("SelectedMaskPassDataDescriptorSet", { {vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eAllGraphics } });
 
     frame->getManagedDescriptorSet("SelectedMaskPassDataDescriptorSet", [frame, this](const vk::DescriptorSet& passDataDescriptorSet) mutable {
         frame->backendDevice->updateDescriptorSetUniformBuffer(passDataDescriptorSet, 0, scene->mainView.camera.data.getBuffer());
@@ -317,15 +285,7 @@ void SelectedMaskPass::prepareIncremental(GPUFrame* frame)
 
 void WireFramePass::prepareAOT(GPUFrame* frame)
 {
-    std::vector<vk::DescriptorSetLayoutBinding> bindings;
-    vk::DescriptorSetLayoutBinding camBinding;
-    camBinding.setBinding(0);
-    camBinding.setDescriptorType(vk::DescriptorType::eUniformBuffer);
-    camBinding.setDescriptorCount(1);
-    camBinding.setStageFlags(vk::ShaderStageFlagBits::eAllGraphics);
-    bindings.push_back(camBinding);
-
-    passDataDescriptorLayout = frame->manageDescriptorSet("WireFramePassDataDescriptorSet", bindings);
+    passDataDescriptorLayout = frame->manageDescriptorSet("WireFramePassDataDescriptorSet", { {vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eAllGraphics } });
 
     frame->getManagedDescriptorSet("WireFramePassDataDescriptorSet", [frame, this](const vk::DescriptorSet& passDataDescriptorSet) mutable {
         frame->backendDevice->updateDescriptorSetUniformBuffer(passDataDescriptorSet, 0, scene->mainView.camera.data.getBuffer());
@@ -423,12 +383,8 @@ void ObjectPickPass::prepareAOT(GPUFrame* frame)
         throw std::runtime_error("Failed to create objectIDBuffer");
     }
     objectIDBuffer = resBuffer.value();
-    vk::DescriptorSetLayoutBinding binding;
-    binding.setBinding(0);
-    binding.setDescriptorType(vk::DescriptorType::eStorageBuffer);
-    binding.setDescriptorCount(1);
-    binding.setStageFlags(vk::ShaderStageFlagBits::eCompute);
-    passDataDescriptorLayout = frame->manageDescriptorSet("ObjectPickPassDataDescriptorSet", { binding });
+
+    passDataDescriptorLayout = frame->manageDescriptorSet("ObjectPickPassDataDescriptorSet", { {vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute }});
     frame->getManagedDescriptorSet("ObjectPickPassDataDescriptorSet", [frame, this](const vk::DescriptorSet& passDataDescriptorSet) mutable {
         frame->backendDevice->updateDescriptorSetStorageBuffer(passDataDescriptorSet, 0, objectIDBuffer.getBuffer());
         });

@@ -892,6 +892,23 @@ vk::DescriptorSetLayout GPUFrame::manageDescriptorSet(std::string &&name, const 
     return newSetLayout._layout;
 }
 
+vk::DescriptorSetLayout GPUFrame::manageDescriptorSet(std::string&& name, std::vector<std::tuple<vk::DescriptorType, uint32_t, vk::ShaderStageFlags>>&& bindings)
+{
+    std::vector<vk::DescriptorSetLayoutBinding> bindings2;
+    bindings2.reserve(bindings.size());
+    for (int i = 0; i < bindings.size(); i++)
+    {
+        vk::DescriptorSetLayoutBinding layoutBinding;
+        layoutBinding.setBinding(i);
+        layoutBinding.setDescriptorType(std::get<0>(bindings[i]));
+        layoutBinding.setDescriptorCount(std::get<1>(bindings[i]));
+        layoutBinding.setStageFlags(std::get<2>(bindings[i]));
+        bindings2.emplace_back(layoutBinding);
+    }
+
+    return manageDescriptorSet(std::move(name), bindings2);
+}
+
 void GPUFrame::getManagedDescriptorSet(std::string &&setName, const std::function<void(vk::DescriptorSet)> &cb) {
     auto it = descriptorSetCallbackMap.find(setName);
     if(it == descriptorSetCallbackMap.end())
