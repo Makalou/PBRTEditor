@@ -41,6 +41,42 @@ void ShadowPass::prepareAOT(GPUFrame* frame)
 
 }
 
+void SSAOPass::prepareAOT(GPUFrame* frame)
+{
+    auto vs = FullScreenQuadDrawer::getVertexShader(frame->backendDevice.get());
+    auto fs = ShaderManager::getInstance().createFragmentShader(frame->backendDevice.get(), "ssao.frag");
+
+    std::vector<vk::DescriptorSetLayoutBinding> bindings;
+    vk::DescriptorSetLayoutBinding camBinding;
+    camBinding.setBinding(0);
+    camBinding.setDescriptorType(vk::DescriptorType::eUniformBuffer);
+    camBinding.setDescriptorCount(1);
+    camBinding.setStageFlags(vk::ShaderStageFlagBits::eAllGraphics);
+    bindings.push_back(camBinding);
+
+    auto passDataDescriptorLayout = frame->manageDescriptorSet("SSAOPassDataDescriptorSet", bindings);
+
+    frame->getManagedDescriptorSet("SSAOPassDataDescriptorSet", [frame, this](const vk::DescriptorSet& passDataDescriptorSet) mutable {
+        frame->backendDevice->updateDescriptorSetUniformBuffer(passDataDescriptorSet, 0, scene->mainView.camera.data.getBuffer());
+        });
+
+    auto pipelineLayout = frame->backendDevice->createPipelineLayout2({ frame->_frameGlobalDescriptorSetLayout, passInputDescriptorSetLayout, passDataDescriptorLayout});
+    frame->backendDevice->setObjectDebugName(pipelineLayout, "SSAOPassPipelineLayout");
+
+    VulkanGraphicsPipelineBuilder builder(frame->backendDevice->device, vs, fs,
+        FullScreenQuadDrawer::getVertexInputStateInfo(), renderPass,
+        pipelineLayout);
+    auto pipeline = builder.build();
+    frame->backendDevice->setObjectDebugName(pipeline.getPipeline(), "SSAOPassPipeline");
+    graphicsPipelines.push_back(pipeline);
+    PassActionContext actionContext{};
+    actionContext.pipelineIdx = 0;
+    actionContext.firstSet = 1;
+    actionContext.descriptorSets = { "SSAOPassInputDescriptorSet","SSAOPassDataDescriptorSet" };
+    actionContext.action = [](vk::CommandBuffer cmd, uint32_t pipelineIdx) {FullScreenQuadDrawer::draw(cmd); };
+    actionContextQueue.push_back(actionContext);
+}
+
 void GBufferPass::prepareAOT(GPUFrame* frame)
 {
     std::vector<vk::DescriptorSetLayoutBinding> bindings;

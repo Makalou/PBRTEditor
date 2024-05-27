@@ -36,6 +36,8 @@ void SceneViewer::init(std::shared_ptr<DeviceExtended> device) {
         auto wireFramePass = std::make_unique<WireFramePass>();
         wireFramePass->scene = this->_renderScene;
         auto outlinePass = std::make_unique<OutlinePass>();
+        auto ssaoPass = std::make_unique<SSAOPass>();
+        ssaoPass->scene = this->_renderScene;
 
         auto selectedMask = frameGraph.createTexture("selectedMask", vk::Format::eR8G8B8A8Srgb);
         selectedMaskPass->renderTo(selectedMask, vk::AttachmentLoadOp::eClear);
@@ -65,6 +67,13 @@ void SceneViewer::init(std::shared_ptr<DeviceExtended> device) {
         gBufferPass->renderTo(encodeMeshID, vk::AttachmentLoadOp::eClear);
         gBufferPass->renderTo(encodeInstanceID,vk::AttachmentLoadOp::eClear);
         frameGraph.executePass(std::move(gBufferPass));
+
+        /*auto ssaoMap = frameGraph.createTexture("ssaoMap", vk::Format::eR8G8B8A8Unorm,PassTextureExtent::SwapchainRelative(1.0,1.0));
+        ssaoPass->sample(sceneDepth);
+        ssaoPass->sample(wPosition);
+        ssaoPass->sample(wNormal);
+        ssaoPass->renderTo(ssaoMap, vk::AttachmentLoadOp::eClear);
+        frameGraph.executePass(std::move(ssaoPass));*/
 
         objectPickPass->sample(encodeMeshID);
         objectPickPass->sample(encodeInstanceID);

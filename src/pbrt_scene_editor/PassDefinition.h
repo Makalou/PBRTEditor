@@ -39,13 +39,17 @@ namespace FullScreenQuadDrawer
 
 RASTERIZEDPASS_DEF_BEGIN(SkyBoxPass)
     void prepareAOT(GPUFrame* frame) override;
-
     renderScene::RenderScene* scene{};
 RASTERIZEDPASS_DEF_END(SkyBoxPass)
 
 RASTERIZEDPASS_DEF_BEGIN(ShadowPass)
     void prepareAOT(GPUFrame* frame) override;
 RASTERIZEDPASS_DEF_END(ShadowPass)
+
+RASTERIZEDPASS_DEF_BEGIN(SSAOPass)
+    void prepareAOT(GPUFrame* frame) override;
+    renderScene::RenderScene* scene{};
+RASTERIZEDPASS_DEF_END(SSAOPass)
 
 RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
     vk::PipelineLayout passLevelPipelineLayout;

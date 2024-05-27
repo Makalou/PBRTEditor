@@ -171,6 +171,34 @@ namespace renderScene
                         }, coatedDiffuse->reflectance);
                 }
 
+                if (mat->getType() == "Diffuse")
+                {
+                    auto* diffuse = static_cast<DiffuseMaterial*>(mat);
+                    std::visit(overloaded{
+                        [](auto arg) {},
+                        [&](const texture& arg) {
+                            for (auto tex : m_sceneGraph->namedTextures)
+                            {
+                                if (tex->name == arg.name && tex->getType() == "ImageMap")
+                                {
+                                    ImageMapTexture* imageMap = static_cast<ImageMapTexture*>(tex);
+                                    meshInstanceRigidDynamic.texture = assetManager.getOrLoadImgDevice(imageMap->filename,
+                                    imageMap->encoding,
+                                    imageMap->wrap,
+                                    imageMap->maxanisotropy);
+                                    return;
+                                }
+                            }
+                        },
+                        [&](const rgb& arg) {
+                            meshInstanceRigidDynamic.texture = assetManager.create1x1ImgDevice(mat->name + ".reflectance",arg.r,arg.g,arg.b,1.0);
+                        },
+                        [](const spectrum& arg) {
+
+                        }
+                        }, diffuse->reflectance);
+                }
+
                 _dynamicRigidMeshBatch.push_back(meshInstanceRigidDynamic);
                 auto instIdx = _dynamicRigidMeshBatch.size() - 1;
                 _sceneGraphNodeDynamicRigidMeshBatchBindingTable.emplace_back(node, std::make_pair(instIdx, 0));
