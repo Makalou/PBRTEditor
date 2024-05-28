@@ -39,13 +39,17 @@ void SceneViewer::init(std::shared_ptr<DeviceExtended> device) {
         auto ssaoPass = std::make_unique<SSAOPass>();
         ssaoPass->scene = this->_renderScene;
 
+        auto scene_selected = frameGraph.createBoolVariable("scene_selected", true);
+        auto shading_mode = frameGraph.createSwitchVariable("shading_mode", "Albedo");
+        auto enable_wireframe = frameGraph.createBoolVariable("enable_wireframe", false);
+
         auto selectedMask = frameGraph.createTexture("selectedMask", vk::Format::eR8G8B8A8Srgb);
         selectedMaskPass->renderTo(selectedMask, vk::AttachmentLoadOp::eClear);
-        frameGraph.executePass(std::move(selectedMaskPass));
+        frameGraph.executeWhen(scene_selected, std::move(selectedMaskPass));
 
         auto tex1 = frameGraph.createTexture("tex1",vk::Format::eR8G8B8A8Srgb);
         skyBoxPass->renderTo(tex1);
-        frameGraph.executePass(std::move(skyBoxPass));
+        frameGraph.executeWhen(scene_selected, std::move(skyBoxPass));
 
         auto sceneDepth = frameGraph.createTexture("sceneDepth", vk::Format::eD32Sfloat);
         auto flat = frameGraph.createTexture("flat", vk::Format::eR8G8B8A8Srgb);
@@ -66,7 +70,7 @@ void SceneViewer::init(std::shared_ptr<DeviceExtended> device) {
         gBufferPass->renderTo(albedoColor, vk::AttachmentLoadOp::eClear);
         gBufferPass->renderTo(encodeMeshID, vk::AttachmentLoadOp::eClear);
         gBufferPass->renderTo(encodeInstanceID,vk::AttachmentLoadOp::eClear);
-        frameGraph.executePass(std::move(gBufferPass));
+        frameGraph.executeWhen(scene_selected, std::move(gBufferPass));
 
         /*auto ssaoMap = frameGraph.createTexture("ssaoMap", vk::Format::eR8G8B8A8Unorm,PassTextureExtent::SwapchainRelative(1.0,1.0));
         ssaoPass->sample(sceneDepth);
@@ -77,17 +81,17 @@ void SceneViewer::init(std::shared_ptr<DeviceExtended> device) {
 
         objectPickPass->sample(encodeMeshID);
         objectPickPass->sample(encodeInstanceID);
-        frameGraph.executePass(std::move(objectPickPass));
+        frameGraph.executeWhen(scene_selected, std::move(objectPickPass));
        
         deferredLightingPass->sample(wPosition);
         deferredLightingPass->sample(wNormal);
         deferredLightingPass->sample(albedoColor);
         deferredLightingPass->renderTo(tex1,vk::AttachmentLoadOp::eLoad);
-        frameGraph.executePass(std::move(deferredLightingPass));
+        frameGraph.executeWhen(scene_selected & shading_mode.is("Final"), std::move(deferredLightingPass));
 
         postProcessPass->sample(tex1);
         postProcessPass->renderTo(frameGraph.getSwapchainTexture(), vk::AttachmentLoadOp::eClear);
-        frameGraph.executePass(std::move(postProcessPass));
+        frameGraph.executeWhen(scene_selected & shading_mode.is("Final"), std::move(postProcessPass));
        
         copyPass->sample(flat);
         copyPass->sample(meshID);
@@ -96,15 +100,16 @@ void SceneViewer::init(std::shared_ptr<DeviceExtended> device) {
         copyPass->sample(UV);
         copyPass->sample(albedoColor);
         copyPass->renderTo(frameGraph.getSwapchainTexture(),vk::AttachmentLoadOp::eClear);
-        frameGraph.executePass(std::move(copyPass));
+        frameGraph.executeWhen(scene_selected & (!shading_mode.is("Final")), std::move(copyPass));
        
         wireFramePass->renderTo(sceneDepth, vk::AttachmentLoadOp::eLoad);
         wireFramePass->renderTo(frameGraph.getSwapchainTexture(), vk::AttachmentLoadOp::eLoad);
-        frameGraph.executePass(std::move(wireFramePass));
+        frameGraph.executeWhen(scene_selected & enable_wireframe, std::move(wireFramePass));
        
         outlinePass->sample(selectedMask);
         outlinePass->renderTo(frameGraph.getSwapchainTexture(), vk::AttachmentLoadOp::eLoad);
-        frameGraph.executePass(std::move(outlinePass));
+        frameGraph.executeWhen(scene_selected, std::move(outlinePass));
+
         _gpuFrames.push_back(std::move(frameGraph));
     }
 
@@ -125,57 +130,37 @@ vk::CommandBuffer SceneViewer::recordGraphicsCommand(unsigned int idx) {
     auto* copyPass = dynamic_cast<CopyPass*>(_gpuFrames[idx].getPass("CopyPass"));
     switch (currenShadingMode)
     {
-    case SceneViewer::ShadingMode::FLAT:
-        _gpuFrames[idx].disablePass("DeferredLightingPass");
-        _gpuFrames[idx].disablePass("PostProcessPass");
-        _gpuFrames[idx].enablePass("CopyPass");
-        copyPass->currentTexIdx.x = 0;
-        break;
-    case SceneViewer::ShadingMode::MESHID:
-        _gpuFrames[idx].disablePass("DeferredLightingPass");
-        _gpuFrames[idx].disablePass("PostProcessPass");
-        _gpuFrames[idx].enablePass("CopyPass");
-        copyPass->currentTexIdx.x = 1;
-        break;
-    case SceneViewer::ShadingMode::POSITION:
-        _gpuFrames[idx].disablePass("DeferredLightingPass");
-        _gpuFrames[idx].disablePass("PostProcessPass");
-        _gpuFrames[idx].enablePass("CopyPass");
-        copyPass->currentTexIdx.x = 2;
-        break;
-    case SceneViewer::ShadingMode::NORMAL:
-        _gpuFrames[idx].disablePass("DeferredLightingPass");
-        _gpuFrames[idx].disablePass("PostProcessPass");
-        _gpuFrames[idx].enablePass("CopyPass");
-        copyPass->currentTexIdx.x = 3;
-        break;
-    case SceneViewer::ShadingMode::UV:
-        _gpuFrames[idx].disablePass("DeferredLightingPass");
-        _gpuFrames[idx].disablePass("PostProcessPass");
-        _gpuFrames[idx].enablePass("CopyPass");
-        copyPass->currentTexIdx.x = 4;
-        break;
-    case SceneViewer::ShadingMode::ALBEDO:
-        _gpuFrames[idx].disablePass("DeferredLightingPass");
-        _gpuFrames[idx].disablePass("PostProcessPass");
-        _gpuFrames[idx].enablePass("CopyPass");
-        copyPass->currentTexIdx.x = 5;
-        break;
-    case SceneViewer::ShadingMode::FINAL:
-        _gpuFrames[idx].enablePass("DeferredLightingPass");
-        _gpuFrames[idx].enablePass("PostProcessPass");
-        _gpuFrames[idx].disablePass("CopyPass");
-        break;
-    default:
-        break;
+        case SceneViewer::ShadingMode::FLAT:
+            _gpuFrames[idx].setSwitchVariable("shading_mode", "Flat");
+            copyPass->currentTexIdx.x = 0;
+            break;
+        case SceneViewer::ShadingMode::MESHID:
+            _gpuFrames[idx].setSwitchVariable("shading_mode", "MeshID");
+            copyPass->currentTexIdx.x = 1;
+            break;
+        case SceneViewer::ShadingMode::POSITION:
+            _gpuFrames[idx].setSwitchVariable("shading_mode", "Position");
+            copyPass->currentTexIdx.x = 2;
+            break;
+        case SceneViewer::ShadingMode::NORMAL:
+            _gpuFrames[idx].setSwitchVariable("shading_mode", "Normal");
+            copyPass->currentTexIdx.x = 3;
+            break;
+        case SceneViewer::ShadingMode::UV:
+            _gpuFrames[idx].setSwitchVariable("shading_mode", "UV");
+            copyPass->currentTexIdx.x = 4;
+            break;
+        case SceneViewer::ShadingMode::ALBEDO:
+            _gpuFrames[idx].setSwitchVariable("shading_mode", "Albedo");
+            copyPass->currentTexIdx.x = 5;
+            break;
+        case SceneViewer::ShadingMode::FINAL:
+            _gpuFrames[idx].setSwitchVariable("shading_mode", "Final");
+            break;
+        default:
+            break;
     }
-    if(enableWireFrame)
-    {
-        _gpuFrames[idx].enablePass("WireFramePass");
-    }
-    else {
-        _gpuFrames[idx].disablePass("WireFramePass");
-    }
+    _gpuFrames[idx].setBoolVariable("enable_wireframe", enableWireFrame);
     _renderScene->update();
     return _gpuFrames[idx].recordMainQueueCommands();
 }

@@ -22,7 +22,7 @@ void PassTextureDescription::resolveBarriers(GPUFrame* frame)
     activeAccessList.reserve(accessList.size());
     for (const auto & access : accessList)
     {
-        if (access.pass->enabled)
+        if (access.pass->is_enabled())
         {
             activeAccessList.push_back(access);
         }
@@ -85,7 +85,7 @@ void PassBufferDescription::resolveBarriers(GPUFrame* frame)
     activeAccessList.reserve(accessList.size());
     for (const auto & access : accessList)
     {
-        if (access.pass->enabled)
+        if (access.pass->is_enabled())
         {
             activeAccessList.push_back(access);
         }
@@ -488,9 +488,9 @@ void GPUFrame::compileAOT()
 void GPUFrame::disablePass(const std::string& passName)
 {
     auto* pass = getPass(passName);
-    if (pass->enabled)
+    if (!pass->force_disabled)
     {
-        pass->enabled = false;
+        pass->force_disabled = true;
         needToRebuildBarriers = true;
     }
 }
@@ -498,9 +498,9 @@ void GPUFrame::disablePass(const std::string& passName)
 void GPUFrame::enablePass(const std::string& passName)
 {
     auto* pass = getPass(passName);
-    if (!pass->enabled)
+    if (pass->force_disabled)
     {
-        pass->enabled = true;
+        pass->force_disabled = false;
         needToRebuildBarriers = true;
     }
 }
@@ -703,7 +703,7 @@ vk::CommandBuffer GPUFrame::recordMainQueueCommands() {
     for(int i = 0 ; i < sortedIndices.size(); i ++)
     {
         auto& pass = _allPasses[sortedIndices[i]];
-        if (!pass->enabled)
+        if (!pass->is_enabled())
         {
             continue;
         }

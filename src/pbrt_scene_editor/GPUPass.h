@@ -250,6 +250,57 @@ struct PassBufferDescription : PassResourceDescriptionBase
 using PassTexture = PassTextureDescription;
 using PassBuffer = PassBufferDescription;
 
+namespace PassConditionalVariable
+{
+    struct BoolVariabel
+    {
+        bool* val;
+
+        BoolVariabel()
+        {
+            val = new bool;
+        }
+
+        bool operator()() const
+        {
+            return *val;
+        }
+    };
+
+    struct SwitchVariable
+    {
+        std::string* val;
+
+        SwitchVariable()
+        {
+            val = new std::string();
+        }
+
+        auto is(const std::string& _case)
+        {
+            return [=,val = this->val] {return _case == *val; };
+        }
+    };
+
+    template<typename T1, typename T2>
+    auto operator&(const T1& t1, const T2& t2)
+    {
+        return [=] {return t1() && t2(); };
+    }
+
+    template<typename T1, typename T2>
+    auto operator|(const T1& t1, const T2& t2)
+    {
+        return [=] {return t1() && t2(); };
+    }
+
+    template<typename T1>
+    auto operator!(const T1& t1)
+    {
+        return [=] {return !t1(); };
+    }
+}
+
 enum GPUPassType
 {
     Graphics,
@@ -286,7 +337,9 @@ struct GPUPass
 
     std::vector<GPUPassHandle> edges;
     vk::DescriptorSetLayout passInputDescriptorSetLayout;
-    bool enabled = true;
+    bool force_disabled = false;
+    bool is_enabled() { return !force_disabled && enableCond(); }
+    std::function<bool(void)> enableCond = [] {return true; };
     /*
      * For some passes, the shaders, pipelines to use can be determined Ahead of Time,
      * And would never change during the whole applications time.
@@ -636,6 +689,22 @@ struct GPUFrame {
         return tex_ptr;
     }
 
+    auto createBoolVariable(const std::string& name, bool intial_state = true)
+    {
+        PassConditionalVariable::BoolVariabel bv;
+        *bv.val = intial_state;
+        boolVariables.emplace(name, bv);
+        return boolVariables[name];
+    }
+
+    auto createSwitchVariable(const std::string& name, std::string intial_case = "")
+    {
+        PassConditionalVariable::SwitchVariable sv;
+        *sv.val = intial_case;
+        switchVariables.emplace(name, sv);
+        return switchVariables[name];
+    }
+
     PassTextureDescription* getSwapchainTexture()
     {
         return swapchainTextureDesc.get();
@@ -643,6 +712,12 @@ struct GPUFrame {
 
     void executePass(std::unique_ptr<GPUPass>&& pass)
     {
+        _allPasses.emplace_back(std::move(pass));
+    }
+
+    void executeWhen(const std::function<bool(void)>& cond, std::unique_ptr<GPUPass>&& pass)
+    {
+        pass->enableCond = cond;
         _allPasses.emplace_back(std::move(pass));
     }
 
@@ -680,6 +755,31 @@ struct GPUFrame {
     void disablePass(const std::string& passName);
 
     void enablePass(const std::string& passName);
+
+    void setBoolVariable(const std::string& name, bool state)
+    {
+        if (*(boolVariables.find(name)->second.val) != state)
+        {
+            needToRebuildBarriers = true;
+        }
+        *(boolVariables.find(name)->second.val) = state;
+    }
+
+    void toggleBoolVariable(const std::string& name)
+    {
+        bool b = *(boolVariables.find(name)->second.val);
+        *(boolVariables.find(name)->second.val) = b;
+        needToRebuildBarriers = true;
+    }
+
+    void setSwitchVariable(const std::string& name, std::string&& _case)
+    {
+        if (*(switchVariables.find(name)->second.val) != _case)
+        {
+            needToRebuildBarriers = true;
+        }
+        *(switchVariables.find(name)->second.val) = _case;
+    }
 
     auto createBackingImage(PassTextureDescription* textureDesc)
     {
@@ -825,6 +925,9 @@ struct GPUFrame {
     std::vector<DescriptorSetLayoutRecord> managedDescriptorSetLayouts;
     std::vector<vk::DescriptorPool> managedDescriptorPools;
     std::unordered_map<std::string,std::vector<DescriptorSetCallback>> descriptorSetCallbackMap;
+
+    std::unordered_map<std::string, PassConditionalVariable::BoolVariabel> boolVariables;
+    std::unordered_map<std::string, PassConditionalVariable::SwitchVariable> switchVariables;
 
     float x = 0;
     float y = 0;
