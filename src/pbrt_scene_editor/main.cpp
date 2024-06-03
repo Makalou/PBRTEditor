@@ -17,42 +17,18 @@ static char const * EngineName = "";
 #include "ShaderManager.h"
 
 std::shared_ptr<DeviceExtended> device;
-#define MAX_FRAME_IN_FLIGHT 3
-
-vk::Semaphore imageAvailableSemaphores[MAX_FRAME_IN_FLIGHT];// use to synchronize swapchain and cpu
-vk::Semaphore renderFinishSemaphores[MAX_FRAME_IN_FLIGHT];// use to synchronize rendering and presentation
-vk::Fence inFlightFrameFence[MAX_FRAME_IN_FLIGHT]; //use to synchronize CPU and GPU frame resource access
 
 double delta_time = 0.0f;
 double last_time = 0.0f;
 
-void createSynchronizeObjects()
-{
-    vk::SemaphoreCreateInfo semaphoreInfo{};
-    vk::FenceCreateInfo fenceInfo{};
-    fenceInfo.flags = vk::FenceCreateFlagBits::eSignaled;
-    
-    for (int i = 0; i < MAX_FRAME_IN_FLIGHT; i++)
-    {
-        imageAvailableSemaphores[i] = device->createSemaphore(semaphoreInfo);
-        renderFinishSemaphores[i] = device->createSemaphore(semaphoreInfo);
-        inFlightFrameFence[i] = device->createFence(fenceInfo);
-    }
-}
+const uint32_t FRAME_IN_FLIGHT = 3;
 
 EditorGUI editorGUI;
 SceneViewer viewer;
 
-auto waitForFence(vk::Fence* fence, uint64_t timeout)
-{
-    return device->waitForFences(1, fence, vk::True, timeout);
-}
-
 void drawFrame()
 {
     //https://app.diagrams.net/#G1e5FP16h8o5Py-69lOYuoYUjs2gC5e5ae
-    static size_t currentFrameIdx = 0; //range in [0, MAX_FRAME_IN_FLIGHT)
-    constexpr static auto maxTimeout = std::numeric_limits<uint64_t>::max();
     // Wait for commands for current frame completion.
     // For example, if triple buffering is enable, then frame 3 should wait the "frame resource" for frame 0 to finish execution
     // to be able re-use them or recycle them.
@@ -63,7 +39,7 @@ void drawFrame()
     // would only happen when the swapchain image is actually available.
 
     //auto begin = std::chrono::steady_clock::now();
-    auto waitResult = waitForFence(&inFlightFrameFence[currentFrameIdx], maxTimeout);
+    auto frame = FrameCoordinator::getInstance().currentFrame();
     //auto end = std::chrono::steady_clock::now();
     //auto microseconds_count = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
 
@@ -71,30 +47,23 @@ void drawFrame()
 
     //https://www.intel.com/content/www/us/en/developer/articles/training/api-without-secrets-introduction-to-vulkan-part-2.html
     uint32_t imageIdx;
-    auto swapChain = device->_swapchain.getRawVKSwapChain();
-    auto acquireResult = device->acquireNextImageKHR(swapChain, maxTimeout,
-                                           imageAvailableSemaphores[currentFrameIdx],VK_NULL_HANDLE,&imageIdx);
-    if (acquireResult == vk::Result::eErrorOutOfDateKHR || device->_swapchain.shouldRecreate) {
-        device->recreateSwapchain();
-        return;
-    } else if (acquireResult != vk::Result::eSuccess && acquireResult != vk::Result::eSuboptimalKHR) {
-        throw std::runtime_error("Failed to acquire swap chain image!");
+    auto acquireResult = device->acquireNextImageKHR(device->_swapchain.getRawVKSwapChain(), std::numeric_limits<uint64_t>::max(),frame->imageAvailableSemaphore, VK_NULL_HANDLE, &imageIdx);
+    if (acquireResult != vk::Result::eSuccess) {
+        throw std::runtime_error("Failed to acquire swapChain image");
     }
 
-    auto viewer_command = viewer.recordGraphicsCommand(currentFrameIdx);
-    auto gui_command = editorGUI.recordGraphicsCommand(currentFrameIdx);
+    auto frameGraph_command = frame->recordMainQueueCommands(imageIdx);
+    auto gui_command = editorGUI.recordGraphicsCommand(imageIdx);
 
-    vk::CommandBuffer commandBuffers[] = { viewer_command, gui_command };
+    vk::CommandBuffer commandBuffers[] = { frameGraph_command, gui_command };
 
     vk::SubmitInfo submitInfo{};
-    submitInfo.setWaitSemaphores(imageAvailableSemaphores[currentFrameIdx]);
+    submitInfo.setWaitSemaphores(frame->imageAvailableSemaphore);
     vk::PipelineStageFlags waitStages[] = { vk::PipelineStageFlagBits::eColorAttachmentOutput };
     submitInfo.setWaitDstStageMask(waitStages);
     submitInfo.setCommandBuffers(commandBuffers);
-    submitInfo.setSignalSemaphores(renderFinishSemaphores[currentFrameIdx]);
+    submitInfo.setSignalSemaphores(frame->renderFinishSemaphore);
 
-    device->resetFences(inFlightFrameFence[currentFrameIdx]);
-    vk::Queue graphicsQueue = device->get_queue(vkb::QueueType::graphics).value();
     // All submitted commands in a submitInfo won't start execution until corresponding wait semaphores have been signaled.
     // Once all submitted commands in a submitInfo complete, corresponding signalSemaphores will be signaled.
     // When all submitted commands in all submitInfos complete, fence will be signaled.
@@ -102,11 +71,15 @@ void drawFrame()
     // Note if there're very complicated multiple queues dependency relationship, the inFlightFrameFence should wait on
     // the last queue submit on the dependency graph. Dependency between other submission should be expressed by semaphore.
     // Command buffer submissions to a single queue respect submission order and other implicit ordering guarantees.
-    graphicsQueue.submit(submitInfo, inFlightFrameFence[currentFrameIdx]);
+    vk::Queue graphicsQueue = device->get_queue(vkb::QueueType::graphics).value();
+    frame->lock(); //frame->executingFence -> unsignaled, frame->is_executing -> true
+    FrameCoordinator::getInstance().acquireNextFrame();
+    graphicsQueue.submit(submitInfo, frame->executingFence);
 
     vk::PresentInfoKHR presentInfo{};
-    presentInfo.setWaitSemaphores(renderFinishSemaphores[currentFrameIdx]);
-    presentInfo.setSwapchains(swapChain);
+    presentInfo.setWaitSemaphores(frame->renderFinishSemaphore);
+    auto swapchain = device->_swapchain.getRawVKSwapChain();
+    presentInfo.setSwapchains(swapchain);
     presentInfo.setImageIndices(imageIdx);
 
     vk::Queue presentQueue = device->get_queue(vkb::QueueType::present).value();
@@ -116,17 +89,31 @@ void drawFrame()
     // Here, we can continuously submit commands(even into different queues) without any synchronization
     // but still make sure their execution order thanks to semaphores.
     // Presentation requests sent to a particular queue are always performed in order.
-    auto presentResult = presentQueue.presentKHR(presentInfo);
-    if (presentResult == vk::Result::eErrorOutOfDateKHR || 
-        presentResult == vk::Result::eSuboptimalKHR || 
-        device->_swapchain.shouldRecreate) {
-        device->recreateSwapchain();
+    
+    try
+    {
+        auto presentResult = presentQueue.presentKHR(presentInfo);
+        if (presentResult != vk::Result::eSuccess)
+        {
+            if (presentResult == vk::Result::eSuboptimalKHR)
+            {
+                device->_swapchain.shouldRecreate = true;
+            }
+        }
     }
-    else if(presentResult != vk::Result::eSuccess){
+    catch (const vk::OutOfDateKHRError& e)
+    {
+        device->_swapchain.shouldRecreate = true;
+    }
+    catch (...)
+    {
         throw std::runtime_error("Failed to present image!");
     }
-
-    currentFrameIdx = (currentFrameIdx + 1) % MAX_FRAME_IN_FLIGHT;
+    
+    if (device->_swapchain.shouldRecreate)
+    {
+        device->recreateSwapchain();
+    }
 }
 
 bool g_support_bindless;
@@ -210,7 +197,8 @@ int main( int /*argc*/, char ** /*argv*/ )
         vkb::SwapchainBuilder swapchainBuilder{device_optional.value()};
         auto swapChain = swapchainBuilder
             .set_old_swapchain(VK_NULL_HANDLE)
-            .set_desired_min_image_count(MAX_FRAME_IN_FLIGHT)
+            .set_desired_min_image_count(NUM_MIN_SWAPCHAIN_IMAGE)
+            .add_image_usage_flags(VkImageUsageFlagBits::VK_IMAGE_USAGE_TRANSFER_DST_BIT)
             .build();
 
         if (!swapChain)
@@ -226,20 +214,24 @@ int main( int /*argc*/, char ** /*argv*/ )
         std::cerr << err.what() << std::endl;
     }
 
-    createSynchronizeObjects();
+    FrameCoordinator::getInstance().init(device.get(), FRAME_IN_FLIGHT);
 
     viewer.init(device);
     editorGUI.init(window.getRawWindowHandle(), device);
     editorGUI.viewer = &viewer;
 
+    viewer.constructFrameGraphAOT(FrameCoordinator::getInstance().frameGraph);
+    FrameCoordinator::getInstance().compileFrameGraphAOT();
+
     //main loop
     while (!window.shouldClose()) {
+        FrameCoordinator::getInstance().waitForCurrentFrame();
         window.pollEvents();
         double current_time = glfwGetTime();
         delta_time = current_time - last_time;
         last_time = current_time;
+        viewer.update(FrameCoordinator::getInstance().frameGraph);
         editorGUI.constructFrame();
-        viewer.constructFrame();
         drawFrame();
     }
     

@@ -6,7 +6,9 @@
 #define PBRTEDITOR_PASSDEFINITION_H
 
 #include "GPUPass.h"
+#include "GPUFrame.hpp"
 #include <map>
+#include "ShaderManager.h"
 
 #define RASTERIZEDPASS_DEF_BEGIN(name) struct name : GPURasterizedPass { name() : GPURasterizedPass(#name){};
 
@@ -38,16 +40,16 @@ namespace FullScreenQuadDrawer
 };
 
 RASTERIZEDPASS_DEF_BEGIN(SkyBoxPass)
-    void prepareAOT(GPUFrame* frame) override;
+    void prepareAOT(FrameCoordinator*) override;
     renderScene::RenderScene* scene{};
 RASTERIZEDPASS_DEF_END(SkyBoxPass)
 
 RASTERIZEDPASS_DEF_BEGIN(ShadowPass)
-    void prepareAOT(GPUFrame* frame) override;
+    void prepareAOT(FrameCoordinator*) override;
 RASTERIZEDPASS_DEF_END(ShadowPass)
 
 RASTERIZEDPASS_DEF_BEGIN(SSAOPass)
-    void prepareAOT(GPUFrame* frame) override;
+    void prepareAOT(FrameCoordinator*) override;
     renderScene::RenderScene* scene{};
 RASTERIZEDPASS_DEF_END(SSAOPass)
 
@@ -59,7 +61,7 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
     vk::PipelineColorBlendStateCreateInfo colorBlendInfo{};
     vk::DescriptorSetLayout passDataDescriptorLayout;
 
-    void prepareAOT(GPUFrame* frame) override;
+    void prepareAOT(FrameCoordinator*) override;
     void prepareIncremental(GPUFrame* frame) override;
 
     using InstanceUUIDMap = std::unordered_map<renderScene::InstanceUUID,int,renderScene::InstanceUUIDHash>;
@@ -84,7 +86,7 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
             pushConstant.setSize(sizeof(glm::uvec4));
             pushConstant.setStageFlags(vk::ShaderStageFlagBits::eFragment);
 
-            auto pipelineLayout = frame->backendDevice->createPipelineLayout2({frame->_frameGlobalDescriptorSetLayout,
+            auto pipelineLayout = frame->backendDevice->createPipelineLayout2({frame->getFrameGlobalDescriptorSetLayout(),
                                                          passDataDescriptorLayout,
                                                          instanceRigidDynamic.getSetLayout()},{pushConstant});
             instancePipelineLayouts.push_back(pipelineLayout);
@@ -135,8 +137,8 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
         if(idx == -1)
         {
             // Need to create new pipeline
-            auto* vs = ShaderManager::getInstance().createVertexShader(frame->backendDevice.get(),"simple.vert",macroList);
-            auto* fs = ShaderManager::getInstance().createFragmentShader(frame->backendDevice.get(),"simple.frag",macroList);
+            auto* vs = ShaderManager::getInstance().createVertexShader(frame->backendDevice,"simple.vert",macroList);
+            auto* fs = ShaderManager::getInstance().createFragmentShader(frame->backendDevice,"simple.frag",macroList);
             int pipelineLayoutIdx = getOrCreatePipelineLayout(frame,instanceRigidDynamic);
             VulkanGraphicsPipelineBuilder builder(frame->backendDevice->device,vs,fs,
                 vertexInputState.getCreateInfo(),
@@ -182,18 +184,18 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
 RASTERIZEDPASS_DEF_END(GBufferPass)
 
 RASTERIZEDPASS_DEF_BEGIN(DeferredLightingPass)
-    void prepareAOT(GPUFrame* frame) override;
+    void prepareAOT(FrameCoordinator*) override;
 RASTERIZEDPASS_DEF_END(DefereredLightingPass)
 
 RASTERIZEDPASS_DEF_BEGIN(PostProcessPass)
-    void prepareAOT(GPUFrame* frame) override;
+    void prepareAOT(FrameCoordinator*) override;
 
 RASTERIZEDPASS_DEF_END(PostProcessPass)
 
 RASTERIZEDPASS_DEF_BEGIN(CopyPass)
     glm::uvec4 currentTexIdx{};
 
-    void prepareAOT(GPUFrame* frame) override;
+    void prepareAOT(FrameCoordinator*) override;
 RASTERIZEDPASS_DEF_END(CopyPass)
 
 RASTERIZEDPASS_DEF_BEGIN(SelectedMaskPass)
@@ -201,7 +203,7 @@ RASTERIZEDPASS_DEF_BEGIN(SelectedMaskPass)
     vk::PipelineLayout pipelineLayout = VK_NULL_HANDLE;
     vk::DescriptorSetLayout passDataDescriptorLayout;
 
-    void prepareAOT(GPUFrame* frame) override;
+    void prepareAOT(FrameCoordinator*) override;
     void prepareIncremental(GPUFrame* frame) override;
 RASTERIZEDPASS_DEF_END(SelectedMaskPass)
 
@@ -213,12 +215,12 @@ RASTERIZEDPASS_DEF_BEGIN(WireFramePass)
     renderScene::RenderScene* scene{};
     vk::PipelineLayout pipelineLayout = VK_NULL_HANDLE;
     vk::DescriptorSetLayout passDataDescriptorLayout;
-    void prepareAOT(GPUFrame* frame) override;
+    void prepareAOT(FrameCoordinator*) override;
     void prepareIncremental(GPUFrame* frame) override;
 RASTERIZEDPASS_DEF_END(WireFramePass)
 
 RASTERIZEDPASS_DEF_BEGIN(OutlinePass)
-    void prepareAOT(GPUFrame* frame) override;
+    void prepareAOT(FrameCoordinator*) override;
 RASTERIZEDPASS_DEF_END(OutlinePass)
 
 COMPUTEPASS_DEF_BEGIN(ObjectPickPass)
@@ -228,6 +230,6 @@ COMPUTEPASS_DEF_BEGIN(ObjectPickPass)
     VMAObservedBufferMapped<glm::uvec4> objectIDBuffer;
     renderScene::RenderScene* scene{};
 
-    void prepareAOT(GPUFrame* frame) override;
+    void prepareAOT(FrameCoordinator*) override;
 COMPUTEPASS_DEF_END(ObjectPickPass)
 #endif //PBRTEDITOR_PASSDEFINITION_H

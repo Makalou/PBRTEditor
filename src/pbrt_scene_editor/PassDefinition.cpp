@@ -1,24 +1,24 @@
 #include "PassDefinition.h"
 
-void SkyBoxPass::prepareAOT(GPUFrame* frame)
+void SkyBoxPass::prepareAOT(FrameCoordinator* coordinator)
 {
-    auto vs = FullScreenQuadDrawer::getVertexShader(frame->backendDevice.get());
-    auto fs = ShaderManager::getInstance().createFragmentShader(frame->backendDevice.get(), "proceduralSkyBox.frag");
+    auto vs = FullScreenQuadDrawer::getVertexShader(coordinator->backendDevice);
+    auto fs = ShaderManager::getInstance().createFragmentShader(coordinator->backendDevice, "proceduralSkyBox.frag");
 
-    auto passDataDescriptorLayout = frame->manageDescriptorSet("SkyBoxPassDataDescriptorSet", { {vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eAllGraphics } });
+    auto passDataDescriptorLayout = coordinator->manageInFlightDescriptorSetAOT("SkyBoxPassDataDescriptorSet", { {vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eAllGraphics } });
 
-    frame->getManagedDescriptorSet("SkyBoxPassDataDescriptorSet", [frame, this](const vk::DescriptorSet& passDataDescriptorSet) mutable {
-        frame->backendDevice->updateDescriptorSetUniformBuffer(passDataDescriptorSet, 0, scene->mainView.camera.data.getBuffer());
-        });
+    coordinator->updateInFlightDescriptorSetAOT("SkyBoxPassDataDescriptorSet", 0, vk::DescriptorType::eUniformBuffer, [this](GPUFrame* frame) {
+        return vk::Buffer(scene->mainView.camera.data.getBufferFor(frame->frameIdx));
+    });
 
-    auto pipelineLayout = frame->backendDevice->createPipelineLayout2({ frame->_frameGlobalDescriptorSetLayout,passDataDescriptorLayout });
-    frame->backendDevice->setObjectDebugName(pipelineLayout, "SkyBoxPassPipelineLayout");
+    auto pipelineLayout = coordinator->backendDevice->createPipelineLayout2({ coordinator->getFrameGlobalDescriptorSetLayout(),passDataDescriptorLayout});
+    coordinator->backendDevice->setObjectDebugName(pipelineLayout, "SkyBoxPassPipelineLayout");
 
-    VulkanGraphicsPipelineBuilder builder(frame->backendDevice->device, vs, fs,
+    VulkanGraphicsPipelineBuilder builder(coordinator->backendDevice->device, vs, fs,
         FullScreenQuadDrawer::getVertexInputStateInfo(), renderPass,
         pipelineLayout);
     auto pipeline = builder.build();
-    frame->backendDevice->setObjectDebugName(pipeline.getPipeline(), "SkyBoxPassPipeline");
+    coordinator->backendDevice->setObjectDebugName(pipeline.getPipeline(), "SkyBoxPassPipeline");
     graphicsPipelines.push_back(pipeline);
     PassActionContext actionContext{};
     actionContext.pipelineIdx = 0;
@@ -28,30 +28,30 @@ void SkyBoxPass::prepareAOT(GPUFrame* frame)
     actionContextQueue.push_back(actionContext);
 }
 
-void ShadowPass::prepareAOT(GPUFrame* frame)
+void ShadowPass::prepareAOT(FrameCoordinator* coordinator)
 {
 
 }
 
-void SSAOPass::prepareAOT(GPUFrame* frame)
+void SSAOPass::prepareAOT(FrameCoordinator* coordinator)
 {
-    auto vs = FullScreenQuadDrawer::getVertexShader(frame->backendDevice.get());
-    auto fs = ShaderManager::getInstance().createFragmentShader(frame->backendDevice.get(), "ssao.frag");
+    auto vs = FullScreenQuadDrawer::getVertexShader(coordinator->backendDevice);
+    auto fs = ShaderManager::getInstance().createFragmentShader(coordinator->backendDevice, "ssao.frag");
 
-    auto passDataDescriptorLayout = frame->manageDescriptorSet("SSAOPassDataDescriptorSet", { {vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eAllGraphics } });
+    auto passDataDescriptorLayout = coordinator->manageInFlightDescriptorSetAOT("SSAOPassDataDescriptorSet", { {vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eAllGraphics } });
 
-    frame->getManagedDescriptorSet("SSAOPassDataDescriptorSet", [frame, this](const vk::DescriptorSet& passDataDescriptorSet) mutable {
-        frame->backendDevice->updateDescriptorSetUniformBuffer(passDataDescriptorSet, 0, scene->mainView.camera.data.getBuffer());
-        });
+    coordinator->updateInFlightDescriptorSetAOT("SSAOPassDataDescriptorSet", 0, vk::DescriptorType::eUniformBuffer, [this](GPUFrame* frame) {
+        return vk::Buffer(scene->mainView.camera.data.getBufferFor(frame->frameIdx));
+    });
 
-    auto pipelineLayout = frame->backendDevice->createPipelineLayout2({ frame->_frameGlobalDescriptorSetLayout, passInputDescriptorSetLayout, passDataDescriptorLayout});
-    frame->backendDevice->setObjectDebugName(pipelineLayout, "SSAOPassPipelineLayout");
+    auto pipelineLayout = coordinator->backendDevice->createPipelineLayout2({ coordinator->getFrameGlobalDescriptorSetLayout(), passInputDescriptorSetLayout, passDataDescriptorLayout});
+    coordinator->backendDevice->setObjectDebugName(pipelineLayout, "SSAOPassPipelineLayout");
 
-    VulkanGraphicsPipelineBuilder builder(frame->backendDevice->device, vs, fs,
+    VulkanGraphicsPipelineBuilder builder(coordinator->backendDevice->device, vs, fs,
         FullScreenQuadDrawer::getVertexInputStateInfo(), renderPass,
         pipelineLayout);
     auto pipeline = builder.build();
-    frame->backendDevice->setObjectDebugName(pipeline.getPipeline(), "SSAOPassPipeline");
+    coordinator->backendDevice->setObjectDebugName(pipeline.getPipeline(), "SSAOPassPipeline");
     graphicsPipelines.push_back(pipeline);
     PassActionContext actionContext{};
     actionContext.pipelineIdx = 0;
@@ -61,16 +61,16 @@ void SSAOPass::prepareAOT(GPUFrame* frame)
     actionContextQueue.push_back(actionContext);
 }
 
-void GBufferPass::prepareAOT(GPUFrame* frame)
+void GBufferPass::prepareAOT(FrameCoordinator* coordinator)
 {
-    passDataDescriptorLayout = frame->manageDescriptorSet("GBufferPassDataDescriptorSet", { {vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eAllGraphics } });
+    passDataDescriptorLayout = coordinator->manageInFlightDescriptorSetAOT("GBufferPassDataDescriptorSet", { {vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eAllGraphics } });
 
-    frame->getManagedDescriptorSet("GBufferPassDataDescriptorSet", [frame, this](const vk::DescriptorSet& passDataDescriptorSet) mutable {
-        frame->backendDevice->updateDescriptorSetUniformBuffer(passDataDescriptorSet, 0, scene->mainView.camera.data.getBuffer());
-        });
+    coordinator->updateInFlightDescriptorSetAOT("GBufferPassDataDescriptorSet", 0, vk::DescriptorType::eUniformBuffer,[this](GPUFrame* frame) {
+        return vk::Buffer(scene->mainView.camera.data.getBufferFor(frame->frameIdx));
+    });
 
-    passLevelPipelineLayout = frame->backendDevice->createPipelineLayout2({ frame->_frameGlobalDescriptorSetLayout,passDataDescriptorLayout });
-    frame->backendDevice->setObjectDebugName(passLevelPipelineLayout, "GBufferPassLevelPipelineLayout");
+    passLevelPipelineLayout = coordinator->backendDevice->createPipelineLayout2({ coordinator->getFrameGlobalDescriptorSetLayout(), passDataDescriptorLayout });
+    coordinator->backendDevice->setObjectDebugName(passLevelPipelineLayout, "GBufferPassLevelPipelineLayout");
 
     rasterInfo.setCullMode(vk::CullModeFlagBits::eNone);
     rasterInfo.setRasterizerDiscardEnable(vk::False);
@@ -165,18 +165,18 @@ void GBufferPass::prepareIncremental(GPUFrame* frame)
     }
 }
 
-void DeferredLightingPass::prepareAOT(GPUFrame* frame)
+void DeferredLightingPass::prepareAOT(FrameCoordinator* coordinator)
 {
-    auto vs = FullScreenQuadDrawer::getVertexShader(frame->backendDevice.get());
-    auto fs = ShaderManager::getInstance().createFragmentShader(frame->backendDevice.get(), "deferred.frag");
+    auto vs = FullScreenQuadDrawer::getVertexShader(coordinator->backendDevice);
+    auto fs = ShaderManager::getInstance().createFragmentShader(coordinator->backendDevice, "deferred.frag");
 
-    auto pipelineLayout = frame->backendDevice->createPipelineLayout2({ frame->_frameGlobalDescriptorSetLayout,passInputDescriptorSetLayout });
-    frame->backendDevice->setObjectDebugName(pipelineLayout, "DeferredLightingPassPipelineLayout");
-    VulkanGraphicsPipelineBuilder builder(frame->backendDevice->device, vs, fs,
+    auto pipelineLayout = coordinator->backendDevice->createPipelineLayout2({ coordinator->getFrameGlobalDescriptorSetLayout(),passInputDescriptorSetLayout });
+    coordinator->backendDevice->setObjectDebugName(pipelineLayout, "DeferredLightingPassPipelineLayout");
+    VulkanGraphicsPipelineBuilder builder(coordinator->backendDevice->device, vs, fs,
         FullScreenQuadDrawer::getVertexInputStateInfo(), renderPass,
         pipelineLayout);
     auto pipeline = builder.build();
-    frame->backendDevice->setObjectDebugName(pipeline.getPipeline(), "DeferredLightingPassPipeline");
+    coordinator->backendDevice->setObjectDebugName(pipeline.getPipeline(), "DeferredLightingPassPipeline");
     graphicsPipelines.push_back(pipeline);
     PassActionContext actionContext{};
     actionContext.pipelineIdx = 0;
@@ -186,19 +186,19 @@ void DeferredLightingPass::prepareAOT(GPUFrame* frame)
     actionContextQueue.push_back(actionContext);
 }
 
-void PostProcessPass::prepareAOT(GPUFrame* frame)
+void PostProcessPass::prepareAOT(FrameCoordinator* coordinator)
 {
-    auto vs = FullScreenQuadDrawer::getVertexShader(frame->backendDevice.get());
-    auto fs = ShaderManager::getInstance().createFragmentShader(frame->backendDevice.get(), "postProcess.frag");
+    auto vs = FullScreenQuadDrawer::getVertexShader(coordinator->backendDevice);
+    auto fs = ShaderManager::getInstance().createFragmentShader(coordinator->backendDevice, "postProcess.frag");
 
-    auto pipelineLayout = frame->backendDevice->createPipelineLayout2({ frame->_frameGlobalDescriptorSetLayout,passInputDescriptorSetLayout });
-    frame->backendDevice->setObjectDebugName(pipelineLayout, "PostProcessPassPipelineLayout");
+    auto pipelineLayout = coordinator->backendDevice->createPipelineLayout2({ coordinator->getFrameGlobalDescriptorSetLayout(),passInputDescriptorSetLayout });
+    coordinator->backendDevice->setObjectDebugName(pipelineLayout, "PostProcessPassPipelineLayout");
 
-    VulkanGraphicsPipelineBuilder builder(frame->backendDevice->device, vs, fs,
+    VulkanGraphicsPipelineBuilder builder(coordinator->backendDevice->device, vs, fs,
         FullScreenQuadDrawer::getVertexInputStateInfo(), renderPass,
         pipelineLayout);
     auto pipeline = builder.build();
-    frame->backendDevice->setObjectDebugName(pipeline.getPipeline(), "PostProcessPassPipeline");
+    coordinator->backendDevice->setObjectDebugName(pipeline.getPipeline(), "PostProcessPassPipeline");
     graphicsPipelines.push_back(pipeline);
     PassActionContext actionContext{};
     actionContext.pipelineIdx = 0;
@@ -208,26 +208,26 @@ void PostProcessPass::prepareAOT(GPUFrame* frame)
     actionContextQueue.push_back(actionContext);
 }
 
-void CopyPass::prepareAOT(GPUFrame* frame)
+void CopyPass::prepareAOT(FrameCoordinator* coordinator)
 {
-    auto vs = FullScreenQuadDrawer::getVertexShader(frame->backendDevice.get());
-    auto fs = ShaderManager::getInstance().createFragmentShader(frame->backendDevice.get(), "copy.frag");
+    auto vs = FullScreenQuadDrawer::getVertexShader(coordinator->backendDevice);
+    auto fs = ShaderManager::getInstance().createFragmentShader(coordinator->backendDevice, "copy.frag");
 
     vk::PushConstantRange pushConstant{};
     pushConstant.setOffset(0);
     pushConstant.setSize(sizeof(glm::uvec4));
     pushConstant.setStageFlags(vk::ShaderStageFlagBits::eFragment);
 
-    auto pipelineLayout = frame->backendDevice->createPipelineLayout2({ frame->_frameGlobalDescriptorSetLayout,
+    auto pipelineLayout = coordinator->backendDevice->createPipelineLayout2({ coordinator->getFrameGlobalDescriptorSetLayout(),
                                                                             passInputDescriptorSetLayout }, { pushConstant });
 
-    frame->backendDevice->setObjectDebugName(pipelineLayout, "CopyPassPipelineLayout");
+    coordinator->backendDevice->setObjectDebugName(pipelineLayout, "CopyPassPipelineLayout");
 
-    VulkanGraphicsPipelineBuilder builder(frame->backendDevice->device, vs, fs,
+    VulkanGraphicsPipelineBuilder builder(coordinator->backendDevice->device, vs, fs,
         FullScreenQuadDrawer::getVertexInputStateInfo(), renderPass,
         pipelineLayout);
     auto pipeline = builder.build();
-    frame->backendDevice->setObjectDebugName(pipeline.getPipeline(), "CopyPassPipeline");
+    coordinator->backendDevice->setObjectDebugName(pipeline.getPipeline(), "CopyPassPipeline");
     graphicsPipelines.push_back(pipeline);
     PassActionContext actionContext{};
     actionContext.pipelineIdx = 0;
@@ -240,13 +240,13 @@ void CopyPass::prepareAOT(GPUFrame* frame)
     actionContextQueue.push_back(actionContext);
 }
 
-void SelectedMaskPass::prepareAOT(GPUFrame* frame)
+void SelectedMaskPass::prepareAOT(FrameCoordinator* coordinator)
 {
-    passDataDescriptorLayout = frame->manageDescriptorSet("SelectedMaskPassDataDescriptorSet", { {vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eAllGraphics } });
+    passDataDescriptorLayout = coordinator->manageInFlightDescriptorSetAOT("SelectedMaskPassDataDescriptorSet", { {vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eAllGraphics } });
 
-    frame->getManagedDescriptorSet("SelectedMaskPassDataDescriptorSet", [frame, this](const vk::DescriptorSet& passDataDescriptorSet) mutable {
-        frame->backendDevice->updateDescriptorSetUniformBuffer(passDataDescriptorSet, 0, scene->mainView.camera.data.getBuffer());
-        });
+    coordinator->updateInFlightDescriptorSetAOT("SelectedMaskPassDataDescriptorSet", 0, vk::DescriptorType::eUniformBuffer,[this](GPUFrame* frame) {
+        return vk::Buffer(scene->mainView.camera.data.getBufferFor(frame->frameIdx));
+    });
 }
 
 void SelectedMaskPass::prepareIncremental(GPUFrame* frame)
@@ -257,10 +257,10 @@ void SelectedMaskPass::prepareIncremental(GPUFrame* frame)
         auto& instanceRigidDynamic = scene->_dynamicRigidMeshBatch[i];
         if (graphicsPipelines.empty())
         {
-            pipelineLayout = frame->backendDevice->createPipelineLayout2({ frame->_frameGlobalDescriptorSetLayout,passDataDescriptorLayout,instanceRigidDynamic.getSetLayout() });
+            pipelineLayout = frame->backendDevice->createPipelineLayout2({ frame->getFrameGlobalDescriptorSetLayout(),passDataDescriptorLayout,instanceRigidDynamic.getSetLayout() });
             frame->backendDevice->setObjectDebugName(pipelineLayout, "SelectedMaskPassPipelineLayout");
-            auto vs = ShaderManager::getInstance().createVertexShader(frame->backendDevice.get(), "positionOnly.vert");
-            auto fs = ShaderManager::getInstance().createFragmentShader(frame->backendDevice.get(), "constantColor.frag");
+            auto vs = ShaderManager::getInstance().createVertexShader(frame->backendDevice, "positionOnly.vert");
+            auto fs = ShaderManager::getInstance().createFragmentShader(frame->backendDevice, "constantColor.frag");
             VulkanGraphicsPipelineBuilder builder(frame->backendDevice->device, vs, fs,
                 instanceRigidDynamic.getPosOnlyVertexInputState().getCreateInfo(), renderPass,
                 pipelineLayout);
@@ -269,7 +269,7 @@ void SelectedMaskPass::prepareIncremental(GPUFrame* frame)
             frame->backendDevice->setObjectDebugName(pipeline.getPipeline(), "SelectedMaskPassPipeline");
             graphicsPipelines.push_back(pipeline);
         }
-        if (instanceRigidDynamic.updateCurrentMask(1, frame->backendDevice.get()) > 0)
+        if (instanceRigidDynamic.updateCurrentMask(1, frame->backendDevice) > 0)
         {
             PassActionContext actionContext{};
             actionContext.pipelineIdx = 0;
@@ -283,12 +283,12 @@ void SelectedMaskPass::prepareIncremental(GPUFrame* frame)
     }
 }
 
-void WireFramePass::prepareAOT(GPUFrame* frame)
+void WireFramePass::prepareAOT(FrameCoordinator* coordinator)
 {
-    passDataDescriptorLayout = frame->manageDescriptorSet("WireFramePassDataDescriptorSet", { {vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eAllGraphics } });
+    passDataDescriptorLayout = coordinator->manageInFlightDescriptorSetAOT("WireFramePassDataDescriptorSet", { {vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eAllGraphics } });
 
-    frame->getManagedDescriptorSet("WireFramePassDataDescriptorSet", [frame, this](const vk::DescriptorSet& passDataDescriptorSet) mutable {
-        frame->backendDevice->updateDescriptorSetUniformBuffer(passDataDescriptorSet, 0, scene->mainView.camera.data.getBuffer());
+    coordinator->updateInFlightDescriptorSetAOT("WireFramePassDataDescriptorSet", 0, vk::DescriptorType::eUniformBuffer,[this](GPUFrame* frame) {
+        return vk::Buffer(scene->mainView.camera.data.getBufferFor(frame->frameIdx));
         });
 }
 
@@ -300,10 +300,10 @@ void WireFramePass::prepareIncremental(GPUFrame* frame)
         auto& instanceRigidDynamic = scene->_dynamicRigidMeshBatch[i];
         if (graphicsPipelines.empty())
         {
-            pipelineLayout = frame->backendDevice->createPipelineLayout2({ frame->_frameGlobalDescriptorSetLayout,passDataDescriptorLayout,instanceRigidDynamic.getSetLayout() });
+            pipelineLayout = frame->backendDevice->createPipelineLayout2({ frame->getFrameGlobalDescriptorSetLayout(),passDataDescriptorLayout,instanceRigidDynamic.getSetLayout()});
             frame->backendDevice->setObjectDebugName(pipelineLayout, "WireFramePassPipelineLayout");
-            auto vs = ShaderManager::getInstance().createVertexShader(frame->backendDevice.get(), "positionOnly.vert");
-            auto fs = ShaderManager::getInstance().createFragmentShader(frame->backendDevice.get(), "constantColor.frag");
+            auto vs = ShaderManager::getInstance().createVertexShader(frame->backendDevice, "positionOnly.vert");
+            auto fs = ShaderManager::getInstance().createFragmentShader(frame->backendDevice, "constantColor.frag");
 
             vk::PipelineRasterizationStateCreateInfo rasterInfo{};
             rasterInfo.setCullMode(vk::CullModeFlagBits::eNone);
@@ -340,13 +340,13 @@ void WireFramePass::prepareIncremental(GPUFrame* frame)
     }
 }
 
-void OutlinePass::prepareAOT(GPUFrame* frame)
+void OutlinePass::prepareAOT(FrameCoordinator* coordinator)
 {
-    auto vs = FullScreenQuadDrawer::getVertexShader(frame->backendDevice.get());
-    auto fs = ShaderManager::getInstance().createFragmentShader(frame->backendDevice.get(), "outline.frag");
+    auto vs = FullScreenQuadDrawer::getVertexShader(coordinator->backendDevice);
+    auto fs = ShaderManager::getInstance().createFragmentShader(coordinator->backendDevice, "outline.frag");
 
-    auto pipelineLayout = frame->backendDevice->createPipelineLayout2({ frame->_frameGlobalDescriptorSetLayout,passInputDescriptorSetLayout });
-    frame->backendDevice->setObjectDebugName(pipelineLayout, "OutlinePassPipelineLayout");
+    auto pipelineLayout = coordinator->backendDevice->createPipelineLayout2({ coordinator->getFrameGlobalDescriptorSetLayout(),passInputDescriptorSetLayout});
+    coordinator->backendDevice->setObjectDebugName(pipelineLayout, "OutlinePassPipelineLayout");
 
     vk::PipelineColorBlendAttachmentState attachmentState{};
     attachmentState.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
@@ -361,11 +361,11 @@ void OutlinePass::prepareAOT(GPUFrame* frame)
     colorBlendInfo.setAttachments(attachmentState);
     colorBlendInfo.setLogicOpEnable(vk::False);
 
-    VulkanGraphicsPipelineBuilder builder(frame->backendDevice->device, vs, fs,
+    VulkanGraphicsPipelineBuilder builder(coordinator->backendDevice->device, vs, fs,
         FullScreenQuadDrawer::getVertexInputStateInfo(), renderPass,
         pipelineLayout, colorBlendInfo);
     auto pipeline = builder.build();
-    frame->backendDevice->setObjectDebugName(pipeline.getPipeline(), "OutlinePassPipeline");
+    coordinator->backendDevice->setObjectDebugName(pipeline.getPipeline(), "OutlinePassPipeline");
     graphicsPipelines.push_back(pipeline);
     PassActionContext actionContext{};
     actionContext.pipelineIdx = 0;
@@ -375,46 +375,38 @@ void OutlinePass::prepareAOT(GPUFrame* frame)
     actionContextQueue.push_back(actionContext);
 }
 
-void ObjectPickPass::prepareAOT(GPUFrame* frame)
+void ObjectPickPass::prepareAOT(FrameCoordinator* coordinator)
 {
-    auto resBuffer = frame->backendDevice->allocateObservedBufferPull<glm::uvec4>(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+    auto resBuffer = coordinator->backendDevice->allocateObservedBufferPull<glm::uvec4>(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
     if (!resBuffer)
     {
         throw std::runtime_error("Failed to create objectIDBuffer");
     }
     objectIDBuffer = resBuffer.value();
 
-    passDataDescriptorLayout = frame->manageDescriptorSet("ObjectPickPassDataDescriptorSet", { {vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute }});
-    frame->getManagedDescriptorSet("ObjectPickPassDataDescriptorSet", [frame, this](const vk::DescriptorSet& passDataDescriptorSet) mutable {
-        frame->backendDevice->updateDescriptorSetStorageBuffer(passDataDescriptorSet, 0, objectIDBuffer.getBuffer());
-        });
+    passDataDescriptorLayout = coordinator->manageInFlightDescriptorSetAOT("ObjectPickPassDataDescriptorSet", { {vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute }});
+    coordinator->updateInFlightDescriptorSetAOT("ObjectPickPassDataDescriptorSet", 0, vk::DescriptorType::eStorageBuffer,[this](GPUFrame* frame) {
+        return vk::Buffer(objectIDBuffer.getBuffer());
+    });
 
-    pipelineLayout = frame->backendDevice->createPipelineLayout2({ frame->_frameGlobalDescriptorSetLayout,
+    pipelineLayout = coordinator->backendDevice->createPipelineLayout2({ coordinator->getFrameGlobalDescriptorSetLayout(),
         passInputDescriptorSetLayout, passDataDescriptorLayout });
 
-    auto cs = ShaderManager::getInstance().createComputeShader(frame->backendDevice.get(), "objectPick.comp");
+    auto cs = ShaderManager::getInstance().createComputeShader(coordinator->backendDevice, "objectPick.comp");
     vk::ComputePipelineCreateInfo pipelineInfo{};
     pipelineInfo.setLayout(pipelineLayout);
     pipelineInfo.setStage(cs->getStageCreateInfo());
-
-    auto newPipeline = frame->backendDevice->createComputePipeline(VK_NULL_HANDLE, pipelineInfo);
-    if (newPipeline.result != vk::Result::eSuccess)
-    {
-        throw std::runtime_error("Failed to create ObjectPickPassPipeline");
-    }
-    pipeline = newPipeline.value;
-    frame->backendDevice->setObjectDebugName(pipelineLayout, "ObjectPickPassPipelineLayout");
-    frame->backendDevice->setObjectDebugName(pipeline, "ObjectPickPassPipeline");
+    VulkanComputePipelineBuilder builder(coordinator->backendDevice->device, cs, pipelineLayout);
+    auto pipeline = builder.build();
+    computePipelines.push_back(pipeline);
+    coordinator->backendDevice->setObjectDebugName(pipelineLayout, "ObjectPickPassPipelineLayout");
+    coordinator->backendDevice->setObjectDebugName(pipeline.getPipeline(), "ObjectPickPassPipeline");
 
     PassActionContext actionContext{};
     actionContext.pipelineIdx = 0;
     actionContext.firstSet = 1;
-    actionContext.descriptorSets = { };
-    actionContext.action = [this,frame](vk::CommandBuffer cmd, uint32_t pipelineIdx) {
-        auto passInputDescriptorSet = frame->getManagedDescriptorSet("ObjectPickPassInputDescriptorSet");
-        auto passDataDescriptorSet = frame->getManagedDescriptorSet("ObjectPickPassDataDescriptorSet");
-        cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipelineLayout, 1, { passInputDescriptorSet,passDataDescriptorSet }, nullptr);
-        cmd.bindPipeline(vk::PipelineBindPoint::eCompute, pipeline);
+    actionContext.descriptorSets = {"ObjectPickPassInputDescriptorSet","ObjectPickPassDataDescriptorSet" };
+    actionContext.action = [this](vk::CommandBuffer cmd, uint32_t pipelineIdx) {
         cmd.dispatch(1, 1, 1);
         scene->selectedDynamicRigidMeshID.x = objectIDBuffer->x;
         scene->selectedDynamicRigidMeshID.y = objectIDBuffer->y;

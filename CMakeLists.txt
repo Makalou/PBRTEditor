@@ -82,11 +82,16 @@ add_executable(editor_exe src/pbrt_scene_editor/main.cpp
         src/pbrt_scene_editor/Insepctor.cpp
         src/pbrt_scene_editor/RenderScene.h
         src/pbrt_scene_editor/RenderScene.cpp
+	src/pbrt_scene_editor/GPUFrame.hpp
+	src/pbrt_scene_editor/GPUFrame.cpp
+	src/pbrt_scene_editor/FrameGraphResourceDef.hpp
+	src/pbrt_scene_editor/FrameGraph.hpp
+	src/pbrt_scene_editor/FrameGraph.cpp
         src/pbrt_scene_editor/GPUPass.h
+        src/pbrt_scene_editor/GPUPass.cpp
         src/pbrt_scene_editor/ShaderManager.cpp
         src/pbrt_scene_editor/ShaderManager.h
         src/pbrt_scene_editor/Singleton.h
-        src/pbrt_scene_editor/GPUPass.cpp
         src/pbrt_scene_editor/VulkanExtension.cpp
         src/pbrt_scene_editor/ApplicationConfig.h
         src/pbrt_scene_editor/ThreadPool.h

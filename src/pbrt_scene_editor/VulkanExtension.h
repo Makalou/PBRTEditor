@@ -9,6 +9,7 @@
 #include "VMAExtension.h"
 #include <optional>
 #include <iostream>
+#include <variant>
 
 struct SwapchainExtended : vkb::Swapchain
 {
@@ -194,6 +195,26 @@ struct DeviceExtended : vkb::Device, vk::Device
         debugNameInfo.setObjectType(ObjectT::objectType);
         debugNameInfo.setObjectHandle((uint64_t)static_cast<typename ObjectT::CType>(object));
         debugNameInfo.setPObjectName(name);
+        setDebugUtilsObjectNameEXT(debugNameInfo, dld);
+    }
+
+    template<class ObjectT>
+    auto setObjectDebugName(ObjectT object, std::string && name) const
+    {
+        vk::DebugUtilsObjectNameInfoEXT debugNameInfo{};
+        debugNameInfo.setObjectType(ObjectT::objectType);
+        debugNameInfo.setObjectHandle((uint64_t)static_cast<typename ObjectT::CType>(object));
+        debugNameInfo.setPObjectName(name.c_str());
+        setDebugUtilsObjectNameEXT(debugNameInfo, dld);
+    }
+
+    template<class ObjectT>
+    auto setObjectDebugName(ObjectT object, const std::string& name) const
+    {
+        vk::DebugUtilsObjectNameInfoEXT debugNameInfo{};
+        debugNameInfo.setObjectType(ObjectT::objectType);
+        debugNameInfo.setObjectHandle((uint64_t)static_cast<typename ObjectT::CType>(object));
+        debugNameInfo.setPObjectName(name.c_str());
         setDebugUtilsObjectNameEXT(debugNameInfo, dld);
     }
 
@@ -415,13 +436,25 @@ private:
     vk::DispatchLoaderDynamic dld;
 };
 
+namespace VulkanUtil
+{
+    static bool isDepthStencilFormat(vk::Format format)
+    {
+        return format == vk::Format::eD32Sfloat ||
+            format == vk::Format::eD16Unorm ||
+            format == vk::Format::eD16UnormS8Uint ||
+            format == vk::Format::eD24UnormS8Uint ||
+            format == vk::Format::eD32SfloatS8Uint;
+    };
+}
+
 struct CommandPoolExtended : vk::CommandPool
 {
     CommandPoolExtended() {}
-    CommandPoolExtended(std::shared_ptr<DeviceExtended> device, vk::CommandPool pool) :_device(device), _cmdPool(pool){}
+    CommandPoolExtended(DeviceExtended* device, vk::CommandPool pool) :_device(device), _cmdPool(pool){}
 
     vk::CommandPool _cmdPool;
-    std::shared_ptr<DeviceExtended> _device;
+    DeviceExtended* _device;
 
     vk::CommandBuffer allocateCommandBuffer(vk::CommandBufferLevel level) const
     {
@@ -575,6 +608,18 @@ struct LinearCachedDescriptorAllocator
     DeviceExtended* backendDevice;
 };
 
+using VulkanDescriptorResourceInfo = std::variant<vk::DescriptorImageInfo, vk::DescriptorBufferInfo, vk::WriteDescriptorSetAccelerationStructureKHR>;
+
+struct VulkanWriteDescriptorSet
+{
+    vk::DescriptorSet dstSet = {};
+    uint32_t dstBinding = {};
+    uint32_t descriptorCount = {};
+    uint32_t dstArrayElement = {};
+    vk::DescriptorType descriptorType = {};
+    VulkanDescriptorResourceInfo resourceInfo = {};
+};
+
 struct VulkanPipelineLayout
 {
     VulkanPipelineLayout(std::vector<DescriptorSetLayoutExtended>&& setLayouts)
@@ -709,6 +754,7 @@ struct VulkanPipelineVertexInputStateInfo
 
 struct VertexShader;
 struct FragmentShader;
+struct ComputeShader;
 
 #define VK_GRAPHICS_PIPELINE_STATE_DEF_GETTER(state)    private: vk::Pipeline##state##StateCreateInfo _##state##StateInfo{}; \
                                                         public: auto get##state##Info() const{ \
@@ -908,5 +954,93 @@ private:
     vk::PipelineLayout _pipelineLayout;
     vk::PipelineColorBlendAttachmentState defaultAttachmentState{};
     std::vector<vk::DynamicState> dynamicStates{ vk::DynamicState::eViewport,vk::DynamicState::eScissor };
+};
+
+struct VulkanComputePipeline
+{
+    bool compatibleWithComputeShader(const std::string& shaderVariantUUID);
+
+    bool compatibleWith(const vk::PipelineShaderStageCreateInfo& shaderInfo)
+    {
+        return false;
+    }
+
+    bool compatibleWith(const vk::ComputePipelineCreateInfo& createInfo) const
+    {
+        return false;
+    }
+
+    bool operator==(const vk::ComputePipelineCreateInfo& createInfo) const
+    {
+        return compatibleWith(createInfo);
+    }
+
+    vk::PipelineLayout getLayout() const
+    {
+        return pipelineLayout;
+    }
+
+    auto getBackendDevice() const
+    {
+        return device;
+    }
+
+    auto getComputeShaderInfo() const
+    {
+        return _cs;
+    }
+
+    vk::Pipeline getPipeline() const
+    {
+        return _pipeline;
+    }
+
+    auto getPipelineLayout() const
+    {
+        return pipelineLayout;
+    }
+private:
+    vk::Pipeline _pipeline = VK_NULL_HANDLE;
+
+    friend struct VulkanComputePipelineBuilder;
+    VulkanComputePipeline() = default;
+
+    vk::Device device = VK_NULL_HANDLE;
+
+    ComputeShader* _cs;
+
+    vk::PipelineLayout pipelineLayout = VK_NULL_HANDLE;
+};
+
+struct VulkanComputePipelineBuilder
+{
+    VulkanComputePipelineBuilder(vk::Device device,
+        ComputeShader* cs);
+
+    VulkanComputePipelineBuilder(vk::Device device,
+        ComputeShader* cs,
+        vk::PipelineLayout pipelineLayout)
+        :VulkanComputePipelineBuilder(device, cs)
+    {
+        if (pipelineLayout == VK_NULL_HANDLE)
+        {
+            //create empty pipeline layout
+            vk::PipelineLayoutCreateInfo emptyLayoutInfo{};
+            emptyLayoutInfo.setSetLayoutCount(0);
+            _pipelineLayout = device.createPipelineLayout(emptyLayoutInfo);
+        }
+        else {
+            _pipelineLayout = pipelineLayout;
+        }
+    }
+    /*
+     *  Make sure you have set all desired state before calling build
+     */
+    VulkanComputePipeline build() const;
+
+private:
+    vk::Device _device;
+    ComputeShader* _cs;
+    vk::PipelineLayout _pipelineLayout;
 };
 

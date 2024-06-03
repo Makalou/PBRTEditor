@@ -49,8 +49,8 @@ void EditorGUI::init(GLFWwindow* window, std::shared_ptr<DeviceExtended> device)
 	init_info.Queue = backendDevice->get_queue(vkb::QueueType::graphics).value();
 	init_info.PipelineCache = VK_NULL_HANDLE;
 	init_info.DescriptorPool = descriptorPool;
-	init_info.MinImageCount = MAX_FRAME_IN_FLIGHT;
-	init_info.ImageCount = MAX_FRAME_IN_FLIGHT;
+	init_info.MinImageCount = NUM_MIN_SWAPCHAIN_IMAGE;
+	init_info.ImageCount = NUM_MIN_SWAPCHAIN_IMAGE;
 	init_info.Allocator = VK_NULL_HANDLE;
 	init_info.CheckVkResultFn = nullptr;
 
@@ -422,12 +422,12 @@ void EditorGUI::createVulkanResource()
 	poolInfo.queueFamilyIndex = graphicsQueueFamilyIdx;
 	poolInfo.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
 
-	for (int i = 0; i < MAX_FRAME_IN_FLIGHT; i++)
+	for (int i = 0; i < NUM_MIN_SWAPCHAIN_IMAGE; i++)
 	{
-		commandPools.emplace_back(backendDevice,backendDevice->createCommandPool(poolInfo));
+		commandPools.emplace_back(backendDevice.get(), backendDevice->createCommandPool(poolInfo));
 	}
 
-	for (int i = 0; i < MAX_FRAME_IN_FLIGHT; i++)
+	for (int i = 0; i < NUM_MIN_SWAPCHAIN_IMAGE; i++)
 	{
 		commandBuffers.push_back(commandPools[i].allocateCommandBuffer(vk::CommandBufferLevel::ePrimary));
 	}
@@ -447,7 +447,7 @@ void EditorGUI::createVulkanResource()
 	//create descriptor pool
 	vk::DescriptorPoolSize pool_sizes[] = {
 		//{vk::DescriptorType::eSampler, MAX_FRAME_IN_FLIGHT},
-		{vk::DescriptorType::eCombinedImageSampler, MAX_FRAME_IN_FLIGHT},
+		{vk::DescriptorType::eCombinedImageSampler, NUM_MIN_SWAPCHAIN_IMAGE},
 		//{vk::DescriptorType::eSampledImage, MAX_FRAME_IN_FLIGHT},
 		//{vk::DescriptorType::eStorageImage, MAX_FRAME_IN_FLIGHT},
 		//{vk::DescriptorType::eUniformTexelBuffer, MAX_FRAME_IN_FLIGHT},
@@ -460,7 +460,7 @@ void EditorGUI::createVulkanResource()
 	};
 
 	vk::DescriptorPoolCreateInfo poolCreateInfo{};
-	poolCreateInfo.maxSets = MAX_FRAME_IN_FLIGHT;
+	poolCreateInfo.maxSets = NUM_MIN_SWAPCHAIN_IMAGE;
 	poolCreateInfo.poolSizeCount = (uint32_t)std::size(pool_sizes);
 	poolCreateInfo.pPoolSizes = pool_sizes;
 	descriptorPool = backendDevice->createDescriptorPool(poolCreateInfo);

@@ -17,6 +17,7 @@ void SwapchainExtended::recreate(const vkb::Device& device)
     auto swapChain = builder
             .set_old_swapchain(this->swapchain)
             .set_desired_min_image_count(3)
+            .add_image_usage_flags(VK_IMAGE_USAGE_TRANSFER_DST_BIT)
             .build();
 
     if (!swapChain)
@@ -411,14 +412,14 @@ void DeviceExtended::oneTimeUploadSync(void* data, VkImage dst, uint32_t channel
 
     vk::ImageMemoryBarrier barrier2; // TransferDstOptimal -> ShaderReadOnlyOptimal
     barrier2.setSrcAccessMask(vk::AccessFlagBits::eTransferWrite);
-    barrier2.setDstAccessMask(vk::AccessFlagBits::eShaderRead);
+    barrier2.setDstAccessMask(vk::AccessFlagBits::eNone);
     barrier2.setOldLayout(vk::ImageLayout::eTransferDstOptimal);
     barrier2.setNewLayout(vk::ImageLayout::eShaderReadOnlyOptimal);
     barrier2.setSrcQueueFamilyIndex(vk::QueueFamilyIgnored);
     barrier2.setDstQueueFamilyIndex(vk::QueueFamilyIgnored);
     barrier2.setImage(dst);
     barrier2.setSubresourceRange(subresourceRange);
-    transfer_cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eVertexShader, {}, 0, {}, barrier2);
+    transfer_cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eNone, {}, 0, {}, barrier2);
 
     transfer_cmd.end();
     auto wait = submitOnceTransferCommand(transfer_cmd);
@@ -636,6 +637,35 @@ VulkanGraphicsPipeline VulkanGraphicsPipelineBuilder::build() const {
     pipeline._MultisampleStateInfo = _MultisampleStateInfo;
     pipeline._ViewportStateInfo = _ViewportStateInfo;
     pipeline._DynamicStateInfo = _DynamicStateInfo;
+
+    return pipeline;
+}
+
+VulkanComputePipelineBuilder::VulkanComputePipelineBuilder(vk::Device device,
+    ComputeShader* cs) {
+    _device = device;
+    _cs = cs;
+}
+
+VulkanComputePipeline VulkanComputePipelineBuilder::build() const {
+    assert(_device != VK_NULL_HANDLE);
+
+    vk::ComputePipelineCreateInfo createInfo{};
+    createInfo.setStage(_cs->getStageCreateInfo());
+    createInfo.setLayout(_pipelineLayout);
+  
+    auto newPipeline = _device.createComputePipeline(VK_NULL_HANDLE, createInfo);
+    if (newPipeline.result != vk::Result::eSuccess)
+    {
+        throw std::runtime_error("Failed to create pipeline");
+    }
+
+    VulkanComputePipeline pipeline;
+    // fill the metadata
+    pipeline._pipeline = newPipeline.value;
+    pipeline.device = _device;
+    pipeline.pipelineLayout = _pipelineLayout;
+    pipeline._cs = _cs;
 
     return pipeline;
 }

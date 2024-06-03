@@ -6,7 +6,7 @@
 #include <deque>
 #include <filesystem>
 
-#define MAX_FRAME_IN_FLIGHT 3
+#define NUM_MIN_SWAPCHAIN_IMAGE 3
 
 struct GLFWwindow;
 struct DeviceExtended;

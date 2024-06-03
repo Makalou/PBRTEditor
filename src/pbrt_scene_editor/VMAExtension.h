@@ -38,6 +38,10 @@ struct VMAObservedBufferMapped
         return buffer;
     }
 
+    void operator=(const T & otherData) {
+        *(static_cast<T*>(allocationInfo.pMappedData)) = otherData;
+    }
+
     friend struct DeviceExtended;
 private:
     VkBuffer buffer = VK_NULL_HANDLE;

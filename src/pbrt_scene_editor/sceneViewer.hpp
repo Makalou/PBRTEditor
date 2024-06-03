@@ -4,6 +4,7 @@
 #include <memory>
 #include "RenderScene.h"
 #include "GPUPass.h"
+#include "GPUFrame.hpp"
 
 struct DeviceExtended;
 struct SceneGraphNode;
@@ -16,9 +17,11 @@ struct SceneViewerCamera
 struct SceneViewer
 {
     void constructFrame();
+    void constructFrameGraphAOT(FrameGraph* frameGraph);
 	void init(std::shared_ptr<DeviceExtended> device);
     void setCurrentSceneGraph(SceneGraph* sceneGraph,AssetManager& assetManager);
-    vk::CommandBuffer recordGraphicsCommand(unsigned int idx);
+    void update(FrameGraph* frameGraph);
+
 	~SceneViewer();
 
     enum class RenderingMode

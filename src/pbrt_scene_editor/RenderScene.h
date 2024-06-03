@@ -12,6 +12,7 @@
 #include "AssetManager.hpp"
 #include "window.h"
 #include <glm/gtc/matrix_transform.hpp>
+#include "GPUFrame.hpp"
 
 namespace renderScene {
 
@@ -454,7 +455,8 @@ namespace renderScene {
         double yaw{};
         double pitch{};
         glm::vec3 front{};
-        VMAObservedBufferMapped<MainCameraData> data;
+        InFlightObservedBufferMapped<MainCameraData> data;
+        MainCameraData stagingData;
     };
 
     struct RenderScene;

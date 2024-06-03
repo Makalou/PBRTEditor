@@ -11,7 +11,7 @@ namespace renderScene
     RenderScene::RenderScene(const std::shared_ptr<DeviceExtended>& device) : backendDevice(device)
     {
         {
-            mainView.camera.data = backendDevice->allocateObservedBufferPull<MainCameraData>(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT).value();
+            mainView.camera.data = FrameCoordinator::getInstance().allocateInFlightObservedBufferMapped<MainCameraData>(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 
             Window::registerMouseDragCallback([this](int button, double deltaX, double deltaY){
                 if(button == GLFW_MOUSE_BUTTON_RIGHT)
@@ -25,8 +25,8 @@ namespace renderScene
                     direction.z = sin(glm::radians(mainView.camera.yaw)) * cos(glm::radians(mainView.camera.pitch));
 
                     mainView.camera.front = glm::normalize(direction);
-                    glm::vec3 eye = mainView.camera.data->position;
-                    mainView.camera.data->view = glm::lookAt(eye, eye + mainView.camera.front, { 0,1,0 });
+                    glm::vec3 eye = mainView.camera.stagingData.position;
+                    mainView.camera.stagingData.view = glm::lookAt(eye, eye + mainView.camera.front, { 0,1,0 });
                 }
             });
 
@@ -34,25 +34,25 @@ namespace renderScene
                 bool hold = (action == GLFW_REPEAT || action == GLFW_PRESS);
                 if (key == GLFW_KEY_W && hold)
                 {
-                    mainView.camera.data->position += 0.1f * glm::vec4(mainView.camera.front,0.0);
+                    mainView.camera.stagingData.position += 0.1f * glm::vec4(mainView.camera.front,0.0);
                 }
                 if (key == GLFW_KEY_S && hold)
                 {
-                    mainView.camera.data->position -= 0.1f * glm::vec4(mainView.camera.front, 0.0);
+                    mainView.camera.stagingData.position -= 0.1f * glm::vec4(mainView.camera.front, 0.0);
                 }
                 if (key == GLFW_KEY_A && hold)
                 {
                     auto right = glm::normalize(glm::cross(mainView.camera.front, { 0,1,0 }));
-                    mainView.camera.data->position -= 0.1f * glm::vec4(right, 0.0);
+                    mainView.camera.stagingData.position -= 0.1f * glm::vec4(right, 0.0);
                 }
                 if (key == GLFW_KEY_D && hold)
                 {
                     auto right = glm::normalize(glm::cross(mainView.camera.front, { 0,1,0 }));
-                    mainView.camera.data->position += 0.1f * glm::vec4(right, 0.0);
+                    mainView.camera.stagingData.position += 0.1f * glm::vec4(right, 0.0);
                 }
 
-                glm::vec3 eye = mainView.camera.data->position;
-                mainView.camera.data->view = glm::lookAt(eye, eye + mainView.camera.front, { 0,1,0 });
+                glm::vec3 eye = mainView.camera.stagingData.position;
+                mainView.camera.stagingData.view = glm::lookAt(eye, eye + mainView.camera.front, { 0,1,0 });
             });
 
             Window::registerMouseButtonCallback([this](int button, int action, int mods) {
@@ -268,9 +268,9 @@ namespace renderScene
         auto look = m_sceneGraph->globalRenderSetting.camera.look;
         auto up = m_sceneGraph->globalRenderSetting.camera.up;
 
-        mainView.camera.data->position.x = eye.x;
-        mainView.camera.data->position.y = eye.y;
-        mainView.camera.data->position.z = eye.z;
+        mainView.camera.stagingData.position.x = eye.x;
+        mainView.camera.stagingData.position.y = eye.y;
+        mainView.camera.stagingData.position.z = eye.z;
 
         mainView.camera.pitch = 0.0f;
         mainView.camera.yaw = 0.0f;
@@ -281,13 +281,13 @@ namespace renderScene
         direction.z = sin(glm::radians(mainView.camera.yaw)) * cos(glm::radians(mainView.camera.pitch));
 
         mainView.camera.front = glm::normalize(direction);
-        mainView.camera.data->view = glm::lookAt(eye, look, up);
+        mainView.camera.stagingData.view = glm::lookAt(eye, look, up);
         float aspect = 1440.0f / 810.0f;
         if (m_sceneGraph->globalRenderSetting.camera.camera->getType() == "Perspective")
         {
             PerspectiveCamera* perspec = static_cast<PerspectiveCamera*>(sceneGraph->globalRenderSetting.camera.camera);
-            mainView.camera.data->proj = glm::perspective(glm::radians(perspec->fov), aspect, 0.1f, 1000.0f);
-            mainView.camera.data->proj[1][1] *= -1.0f;
+            mainView.camera.stagingData.proj = glm::perspective(glm::radians(perspec->fov), aspect, 0.1f, 1000.0f);
+            mainView.camera.stagingData.proj[1][1] *= -1.0f;
         }
 
         static auto nodeFocusOn = [this](SceneGraphNode* node)->void
@@ -296,9 +296,9 @@ namespace renderScene
             target.x = node->_finalTransform[3].x;
             target.y = node->_finalTransform[3].y;
             target.z = node->_finalTransform[3].z;
-            glm::vec3 eye = mainView.camera.data->position;
+            glm::vec3 eye = mainView.camera.stagingData.position;
             mainView.camera.front = target - eye;
-            mainView.camera.data->view = glm::lookAt(eye, target, { 0,1,0 });
+            mainView.camera.stagingData.view = glm::lookAt(eye, target, { 0,1,0 });
         };
 
         auto handleNode = [this,&assetManager](SceneGraphNode* node,const glm::mat4& instanceBaseTransform )->void{
@@ -416,6 +416,7 @@ namespace renderScene
     }
 
     void RenderScene::update() {
+       mainView.camera.data = mainView.camera.stagingData;
        backendDevice->oneTimeUploadSync(uploadRequests);
        uploadRequests.clear();
     }
