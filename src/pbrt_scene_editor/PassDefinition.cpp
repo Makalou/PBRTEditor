@@ -1,4 +1,5 @@
 #include "PassDefinition.h"
+#include "editorGUI.h"
 
 void SkyBoxPass::prepareAOT(FrameCoordinator* coordinator)
 {
@@ -410,6 +411,19 @@ void ObjectPickPass::prepareAOT(FrameCoordinator* coordinator)
         cmd.dispatch(1, 1, 1);
         scene->selectedDynamicRigidMeshID.x = objectIDBuffer->x;
         scene->selectedDynamicRigidMeshID.y = objectIDBuffer->y;
+    };
+    actionContextQueue.push_back(actionContext);
+}
+
+void GUIPass::prepareAOT(FrameCoordinator* coordinator)
+{
+    gui->renderInit(renderPass);
+    PassActionContext actionContext{};
+    actionContext.pipelineIdx = -1;
+    actionContext.firstSet = 1;
+    actionContext.descriptorSets = {};
+    actionContext.action = [this](vk::CommandBuffer cmd, uint32_t pipelineIdx) {
+        gui->render(cmd);
     };
     actionContextQueue.push_back(actionContext);
 }

@@ -53,9 +53,8 @@ void drawFrame()
     }
 
     auto frameGraph_command = frame->recordMainQueueCommands(imageIdx);
-    auto gui_command = editorGUI.recordGraphicsCommand(imageIdx);
 
-    vk::CommandBuffer commandBuffers[] = { frameGraph_command, gui_command };
+    vk::CommandBuffer commandBuffers[] = { frameGraph_command };
 
     vk::SubmitInfo submitInfo{};
     submitInfo.setWaitSemaphores(frame->imageAvailableSemaphore);
@@ -221,6 +220,7 @@ int main( int /*argc*/, char ** /*argv*/ )
     editorGUI.viewer = &viewer;
 
     viewer.constructFrameGraphAOT(FrameCoordinator::getInstance().frameGraph);
+    editorGUI.constructFrameGraphAOT(FrameCoordinator::getInstance().frameGraph);
     FrameCoordinator::getInstance().compileFrameGraphAOT();
 
     //main loop

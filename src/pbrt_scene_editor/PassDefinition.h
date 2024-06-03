@@ -232,4 +232,11 @@ COMPUTEPASS_DEF_BEGIN(ObjectPickPass)
 
     void prepareAOT(FrameCoordinator*) override;
 COMPUTEPASS_DEF_END(ObjectPickPass)
+
+struct EditorGUI;
+RASTERIZEDPASS_DEF_BEGIN(GUIPass)
+EditorGUI* gui;
+void prepareAOT(FrameCoordinator*) override;
+RASTERIZEDPASS_DEF_END(GUIPass)
+
 #endif //PBRTEDITOR_PASSDEFINITION_H

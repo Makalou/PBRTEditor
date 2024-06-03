@@ -360,8 +360,11 @@ void GPURasterizedPass::record(vk::CommandBuffer cmd, GPUFrame* frame)
                 vkDescriptorSets.push_back(std::get<vk::DescriptorSet>(descriptorSet));
             }
         }
-        cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, graphicsPipelines[ctx.pipelineIdx].getLayout(), ctx.firstSet, vkDescriptorSets, nullptr);
-        cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipelines[ctx.pipelineIdx].getPipeline());
+        if (ctx.pipelineIdx != -1)
+        {
+            cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, graphicsPipelines[ctx.pipelineIdx].getLayout(), ctx.firstSet, vkDescriptorSets, nullptr);
+            cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, graphicsPipelines[ctx.pipelineIdx].getPipeline());
+        }
         ctx.action(cmd,ctx.pipelineIdx);
     }
     endPass(cmd);
