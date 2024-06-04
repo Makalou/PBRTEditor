@@ -99,7 +99,11 @@ vk::CommandBuffer GPUFrame::recordMainQueueCommands(uint32_t avaliableSwapChainI
         else {
             cmdPrimary.bindDescriptorSets(vk::PipelineBindPoint::eCompute, frameCoordinator->_frameLevelPipelineLayout, 0, _frameGlobalDescriptorSet, nullptr);
         }
+#if __APPLE__
         pass->insertPipelineBarrier(cmdPrimary,backendDevice->getDLD());
+#else
+        pass->insertPipelineBarrier(cmdPrimary);
+#endif
         vk::DebugUtilsLabelEXT passLabel{};
         passLabel.setPLabelName(pass->_name.c_str());
         cmdPrimary.beginDebugUtilsLabelEXT(passLabel, backendDevice->getDLD());
