@@ -112,7 +112,11 @@ vk::CommandBuffer GPUFrame::recordMainQueueCommands(uint32_t avaliableSwapChainI
         else {
             cmdPrimary.bindDescriptorSets(vk::PipelineBindPoint::eCompute, frameCoordinator->_frameLevelPipelineLayout, 0, _frameGlobalDescriptorSet, nullptr);
         }
+#if __APPLE__
+        pass->insertPipelineBarrier(cmdPrimary,backendDevice->getDLD());
+#else
         pass->insertPipelineBarrier(cmdPrimary);
+#endif
         vk::DebugUtilsLabelEXT passLabel{};
         passLabel.setPLabelName(pass->_name.c_str());
         cmdPrimary.beginDebugUtilsLabelEXT(passLabel, backendDevice->getDLD());
@@ -160,9 +164,13 @@ void GPUFrame::copyPresentToSwapChain(vk::CommandBuffer cmd, uint32_t avaliableS
     imb2.newLayout = vk::ImageLayout::eTransferDstOptimal;
 
     vk::DependencyInfo dependencyInfo{};
-    std::initializer_list imbs{ imb,imb2 };
+    std::initializer_list<vk::ImageMemoryBarrier2> imbs{ imb,imb2 };
     dependencyInfo.setImageMemoryBarriers(imbs);
+#if __APPLE__
+    cmd.pipelineBarrier2KHR(dependencyInfo,backendDevice->getDLD());
+#else
     cmd.pipelineBarrier2(dependencyInfo);
+#endif
 
     presentImage.lastStage = vk::PipelineStageFlagBits2::eTransfer;
     presentImage.lastAccess = vk::AccessFlagBits2::eTransferRead;
@@ -191,8 +199,11 @@ void GPUFrame::copyPresentToSwapChain(vk::CommandBuffer cmd, uint32_t avaliableS
     imb2.newLayout = vk::ImageLayout::eColorAttachmentOptimal;
 
     dependencyInfo.setImageMemoryBarriers(imb2);
+#if __APPLE__
+    cmd.pipelineBarrier2KHR(dependencyInfo,backendDevice->getDLD());
+#else
     cmd.pipelineBarrier2(dependencyInfo);
-
+#endif
 }
 
 void GPUFrame::createPresentImage()
