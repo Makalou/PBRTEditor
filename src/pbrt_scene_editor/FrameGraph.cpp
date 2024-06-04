@@ -130,7 +130,7 @@ void FrameGraph::setBoolVariable(const std::string& name, bool state)
 {
     if (*(boolVariables.find(name)->second.val) != state)
     {
-        needToRebuildBarriers = true;
+
     }
     *(boolVariables.find(name)->second.val) = state;
 }
@@ -139,14 +139,12 @@ void FrameGraph::toggleBoolVariable(const std::string& name)
 {
     bool b = *(boolVariables.find(name)->second.val);
     *(boolVariables.find(name)->second.val) = b;
-    needToRebuildBarriers = true;
 }
 
 void FrameGraph::setSwitchVariable(const std::string& name, std::string&& _case)
 {
     if (*(switchVariables.find(name)->second.val) != _case)
     {
-        needToRebuildBarriers = true;
     }
     *(switchVariables.find(name)->second.val) = _case;
 }
@@ -157,7 +155,6 @@ void FrameGraph::disablePass(const std::string& passName)
     if (!pass->force_disabled)
     {
         pass->force_disabled = true;
-        needToRebuildBarriers = true;
     }
 }
 
@@ -167,7 +164,6 @@ void FrameGraph::enablePass(const std::string& passName)
     if (pass->force_disabled)
     {
         pass->force_disabled = false;
-        needToRebuildBarriers = true;
     }
 }
 

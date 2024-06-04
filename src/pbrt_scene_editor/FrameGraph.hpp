@@ -63,8 +63,6 @@ struct FrameGraph
     std::vector<int> sortedIndices;
     std::vector<std::unique_ptr<GPUPass>> _allPasses;
 
-    bool needToRebuildBarriers = false;
-
     std::unordered_map<std::string, FrameGraphConditionalVariable::BoolVariabel> boolVariables;
     std::unordered_map<std::string, FrameGraphConditionalVariable::SwitchVariable> switchVariables;
 

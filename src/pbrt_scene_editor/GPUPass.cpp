@@ -50,9 +50,19 @@ void GPUPass::sample(FrameGraphTextureDescription* texture, bool mipmap)
     this->samples.emplace_back(texture);
 }
 
-void GPUPass::prepareIncremental(GPUFrame* frame)
+void GPUPass::onFirstEnable(GPUFrame* frame)
 {
 
+}
+
+void GPUPass::onEnable(GPUFrame* frame)
+{
+	
+}
+
+void GPUPass::onSwitchToEnable(GPUFrame* frame)
+{
+	
 }
 
 void GPURasterizedPass::renderTo(FrameGraphTextureDescription* texture, vk::AttachmentLoadOp loadOp)

@@ -87,10 +87,23 @@ vk::CommandBuffer GPUFrame::recordMainQueueCommands(uint32_t avaliableSwapChainI
         auto& pass = frameGraph->_allPasses[frameGraph->sortedIndices[i]];
         if (!pass->is_enabled())
         {
+            pass->is_switched_to_enabled = true;
             continue;
         }
 
-        pass->prepareIncremental(this);
+        if(pass->is_first_enabled)
+        {
+            pass->onFirstEnable(this);
+            pass->is_first_enabled = false;
+        }
+
+        if(pass->is_switched_to_enabled)
+        {
+            pass->onSwitchToEnable(this);
+            pass->is_switched_to_enabled = false;
+        }
+
+        pass->onEnable(this);
 
         if (pass->getType() == GPUPassType::Graphics)
         {

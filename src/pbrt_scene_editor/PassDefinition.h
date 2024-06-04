@@ -62,7 +62,7 @@ RASTERIZEDPASS_DEF_BEGIN(GBufferPass)
     vk::DescriptorSetLayout passDataDescriptorLayout;
 
     void prepareAOT(FrameCoordinator*) override;
-    void prepareIncremental(GPUFrame* frame) override;
+    void onEnable(GPUFrame* frame) override;
 
     using InstanceUUIDMap = std::unordered_map<renderScene::InstanceUUID,int,renderScene::InstanceUUIDHash>;
     InstanceUUIDMap pipelineLayoutMap;
@@ -204,7 +204,7 @@ RASTERIZEDPASS_DEF_BEGIN(SelectedMaskPass)
     vk::DescriptorSetLayout passDataDescriptorLayout;
 
     void prepareAOT(FrameCoordinator*) override;
-    void prepareIncremental(GPUFrame* frame) override;
+    void onEnable(GPUFrame* frame) override;
 RASTERIZEDPASS_DEF_END(SelectedMaskPass)
 
 RASTERIZEDPASS_DEF_BEGIN(BoundingBoxPass)
@@ -216,7 +216,7 @@ RASTERIZEDPASS_DEF_BEGIN(WireFramePass)
     vk::PipelineLayout pipelineLayout = VK_NULL_HANDLE;
     vk::DescriptorSetLayout passDataDescriptorLayout;
     void prepareAOT(FrameCoordinator*) override;
-    void prepareIncremental(GPUFrame* frame) override;
+    void onEnable(GPUFrame* frame) override;
 RASTERIZEDPASS_DEF_END(WireFramePass)
 
 RASTERIZEDPASS_DEF_BEGIN(OutlinePass)

@@ -105,7 +105,7 @@ void GBufferPass::prepareAOT(FrameCoordinator* coordinator)
     colorBlendInfo.setBlendConstants({ 1.0,1.0,1.0,1.0 });
 }
 
-void GBufferPass::prepareIncremental(GPUFrame* frame)
+void GBufferPass::onEnable(GPUFrame* frame)
 {
     actionContextQueue.clear();
     currentInstanceDescriptorSetIdx = -1;
@@ -250,7 +250,7 @@ void SelectedMaskPass::prepareAOT(FrameCoordinator* coordinator)
     });
 }
 
-void SelectedMaskPass::prepareIncremental(GPUFrame* frame)
+void SelectedMaskPass::onEnable(GPUFrame* frame)
 {
     actionContextQueue.clear();
     for (int i = 0; i < scene->_dynamicRigidMeshBatch.size(); i++)
@@ -293,7 +293,7 @@ void WireFramePass::prepareAOT(FrameCoordinator* coordinator)
         });
 }
 
-void WireFramePass::prepareIncremental(GPUFrame* frame)
+void WireFramePass::onEnable(GPUFrame* frame)
 {
     actionContextQueue.clear();
     for (int i = 0; i < scene->_dynamicRigidMeshBatch.size(); i++)

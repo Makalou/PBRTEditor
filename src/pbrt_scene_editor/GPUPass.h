@@ -53,6 +53,8 @@ struct GPUPass
     vk::DescriptorSetLayout passInputDescriptorSetLayout;
     bool force_disabled = false;
     bool is_enabled() { return !force_disabled && enableCond(); }
+    bool is_first_enabled = true;
+    bool is_switched_to_enabled = true;
     std::function<bool(void)> enableCond = [] {return true; };
     /*
      * For some passes, the shaders, pipelines to use can be determined Ahead of Time,
@@ -67,9 +69,18 @@ struct GPUPass
     /*
      * For some passes, it's hard or impossible to decide which shaders or pipeline to use ahead of time.
      * And maybe new shader variants can appear at every frame.
-     * Also per pass data can change every frame, so this function also plays the role of 'Prepare'
+     * Also, per pass data can change every frame.
+     * That's why we also provide functionality to update the pass on-the-fly.
      * */
-    virtual void prepareIncremental(GPUFrame* frame);
+
+    // Invoked when the pass is enabled on the first time
+    virtual void onFirstEnable(GPUFrame* frame);
+
+    // Invoked at every iteration if the pass is enabled
+    virtual void onEnable(GPUFrame* frame);
+
+    // Invoked once when the pass is switche to enable state
+    virtual void onSwitchToEnable(GPUFrame* frame);
 
     void read(FrameGraphTextureDescription* texture);
 
@@ -172,12 +183,12 @@ struct GPURasterizedPass : GPUPass
     GPURasterizedPass() = delete;
     explicit GPURasterizedPass(const std::string& name) : GPUPass(name){};
 
-    virtual ~GPURasterizedPass()
+    ~GPURasterizedPass() override
     {
 
     }
 
-    virtual GPUPassType getType() const override
+    GPUPassType getType() const override
     {
         return GPUPassType::Graphics;
     }
