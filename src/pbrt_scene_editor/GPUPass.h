@@ -92,7 +92,11 @@ struct GPUPass
     std::vector<vk::BufferMemoryBarrier2> transientBufferMemoryBarriers;
     std::vector<vk::ImageMemoryBarrier2> transientImageMemoryBarriers;
 
-    void insertPipelineBarrier(vk::CommandBuffer cmd)
+    void insertPipelineBarrier(vk::CommandBuffer cmd
+#if __APPLE__
+                               ,const vk::DispatchLoaderDynamic& d
+#endif
+                               )
     {
         if (transientMemoryBarriers.empty() && transientBufferMemoryBarriers.empty() && transientImageMemoryBarriers.empty())
         {
@@ -102,7 +106,11 @@ struct GPUPass
         info.setMemoryBarriers(transientMemoryBarriers);
         info.setBufferMemoryBarriers(transientBufferMemoryBarriers);
         info.setImageMemoryBarriers(transientImageMemoryBarriers);
+#if __APPLE__
+        cmd.pipelineBarrier2KHR(info,d);
+#else
         cmd.pipelineBarrier2(info);
+#endif
         transientMemoryBarriers.clear();
         transientBufferMemoryBarriers.clear();
         transientImageMemoryBarriers.clear();
